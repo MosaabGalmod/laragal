@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/laragal/laragal/app/internal/certs"
+	"github.com/laragal/laragal/internal/certs"
 )
 
 func TestReadCertFingerprint(t *testing.T) {

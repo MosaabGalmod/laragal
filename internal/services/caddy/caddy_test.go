@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/laragal/laragal/app/internal/services/caddy"
+	"github.com/laragal/laragal/internal/services/caddy"
 )
 
 func TestGenerateCaddyfile(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/laragal/laragal/app/internal/hosts"
+	"github.com/laragal/laragal/internal/hosts"
 )
 
 func TestSyncHostsContent(t *testing.T) {

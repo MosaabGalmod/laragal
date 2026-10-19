@@ -1,0 +1,7 @@
+# Binaries & Builds
+laragal.exe
+*.exe
+frontend/node_modules/
+frontend/dist/
+data/
+bin/

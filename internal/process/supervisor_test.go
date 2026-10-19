@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/laragal/laragal/app/internal/process"
+	"github.com/laragal/laragal/internal/process"
 )
 
 func TestSupervisorLifecycle(t *testing.T) {

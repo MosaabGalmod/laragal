@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/laragal/laragal/app/internal/config"
+	"github.com/laragal/laragal/internal/config"
 )
 
 func TestDefaultConfigAndSave(t *testing.T) {

@@ -3,7 +3,7 @@ package php_test
 import (
 	"testing"
 
-	"github.com/laragal/laragal/app/internal/services/php"
+	"github.com/laragal/laragal/internal/services/php"
 )
 
 func TestAssignPortForVersion(t *testing.T) {

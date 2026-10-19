@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/laragal/laragal/app/internal/projects"
+	"github.com/laragal/laragal/internal/projects"
 )
 
 func TestInjectEnvVariables(t *testing.T) {
