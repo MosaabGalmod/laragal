@@ -15,9 +15,13 @@ type AppConfig struct {
 }
 
 func NewDefaultConfig() *AppConfig {
+	defaultPath := "C:\\laragal\\sites"
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		defaultPath = filepath.Join(home, "laragal", "sites")
+	}
 	return &AppConfig{
-		ProjectsPath: "C:\\laragal\\sites",
-		RecentPaths:  []string{"C:\\laragal\\sites"},
+		ProjectsPath: defaultPath,
+		RecentPaths:  []string{defaultPath},
 		DefaultPHP:   "8.3",
 		DomainSuffix: ".test",
 		Services: map[string]bool{

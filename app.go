@@ -285,23 +285,44 @@ func (a *App) SetProjectsDirectory(dirPath string) ([]caddy.SiteDef, error) {
 func (a *App) SelectProjectsDirectory() (string, error) {
 	defaultDir := a.cfg.ProjectsPath
 	if defaultDir == "" {
-		defaultDir = "C:\\laragal\\sites"
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			defaultDir = filepath.Join(home, "laragal", "sites")
+		} else {
+			defaultDir = "C:\\laragal\\sites"
+		}
 	}
 	_ = os.MkdirAll(defaultDir, 0755)
+
+	// In Wails runtime, if DefaultDirectory is non-empty and does NOT exist on disk,
+	// OpenDirectoryDialog fails with "default directory '...' does not exist".
+	// Passing an empty string bypasses Wails validation completely.
+	wailsDir := defaultDir
+	if _, err := os.Stat(wailsDir); err != nil {
+		wailsDir = ""
+	}
 
 	var selectedDir string
 	var err error
 
 	if a.ctx != nil {
 		selectedDir, err = runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-			DefaultDirectory: defaultDir,
+			DefaultDirectory: wailsDir,
 			Title:            "اختر مجلد المشاريع / Select Projects Directory",
 		})
 	}
 
 	// Guaranteed Windows fallback if COM dialog fails or returned empty
 	if err != nil || selectedDir == "" {
-		psScript := fmt.Sprintf(`Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'اختر مجلد المشاريع لـ LaraGal'; $f.SelectedPath = '%s'; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }`, strings.ReplaceAll(defaultDir, `\`, `\\`))
+		safeDir := defaultDir
+		if _, statErr := os.Stat(safeDir); statErr != nil {
+			safeDir = ""
+		}
+		var psScript string
+		if safeDir != "" {
+			psScript = fmt.Sprintf(`Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'اختر مجلد المشاريع لـ LaraGal'; $f.SelectedPath = '%s'; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }`, strings.ReplaceAll(safeDir, `\`, `\\`))
+		} else {
+			psScript = `Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'اختر مجلد المشاريع لـ LaraGal'; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }`
+		}
 		out, psErr := exec.Command("powershell", "-NoProfile", "-Command", psScript).Output()
 		if psErr == nil {
 			trimmed := strings.TrimSpace(string(out))
