@@ -1,71 +1,74 @@
 <template>
   <div :dir="currentLang === 'ar' ? 'rtl' : 'ltr'" class="min-h-screen flex flex-col justify-between bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-150 select-none">
     <div>
-      <!-- Custom Desktop Frameless Title Bar -->
+      <!-- Custom Desktop Title Bar with Strict Physical LTR Layout -->
+      <!-- By enforcing dir="ltr" on the bar, physical LEFT is ALWAYS child 1 and physical RIGHT is ALWAYS child 3 -->
       <div
-        class="wails-drag h-10 w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-3 text-xs font-medium z-40 sticky top-0"
+        dir="ltr"
+        class="wails-drag h-10 w-full bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-3 text-xs font-medium z-40 sticky top-0 select-none"
       >
-        <!-- In Arabic (RTL): Window Controls on the LEFT -->
-        <div v-if="currentLang === 'ar'" class="flex items-center gap-1 wails-no-drag">
+        <!-- ================= PHYSICAL LEFT (Child 1) ================= -->
+        <!-- In Arabic (RTL): Window controls (Close, Maximize, Minimize) are on the physical LEFT -->
+        <div v-if="currentLang === 'ar'" class="flex items-center gap-1.5 wails-no-drag">
           <button
             @click="closeWindow"
-            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:bg-rose-600 hover:text-white transition-colors"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-rose-600 hover:text-white transition-colors"
             title="إغلاق"
           >
             <X class="w-3.5 h-3.5" />
           </button>
           <button
             @click="toggleMaximize"
-            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-400 transition-colors"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
             title="تكبير / استعادة"
           >
             <Square class="w-3 h-3" />
           </button>
           <button
             @click="minimizeWindow"
-            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-400 transition-colors"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
             title="تصغير"
           >
             <Minus class="w-3.5 h-3.5" />
           </button>
         </div>
-
-        <!-- In English (LTR): App Logo on the LEFT -->
+        <!-- In English (LTR): Clean brand tag on the physical LEFT -->
         <div v-else class="flex items-center gap-2">
-          <div class="w-5 h-5 rounded bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">LG</div>
-          <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">LaraGal</span>
+          <div class="w-5 h-5 rounded bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white shadow-xs">LG</div>
+          <span class="text-xs font-bold text-slate-800 dark:text-slate-200">LaraGal</span>
         </div>
 
-        <!-- Title in center -->
-        <div class="text-[11px] text-slate-400 dark:text-slate-500 font-mono tracking-wide pointer-events-none">
-          LaraGal - {{ t('app_subtitle') }}
+        <!-- ================= PHYSICAL CENTER (Child 2) ================= -->
+        <div class="text-xs text-slate-400 dark:text-slate-500 font-medium pointer-events-none select-none">
+          <span v-if="currentLang === 'ar'" dir="rtl">بيئة التطوير المحلية — LaraGal</span>
+          <span v-else dir="ltr">LaraGal — Local Development Environment</span>
         </div>
 
-        <!-- In Arabic (RTL): App Logo on the RIGHT -->
+        <!-- ================= PHYSICAL RIGHT (Child 3) ================= -->
+        <!-- In Arabic (RTL): Clean brand tag on the physical RIGHT -->
         <div v-if="currentLang === 'ar'" class="flex items-center gap-2">
-          <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">LaraGal</span>
-          <div class="w-5 h-5 rounded bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">LG</div>
+          <span class="text-xs font-bold text-slate-800 dark:text-slate-200">LaraGal</span>
+          <div class="w-5 h-5 rounded bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white shadow-xs">LG</div>
         </div>
-
-        <!-- In English (LTR): Window Controls on the RIGHT -->
-        <div v-else class="flex items-center gap-1 wails-no-drag">
+        <!-- In English (LTR): Window controls on the physical RIGHT -->
+        <div v-else class="flex items-center gap-1.5 wails-no-drag">
           <button
             @click="minimizeWindow"
-            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-400 transition-colors"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
             title="Minimize"
           >
             <Minus class="w-3.5 h-3.5" />
           </button>
           <button
             @click="toggleMaximize"
-            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-400 transition-colors"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
             title="Maximize"
           >
             <Square class="w-3 h-3" />
           </button>
           <button
             @click="closeWindow"
-            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:bg-rose-600 hover:text-white transition-colors"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-rose-600 hover:text-white transition-colors"
             title="Close"
           >
             <X class="w-3.5 h-3.5" />
@@ -73,12 +76,12 @@
         </div>
       </div>
 
-      <!-- Main Application Header -->
+      <!-- Main Application Header (Single Unified Brand Hero) -->
       <header class="border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur z-30">
         <div class="w-full px-6 lg:px-8 py-4 flex items-center justify-between">
-          <!-- Main Brand Anchor (Aligned at start of reading) -->
+          <!-- Main Brand Anchor -->
           <div class="flex items-center space-x-3.5 rtl:space-x-reverse">
-            <div class="w-11 h-11 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-500 flex items-center justify-center text-white font-black text-xl shadow-md ring-2 ring-blue-500/20">
+            <div class="w-11 h-11 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-500 flex items-center justify-center text-white font-black text-xl shadow-md ring-2 ring-blue-500/20 flex-shrink-0">
               LG
             </div>
             <div>
@@ -86,8 +89,8 @@
                 <h1 class="text-xl font-black tracking-tight text-slate-900 dark:text-white">
                   {{ t('app_name') }}
                 </h1>
-                <span class="text-[11px] px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-semibold border border-blue-200 dark:border-blue-900">
-                  v1.0.1
+                <span class="text-[11px] px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
+                  v1.0.2
                 </span>
               </div>
               <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">{{ t('app_subtitle') }}</p>
@@ -107,14 +110,14 @@
 
             <button
               @click="toggleLang"
-              class="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              class="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
             >
               {{ currentLang === 'ar' ? 'English' : 'العربية' }}
             </button>
 
             <button
               @click="toggleTheme"
-              class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               :title="isDark ? t('light_mode') : t('dark_mode')"
             >
               <Sun v-if="isDark" class="w-4 h-4 text-amber-400" />
@@ -161,11 +164,11 @@
             </div>
           </div>
 
-          <!-- Services Grid -->
+          <!-- Services Grid (Responsive 2 / 3 / 6 columns) -->
           <div class="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-3.5">
             <div
               v-for="service in services"
-              :key="service.name"
+              :key="service.id"
               class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
             >
               <div>
@@ -181,20 +184,22 @@
                     <span class="w-1.5 h-1.5 rounded-full" :class="service.running ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
                     {{ service.running ? t('status_running') : t('status_stopped') }}
                   </span>
-                  <span dir="ltr" class="text-xs font-mono text-slate-400 dark:text-slate-400 font-medium">:{{ service.port }}</span>
+                  <span dir="ltr" class="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">:{{ service.port }}</span>
                 </div>
 
-                <h3 class="font-bold text-sm text-slate-900 dark:text-slate-100 leading-snug">{{ service.label }}</h3>
-                <p class="text-[11px] text-slate-400 dark:text-slate-400 mt-1 line-clamp-1" :title="service.role">{{ service.role }}</p>
+                <h3 class="font-bold text-sm text-slate-900 dark:text-slate-100 leading-snug">{{ t(service.name_key) }}</h3>
+                <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-1" :title="t(service.desc_key)">
+                  {{ t(service.desc_key) }}
+                </p>
               </div>
 
               <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end">
                 <button
                   @click="toggleService(service)"
-                  class="text-xs font-bold px-2.5 py-1 rounded-md transition-colors"
+                  class="text-xs font-bold px-3 py-1 rounded-md transition-colors"
                   :class="service.running ? 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40' : 'text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40'"
                 >
-                  {{ service.running ? 'إيقاف' : 'تشغيل' }}
+                  {{ service.running ? t('stop_btn') : t('start_btn') }}
                 </button>
               </div>
             </div>
@@ -208,7 +213,7 @@
               <Globe class="w-4 h-4 text-blue-600" />
               {{ t('sites_title') }}
             </h2>
-            <span class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ sites.length }} متاح</span>
+            <span class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ sites.length }} {{ t('available_count') }}</span>
           </div>
 
           <div v-if="sites.length === 0" class="p-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/60">
@@ -231,12 +236,12 @@
             >
               <div>
                 <div class="flex items-center justify-between mb-3">
-                  <span class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-mono font-semibold">
+                  <span class="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-mono font-bold">
                     <Lock class="w-3 h-3 text-emerald-600" />
                     HTTPS
                   </span>
-                  <span dir="ltr" class="text-xs font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold border border-slate-200 dark:border-slate-700">
-                    PHP :{{ site.php_port }}
+                  <span dir="ltr" class="text-xs font-mono px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
+                    {{ site.php_version || 'PHP 8.3' }}
                   </span>
                 </div>
 
@@ -245,8 +250,8 @@
                 </h3>
 
                 <!-- Monospace Path Box with Actions -->
-                <div class="mt-3 flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-[11px] font-mono text-slate-600 dark:text-slate-300">
-                  <span dir="ltr" class="truncate flex-1" :title="site.root_path">{{ site.root_path }}</span>
+                <div dir="ltr" class="mt-3 flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-[11px] font-mono text-slate-600 dark:text-slate-300">
+                  <span class="truncate flex-1 text-left select-all" :title="site.root_path">{{ site.root_path }}</span>
                   <div class="flex items-center gap-1 flex-shrink-0 ms-2">
                     <button
                       @click="copyText(site.root_path)"
@@ -270,13 +275,13 @@
               <!-- Quick action bar -->
               <div class="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                  <span class="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
+                  <span class="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
                     <CheckCircle2 class="w-3.5 h-3.5" />
                     {{ t('ssl_trusted') }}
                   </span>
                   <button
                     @click="openVSCode(site.root_path)"
-                    class="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors ms-1"
+                    class="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors ms-1"
                     :title="t('open_vscode')"
                   >
                     <Code class="w-3.5 h-3.5" />
@@ -306,19 +311,19 @@
         <div class="flex items-center gap-4">
           <div class="flex items-center gap-1.5">
             <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span class="font-medium text-slate-700 dark:text-slate-300">{{ t('all_services_healthy') }}</span>
+            <span class="font-bold text-slate-700 dark:text-slate-300">{{ t('all_services_healthy') }}</span>
           </div>
           <span class="text-slate-300 dark:text-slate-700">|</span>
           <div class="flex items-center gap-1 font-mono">
             <span>{{ t('root_directory') }}:</span>
-            <button @click="openExplorer('C:/laragal')" class="text-blue-600 dark:text-blue-400 font-semibold hover:underline">C:\laragal</button>
+            <button @click="openExplorer('C:/laragal')" class="text-blue-600 dark:text-blue-400 font-bold hover:underline">C:\laragal</button>
           </div>
         </div>
 
         <div class="flex items-center gap-3 font-mono text-[11px]">
           <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">TLD: *.test</span>
           <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">SSL: Auto-TLS</span>
-          <span class="text-slate-400 dark:text-slate-500">LaraGal v1.0.1</span>
+          <span class="text-slate-400 dark:text-slate-500 font-bold">LaraGal v1.0.2</span>
         </div>
       </div>
     </footer>
@@ -328,7 +333,7 @@
       <div class="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 animate-scale-in">
         <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <h3 class="font-bold text-base text-slate-900 dark:text-white">{{ t('modal_new_title') }}</h3>
-          <button @click="showNewModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">&times;</button>
+          <button @click="showNewModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold">&times;</button>
         </div>
 
         <form @submit.prevent="handleCreateProject" class="space-y-4">
@@ -396,14 +401,14 @@
             <Download class="w-4 h-4 text-blue-600" />
             {{ t('modal_download_title') }}
           </h3>
-          <button @click="showDownloadModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">&times;</button>
+          <button @click="showDownloadModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold">&times;</button>
         </div>
 
         <div class="space-y-3">
           <div
             v-for="rt in availableRuntimes"
             :key="rt.name"
-            class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-850"
+            class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/80"
           >
             <div>
               <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">{{ rt.label }}</h4>
@@ -444,7 +449,8 @@ import {
 import arLocale from './locales/ar.json'
 import enLocale from './locales/en.json'
 
-const isDark = ref(true)
+// Dark theme preference persistence
+const isDark = ref(localStorage.getItem('laragal_theme') !== 'light')
 const currentLang = ref<'ar' | 'en'>('ar')
 const showNewModal = ref(false)
 const showDownloadModal = ref(false)
@@ -452,12 +458,13 @@ const downloadingRuntime = ref('')
 const notification = ref('')
 const copiedItem = ref('')
 
-// Synchronize dark class to html document element
 watch(isDark, (val) => {
   if (val) {
     document.documentElement.classList.add('dark')
+    localStorage.setItem('laragal_theme', 'dark')
   } else {
     document.documentElement.classList.remove('dark')
+    localStorage.setItem('laragal_theme', 'light')
   }
 }, { immediate: true })
 
@@ -465,7 +472,7 @@ function toggleTheme() {
   isDark.value = !isDark.value
 }
 
-// Window control functions
+// Window control functions connected to Wails backend
 function closeWindow() {
   if ((window as any).go?.main?.App?.CloseWindow) {
     (window as any).go.main.App.CloseWindow()
@@ -511,31 +518,32 @@ function toggleLang() {
 }
 
 interface ServiceItem {
-  name: string
-  label: string
+  id: string
+  name_key: string
+  desc_key: string
   port: number
   running: boolean
-  role: string
 }
 
 const services = ref<ServiceItem[]>([
-  { name: 'caddy', label: 'Caddy Server', port: 443, running: true, role: 'Auto-TLS Reverse Proxy' },
-  { name: 'php-8.4', label: 'PHP 8.4', port: 9084, running: true, role: 'FastCGI Daemon' },
-  { name: 'php-8.3', label: 'PHP 8.3', port: 9083, running: true, role: 'FastCGI Daemon' },
-  { name: 'mysql', label: 'MySQL Server', port: 3306, running: true, role: 'Portable Relational DB' },
-  { name: 'redis', label: 'Redis Cache', port: 6379, running: false, role: 'In-Memory Cache' },
-  { name: 'mailpit', label: 'Mailpit Catcher', port: 1025, running: true, role: 'Local SMTP & Web UI (:8025)' },
+  { id: 'caddy', name_key: 'service_caddy', desc_key: 'service_caddy_desc', port: 443, running: true },
+  { id: 'php-8.4', name_key: 'service_php84', desc_key: 'service_php84_desc', port: 9084, running: true },
+  { id: 'php-8.3', name_key: 'service_php83', desc_key: 'service_php83_desc', port: 9083, running: true },
+  { id: 'mysql', name_key: 'service_mysql', desc_key: 'service_mysql_desc', port: 3306, running: true },
+  { id: 'redis', name_key: 'service_redis', desc_key: 'service_redis_desc', port: 6379, running: false },
+  { id: 'mailpit', name_key: 'service_mailpit', desc_key: 'service_mailpit_desc', port: 1025, running: true },
 ])
 
 interface SiteItem {
   domain: string
   root_path: string
+  php_version: string
   php_port: number
 }
 
 const sites = ref<SiteItem[]>([
-  { domain: 'laravel-starter.test', root_path: 'C:/laragal/sites/laravel-starter/public', php_port: 9083 },
-  { domain: 'blog.test', root_path: 'C:/laragal/sites/blog/public', php_port: 9084 }
+  { domain: 'laravel-starter.test', root_path: 'C:/laragal/sites/laravel-starter/public', php_version: 'PHP 8.3', php_port: 9083 },
+  { domain: 'blog.test', root_path: 'C:/laragal/sites/blog/public', php_version: 'PHP 8.4', php_port: 9084 }
 ])
 
 const newProject = ref({
@@ -572,7 +580,7 @@ function openVSCode(path: string) {
 
 function toggleService(service: ServiceItem) {
   service.running = !service.running
-  notification.value = `تم ${service.running ? 'تشغيل' : 'إيقاف'} خدمة ${service.label} بنجاح.`
+  notification.value = `تم ${service.running ? 'تشغيل' : 'إيقاف'} ${t(service.name_key)} بنجاح.`
 }
 
 async function installSSL() {
@@ -607,6 +615,7 @@ async function handleCreateProject() {
   sites.value.push({
     domain,
     root_path: rootPath,
+    php_version: `PHP ${newProject.value.php}`,
     php_port: port
   })
 

@@ -1,6 +1,7 @@
 {
   "app_name": "LaraGal",
   "app_subtitle": "Smart Local Development Environment for PHP & Laravel",
+  "app_title_bar": "LaraGal — Local Development Environment",
   "services_title": "Managed Services",
   "sites_title": "Projects & Domains",
   "new_project_btn": "New Project",
@@ -37,5 +38,20 @@
   "copy_url": "Copy URL",
   "copied": "Copied!",
   "root_directory": "Root Projects Directory",
-  "all_services_healthy": "All services operational"
+  "all_services_healthy": "All services operational",
+  "start_btn": "Start",
+  "stop_btn": "Stop",
+  "available_count": "available",
+  "service_caddy": "Caddy Web Server",
+  "service_caddy_desc": "Web server & reverse proxy with auto-TLS",
+  "service_php84": "PHP 8.4 Engine",
+  "service_php84_desc": "Latest official PHP engine release",
+  "service_php83": "PHP 8.3 Engine",
+  "service_php83_desc": "Stable release recommended for Laravel 11/12",
+  "service_mysql": "MySQL Server",
+  "service_mysql_desc": "Local relational database server",
+  "service_redis": "Redis Cache",
+  "service_redis_desc": "Ultra-fast in-memory caching",
+  "service_mailpit": "Mailpit Mail Catcher",
+  "service_mailpit_desc": "Local SMTP catcher & web mailbox"
 }

@@ -1,6 +1,7 @@
 {
   "app_name": "LaraGal",
   "app_subtitle": "بيئة التطوير المحلية الذكية لـ PHP و Laravel",
+  "app_title_bar": "LaraGal — بيئة التطوير المحلية",
   "services_title": "الخدمات المحلية",
   "sites_title": "المشاريع والنطاقات",
   "new_project_btn": "مشروع جديد",
@@ -37,5 +38,20 @@
   "copy_url": "نسخ الرابط",
   "copied": "تم النسخ!",
   "root_directory": "المجلد الجذري للمشاريع",
-  "all_services_healthy": "جميع الخدمات تعمل بكفاءة"
+  "all_services_healthy": "جميع الخدمات تعمل بكفاءة",
+  "start_btn": "تشغيل",
+  "stop_btn": "إيقاف",
+  "available_count": "متاح",
+  "service_caddy": "خادم Caddy",
+  "service_caddy_desc": "خادم الويب وإدارة شهادات SSL التلقائية",
+  "service_php84": "محرك PHP 8.4",
+  "service_php84_desc": "أحدث إصدار رسمي لمحرك PHP",
+  "service_php83": "محرك PHP 8.3",
+  "service_php83_desc": "إصدار مستقر موصى به لـ Laravel 11/12",
+  "service_mysql": "خادم MySQL",
+  "service_mysql_desc": "قواعد البيانات العلائقية المحلية",
+  "service_redis": "مخزن Redis",
+  "service_redis_desc": "ذاكرة التخزين المؤقت السريعة",
+  "service_mailpit": "صائد البريد Mailpit",
+  "service_mailpit_desc": "صيد واختبار رسائل البريد محلياً"
 }
