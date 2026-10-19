@@ -60,5 +60,17 @@
   "confirm_stop_title": "تأكيد إيقاف الخدمة",
   "confirm_stop_msg": "هل أنت متأكد من رغبتك في إيقاف هذه الخدمة؟ قد تتوقف المواقع المرتبطة بها مؤقتاً.",
   "confirm_btn": "تأكيد الإجراء",
-  "close_btn": "إغلاق"
+  "close_btn": "إغلاق",
+  "change_btn": "تغيير",
+  "change_dir_hint": "تحديد مجلد جديد لتخزين المشاريع",
+  "projects_dir_updated": "تم تحديث مجلد المشاريع بنجاح إلى",
+  "error_changing_dir": "حدث خطأ أثناء تغيير مجلد المشاريع",
+  "target_directory": "مجلد حفظ المشروع",
+  "close_to_background": "إخفاء إلى الخلفية (تبقى الخدمات تعمل)",
+  "quit_app_btn": "إغلاق كلي",
+  "quit_app_hint": "إيقاف جميع الخدمات والخروج التام من البرنامج",
+  "confirm_quit_title": "تأكيد الخروج التام وإيقاف الخدمات",
+  "confirm_quit_msg": "هل تريد إيقاف جميع الخدمات المحلية (Caddy، PHP، MySQL، Mailpit) والخروج النهائي من LaraGal؟",
+  "maximize_restore": "تكبير / استعادة",
+  "minimize": "تصغير"
 }

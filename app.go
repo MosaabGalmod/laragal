@@ -218,8 +218,44 @@ func (a *App) ToggleMaximizeWindow() {
 	}
 }
 
+// CloseWindow hides the window to the background so running services (Caddy, PHP, MySQL, Mailpit) keep working
 func (a *App) CloseWindow() {
+	if a.ctx != nil {
+		runtime.WindowHide(a.ctx)
+	}
+}
+
+// QuitApp performs full application shutdown and stops background services
+func (a *App) QuitApp() {
 	if a.ctx != nil {
 		runtime.Quit(a.ctx)
 	}
 }
+
+// GetProjectsDirectory returns the configured projects root directory
+func (a *App) GetProjectsDirectory() string {
+	return a.cfg.ProjectsPath
+}
+
+// SelectProjectsDirectory displays a native directory chooser dialog and updates configuration
+func (a *App) SelectProjectsDirectory() (string, error) {
+	if a.ctx == nil {
+		return a.cfg.ProjectsPath, nil
+	}
+
+	selectedDir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+		DefaultDirectory: a.cfg.ProjectsPath,
+		Title:            "اختر مجلد المشاريع / Select Projects Directory",
+	})
+	if err != nil {
+		return "", err
+	}
+	if selectedDir == "" {
+		return a.cfg.ProjectsPath, nil
+	}
+
+	a.cfg.ProjectsPath = filepath.Clean(selectedDir)
+	_ = a.cfg.Save(a.cfgPath)
+	return a.cfg.ProjectsPath, nil
+}
+

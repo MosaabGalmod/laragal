@@ -60,5 +60,17 @@
   "confirm_stop_title": "Confirm Service Stop",
   "confirm_stop_msg": "Are you sure you want to stop this service? Sites depending on it may temporarily become unavailable.",
   "confirm_btn": "Confirm",
-  "close_btn": "Close"
+  "close_btn": "Close",
+  "change_btn": "Change",
+  "change_dir_hint": "Select custom root directory for projects",
+  "projects_dir_updated": "Projects directory updated to",
+  "error_changing_dir": "Error changing projects directory",
+  "target_directory": "Project Destination Folder",
+  "close_to_background": "Hide to background (services keep running)",
+  "quit_app_btn": "Exit All",
+  "quit_app_hint": "Stop all services and quit LaraGal completely",
+  "confirm_quit_title": "Confirm Complete Exit",
+  "confirm_quit_msg": "Are you sure you want to stop all local services (Caddy, PHP, MySQL, Mailpit) and quit LaraGal?",
+  "maximize_restore": "Maximize / Restore",
+  "minimize": "Minimize"
 }
