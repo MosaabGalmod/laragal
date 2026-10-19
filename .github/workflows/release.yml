@@ -40,7 +40,7 @@ jobs:
         run: go test ./... -v
 
       - name: Compile LaraGal Standalone Binary
-        run: go build -ldflags "-s -w -H windowsgui" -o laragal.exe .
+        run: go build -tags desktop,production -ldflags "-s -w -H windowsgui" -o laragal.exe .
 
       - name: Package Release ZIP
         run: |
