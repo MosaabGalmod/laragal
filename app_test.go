@@ -46,3 +46,90 @@ func TestProjectsDirectoryLogic(t *testing.T) {
 		t.Errorf("expected loaded path %s, got %s", newDir, loadedCfg.ProjectsPath)
 	}
 }
+
+func TestScanProjects(t *testing.T) {
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "laragal.json")
+
+	// Create test project folders:
+	// 1. laravel-app with public/ directory
+	// 2. simple-php with direct index.php
+	laravelDir := filepath.Join(tempDir, "laravel-app", "public")
+	_ = os.MkdirAll(laravelDir, 0755)
+	_ = os.WriteFile(filepath.Join(laravelDir, "index.php"), []byte("<?php echo 'laravel';"), 0644)
+
+	simpleDir := filepath.Join(tempDir, "simple-php")
+	_ = os.MkdirAll(simpleDir, 0755)
+	_ = os.WriteFile(filepath.Join(simpleDir, "index.php"), []byte("<?php echo 'simple';"), 0644)
+
+	cfg := config.NewDefaultConfig()
+	cfg.ProjectsPath = tempDir
+
+	app := &App{
+		cfg:     cfg,
+		cfgPath: cfgPath,
+	}
+
+	sites := app.ScanProjects()
+	if len(sites) != 2 {
+		t.Fatalf("expected 2 sites scanned, got %d", len(sites))
+	}
+
+	foundLaravel := false
+	foundSimple := false
+	for _, s := range sites {
+		if s.Domain == "laravel-app.test" {
+			foundLaravel = true
+			if !filepath.IsAbs(filepath.FromSlash(s.RootPath)) {
+				t.Errorf("expected absolute root path, got %s", s.RootPath)
+			}
+		}
+		if s.Domain == "simple-php.test" {
+			foundSimple = true
+		}
+	}
+
+	if !foundLaravel || !foundSimple {
+		t.Errorf("did not find expected sites: laravel=%v, simple=%v", foundLaravel, foundSimple)
+	}
+}
+
+func TestRecentDirectories(t *testing.T) {
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "laragal.json")
+
+	cfg := config.NewDefaultConfig()
+	cfg.RecentPaths = []string{}
+	cfg.ProjectsPath = filepath.Join(tempDir, "dir1")
+
+	app := &App{
+		cfg:     cfg,
+		cfgPath: cfgPath,
+	}
+
+	app.addRecentDirectory(filepath.Join(tempDir, "dir1"))
+	app.addRecentDirectory(filepath.Join(tempDir, "dir2"))
+	app.addRecentDirectory(filepath.Join(tempDir, "dir3"))
+
+	recent := app.GetRecentDirectories()
+	if len(recent) != 3 {
+		t.Fatalf("expected 3 recent dirs, got %d", len(recent))
+	}
+	if recent[0] != filepath.Join(tempDir, "dir3") {
+		t.Errorf("expected most recent to be dir3, got %s", recent[0])
+	}
+
+	// Switch directory
+	newDir := filepath.Join(tempDir, "dir4")
+	_ = os.MkdirAll(newDir, 0755)
+	sites, err := app.SetProjectsDirectory(newDir)
+	if err != nil {
+		t.Fatalf("SetProjectsDirectory failed: %v", err)
+	}
+	if app.GetProjectsDirectory() != newDir {
+		t.Errorf("expected current dir %s, got %s", newDir, app.GetProjectsDirectory())
+	}
+	if len(sites) != 0 {
+		t.Errorf("expected 0 sites in empty dir, got %d", len(sites))
+	}
+}

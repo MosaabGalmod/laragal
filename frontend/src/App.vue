@@ -321,6 +321,16 @@
               <FolderOpen class="w-3 h-3 text-amber-500" />
               <span>{{ t('change_btn') }}</span>
             </button>
+            <select
+              v-if="recentDirectories.length > 1"
+              @change="switchRecentDirectory($event)"
+              :value="projectsDirectory"
+              dir="ltr"
+              class="text-[11px] font-sans font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 focus:outline-none cursor-pointer max-w-[140px] truncate"
+              :title="t('recent_directories')"
+            >
+              <option v-for="dir in recentDirectories" :key="dir" :value="dir">{{ dir }}</option>
+            </select>
           </div>
         </div>
 
@@ -567,6 +577,7 @@ const projectError = ref('')
 const confirmService = ref<ServiceItem | null>(null)
 const showQuitConfirm = ref(false)
 const projectsDirectory = ref('C:/laragal/sites')
+const recentDirectories = ref<string[]>([])
 
 // Synchronize dark class to html document element
 watch(isDark, (val) => {
@@ -629,6 +640,61 @@ function minimizeWindow() {
   }
 }
 
+async function loadSites() {
+  if ((window as any).go?.main?.App?.GetSites) {
+    try {
+      const s = await (window as any).go.main.App.GetSites()
+      if (Array.isArray(s)) {
+        sites.value = s.map((item: any) => ({
+          domain: item.domain || item.Domain,
+          root_path: item.root_path || item.RootPath,
+          php_version: `PHP ${item.php_version || item.PHPVersion || '8.3'}`,
+          php_port: item.php_port || item.PHPPort || 9083
+        }))
+      }
+    } catch (e) {
+      console.warn("Could not load sites:", e)
+    }
+  }
+}
+
+async function loadRecentDirectories() {
+  if ((window as any).go?.main?.App?.GetRecentDirectories) {
+    try {
+      const rec = await (window as any).go.main.App.GetRecentDirectories()
+      if (Array.isArray(rec)) {
+        recentDirectories.value = rec
+      }
+    } catch (e) {
+      console.warn("Could not load recent directories:", e)
+    }
+  }
+}
+
+async function switchRecentDirectory(event: Event) {
+  const target = event.target as HTMLSelectElement
+  const chosen = target.value
+  if (!chosen || chosen === projectsDirectory.value) return
+  if ((window as any).go?.main?.App?.SetProjectsDirectory) {
+    try {
+      const s = await (window as any).go.main.App.SetProjectsDirectory(chosen)
+      projectsDirectory.value = chosen
+      notification.value = `${t('projects_dir_updated')} ${chosen}`
+      if (Array.isArray(s)) {
+        sites.value = s.map((item: any) => ({
+          domain: item.domain || item.Domain,
+          root_path: item.root_path || item.RootPath,
+          php_version: `PHP ${item.php_version || item.PHPVersion || '8.3'}`,
+          php_port: item.php_port || item.PHPPort || 9083
+        }))
+      }
+      await loadRecentDirectories()
+    } catch (e: any) {
+      notification.value = `${t('error_changing_dir')}: ${e}`
+    }
+  }
+}
+
 async function changeProjectsDirectory() {
   if ((window as any).go?.main?.App?.SelectProjectsDirectory) {
     try {
@@ -636,6 +702,8 @@ async function changeProjectsDirectory() {
       if (newPath) {
         projectsDirectory.value = newPath
         notification.value = `${t('projects_dir_updated')} ${newPath}`
+        await loadSites()
+        await loadRecentDirectories()
       }
     } catch (e: any) {
       notification.value = `${t('error_changing_dir')}: ${e}`
@@ -652,6 +720,8 @@ onMounted(async () => {
       console.warn("Could not load projects directory:", e)
     }
   }
+  await loadRecentDirectories()
+  await loadSites()
 })
 
 const availableRuntimes = ref([
@@ -698,10 +768,7 @@ interface SiteItem {
   php_port: number
 }
 
-const sites = ref<SiteItem[]>([
-  { domain: 'laravel-starter.test', root_path: 'C:/laragal/sites/laravel-starter/public', php_version: 'PHP 8.3', php_port: 9083 },
-  { domain: 'blog.test', root_path: 'C:/laragal/sites/blog/public', php_version: 'PHP 8.4', php_port: 9084 }
-])
+const sites = ref<SiteItem[]>([])
 
 const newProject = ref({
   name: '',

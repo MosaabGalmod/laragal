@@ -8,6 +8,7 @@ import (
 
 type AppConfig struct {
 	ProjectsPath string          `json:"projects_path"`
+	RecentPaths  []string        `json:"recent_paths,omitempty"`
 	DefaultPHP   string          `json:"default_php"`
 	DomainSuffix string          `json:"domain_suffix"`
 	Services     map[string]bool `json:"services"`
@@ -16,6 +17,7 @@ type AppConfig struct {
 func NewDefaultConfig() *AppConfig {
 	return &AppConfig{
 		ProjectsPath: "C:\\laragal\\sites",
+		RecentPaths:  []string{"C:\\laragal\\sites"},
 		DefaultPHP:   "8.3",
 		DomainSuffix: ".test",
 		Services: map[string]bool{

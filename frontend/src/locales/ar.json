@@ -72,5 +72,6 @@
   "confirm_quit_title": "تأكيد الخروج التام وإيقاف الخدمات",
   "confirm_quit_msg": "هل تريد إيقاف جميع الخدمات المحلية (Caddy، PHP، MySQL، Mailpit) والخروج النهائي من LaraGal؟",
   "maximize_restore": "تكبير / استعادة",
-  "minimize": "تصغير"
+  "minimize": "تصغير",
+  "recent_directories": "المجلدات السابقة"
 }

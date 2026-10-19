@@ -46,6 +46,9 @@ func NewApp() *App {
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	_ = os.MkdirAll(a.cfg.ProjectsPath, 0755)
+	a.initTray()
+	a.ScanProjects()
 }
 
 func (a *App) shutdown(ctx context.Context) {
@@ -195,7 +198,9 @@ APP_DEBUG=true
 }
 
 func (a *App) OpenFolder(folderPath string) error {
-	return exec.Command("explorer", filepath.FromSlash(folderPath)).Start()
+	cleanPath := filepath.FromSlash(folderPath)
+	_ = os.MkdirAll(cleanPath, 0755)
+	return exec.Command("explorer", cleanPath).Start()
 }
 
 func (a *App) OpenBrowser(targetURL string) error {
@@ -203,7 +208,9 @@ func (a *App) OpenBrowser(targetURL string) error {
 }
 
 func (a *App) OpenVSCode(folderPath string) error {
-	return exec.Command("cmd", "/c", "code", filepath.FromSlash(folderPath)).Start()
+	cleanPath := filepath.FromSlash(folderPath)
+	_ = os.MkdirAll(cleanPath, 0755)
+	return exec.Command("cmd", "/c", "code", cleanPath).Start()
 }
 
 func (a *App) MinimizeWindow() {
@@ -237,25 +244,137 @@ func (a *App) GetProjectsDirectory() string {
 	return a.cfg.ProjectsPath
 }
 
-// SelectProjectsDirectory displays a native directory chooser dialog and updates configuration
-func (a *App) SelectProjectsDirectory() (string, error) {
-	if a.ctx == nil {
-		return a.cfg.ProjectsPath, nil
+// GetRecentDirectories returns the list of recently used project folders
+func (a *App) GetRecentDirectories() []string {
+	if len(a.cfg.RecentPaths) == 0 && a.cfg.ProjectsPath != "" {
+		a.cfg.RecentPaths = []string{a.cfg.ProjectsPath}
+	}
+	return a.cfg.RecentPaths
+}
+
+func (a *App) addRecentDirectory(dir string) {
+	cleanDir := filepath.Clean(dir)
+	newRecent := []string{cleanDir}
+	for _, p := range a.cfg.RecentPaths {
+		if filepath.Clean(p) != cleanDir {
+			newRecent = append(newRecent, p)
+		}
+		if len(newRecent) >= 5 {
+			break
+		}
+	}
+	a.cfg.RecentPaths = newRecent
+}
+
+// SetProjectsDirectory switches active projects directory and rescans projects
+func (a *App) SetProjectsDirectory(dirPath string) ([]caddy.SiteDef, error) {
+	cleanDir := filepath.Clean(dirPath)
+	if err := os.MkdirAll(cleanDir, 0755); err != nil {
+		return a.sites, err
 	}
 
-	selectedDir, err := runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
-		DefaultDirectory: a.cfg.ProjectsPath,
-		Title:            "اختر مجلد المشاريع / Select Projects Directory",
-	})
-	if err != nil {
-		return "", err
+	a.cfg.ProjectsPath = cleanDir
+	a.addRecentDirectory(cleanDir)
+	_ = a.cfg.Save(a.cfgPath)
+
+	sites := a.ScanProjects()
+	return sites, nil
+}
+
+// SelectProjectsDirectory displays a directory chooser dialog with guaranteed PowerShell fallback and updates configuration
+func (a *App) SelectProjectsDirectory() (string, error) {
+	defaultDir := a.cfg.ProjectsPath
+	if defaultDir == "" {
+		defaultDir = "C:\\laragal\\sites"
 	}
+	_ = os.MkdirAll(defaultDir, 0755)
+
+	var selectedDir string
+	var err error
+
+	if a.ctx != nil {
+		selectedDir, err = runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
+			DefaultDirectory: defaultDir,
+			Title:            "اختر مجلد المشاريع / Select Projects Directory",
+		})
+	}
+
+	// Guaranteed Windows fallback if COM dialog fails or returned empty
+	if err != nil || selectedDir == "" {
+		psScript := fmt.Sprintf(`Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'اختر مجلد المشاريع لـ LaraGal'; $f.SelectedPath = '%s'; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }`, strings.ReplaceAll(defaultDir, `\`, `\\`))
+		out, psErr := exec.Command("powershell", "-NoProfile", "-Command", psScript).Output()
+		if psErr == nil {
+			trimmed := strings.TrimSpace(string(out))
+			if trimmed != "" {
+				selectedDir = trimmed
+			}
+		}
+	}
+
 	if selectedDir == "" {
 		return a.cfg.ProjectsPath, nil
 	}
 
-	a.cfg.ProjectsPath = filepath.Clean(selectedDir)
+	cleanDir := filepath.Clean(selectedDir)
+	_ = os.MkdirAll(cleanDir, 0755)
+	a.cfg.ProjectsPath = cleanDir
+	a.addRecentDirectory(cleanDir)
 	_ = a.cfg.Save(a.cfgPath)
+
+	a.ScanProjects()
 	return a.cfg.ProjectsPath, nil
+}
+
+// ScanProjects scans the projects directory and populates existing projects
+func (a *App) ScanProjects() []caddy.SiteDef {
+	if a.cfg.ProjectsPath == "" {
+		return a.sites
+	}
+	_ = os.MkdirAll(a.cfg.ProjectsPath, 0755)
+
+	entries, err := os.ReadDir(a.cfg.ProjectsPath)
+	if err != nil {
+		return a.sites
+	}
+
+	scannedSites := make([]caddy.SiteDef, 0)
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		projectName := entry.Name()
+		if strings.HasPrefix(projectName, ".") || strings.HasPrefix(projectName, "$") {
+			continue
+		}
+
+		projectDir := filepath.Join(a.cfg.ProjectsPath, projectName)
+		docRoot := projectDir
+		publicDir := filepath.Join(projectDir, "public")
+		if info, err := os.Stat(publicDir); err == nil && info.IsDir() {
+			docRoot = publicDir
+		}
+
+		domain := projectName + a.cfg.DomainSuffix
+		phpPort := 9083 // default PHP 8.3
+
+		scannedSites = append(scannedSites, caddy.SiteDef{
+			Domain:   domain,
+			RootPath: filepath.ToSlash(docRoot),
+			PHPPort:  phpPort,
+		})
+	}
+
+	a.sites = scannedSites
+
+	// Update system hosts file for all scanned domains
+	domains := make([]string, 0, len(a.sites))
+	for _, s := range a.sites {
+		domains = append(domains, s.Domain)
+	}
+	if len(domains) > 0 {
+		_ = hosts.UpdateSystemHosts(domains)
+	}
+
+	return a.sites
 }
 
