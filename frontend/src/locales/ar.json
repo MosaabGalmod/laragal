@@ -31,5 +31,11 @@
   "download_runtimes_btn": "تنزيل الحزم المحمولة",
   "modal_download_title": "إدارة وتنزيل الحزم المحمولة",
   "download_now": "تنزيل وتثبيت",
-  "downloading": "جاري التنزيل..."
+  "downloading": "جاري التنزيل...",
+  "open_folder": "فتح المجلد",
+  "open_vscode": "فتح في VS Code",
+  "copy_url": "نسخ الرابط",
+  "copied": "تم النسخ!",
+  "root_directory": "المجلد الجذري للمشاريع",
+  "all_services_healthy": "جميع الخدمات تعمل بكفاءة"
 }

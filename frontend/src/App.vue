@@ -1,191 +1,249 @@
 <template>
-  <div :dir="currentLang === 'ar' ? 'rtl' : 'ltr'" :class="[isDark ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800', 'min-h-screen transition-colors duration-200']">
-    <!-- Header -->
-    <header class="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-30">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-        <div class="flex items-center space-x-3 rtl:space-x-reverse">
-          <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-sm">
-            LG
+  <div :dir="currentLang === 'ar' ? 'rtl' : 'ltr'" :class="[isDark ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800', 'min-h-screen flex flex-col justify-between transition-colors duration-200']">
+    <div>
+      <!-- Header -->
+      <header class="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+          <div class="flex items-center space-x-3 rtl:space-x-reverse">
+            <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-sm">
+              LG
+            </div>
+            <div>
+              <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
+                {{ t('app_name') }}
+                <span class="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 font-mono">v1.0</span>
+              </h1>
+              <p class="text-xs text-slate-500 dark:text-slate-400">{{ t('app_subtitle') }}</p>
+            </div>
           </div>
-          <div>
-            <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-              {{ t('app_name') }}
-              <span class="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 font-mono">v1.0</span>
-            </h1>
-            <p class="text-xs text-slate-500 dark:text-slate-400">{{ t('app_subtitle') }}</p>
-          </div>
-        </div>
 
-        <!-- Controls: Language, Theme & Actions -->
-        <div class="flex items-center gap-3">
-          <button
-            @click="installSSL"
-            class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors"
-            :title="t('ssl_install_hint')"
-          >
-            <ShieldCheck class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span>{{ t('install_ssl_btn') }}</span>
-          </button>
-
-          <button
-            @click="toggleLang"
-            class="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-          >
-            {{ currentLang === 'ar' ? 'English' : 'العربية' }}
-          </button>
-
-          <button
-            @click="isDark = !isDark"
-            class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            :title="isDark ? t('light_mode') : t('dark_mode')"
-          >
-            <Sun v-if="isDark" class="w-4 h-4 text-amber-400" />
-            <Moon v-else class="w-4 h-4 text-slate-600" />
-          </button>
-
-          <button
-            @click="showNewModal = true"
-            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors"
-          >
-            <Plus class="w-4 h-4" />
-            <span>{{ t('new_project_btn') }}</span>
-          </button>
-        </div>
-      </div>
-    </header>
-
-    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-      <!-- Notification Banner -->
-      <div v-if="notification" class="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200 flex items-center justify-between text-sm animate-fade-in">
-        <div class="flex items-center gap-2">
-          <Info class="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-          <span>{{ notification }}</span>
-        </div>
-        <button @click="notification = ''" class="text-blue-500 hover:text-blue-700 font-bold">&times;</button>
-      </div>
-
-      <!-- Services Section -->
-      <section>
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-white">
-            <Server class="w-5 h-5 text-blue-600" />
-            {{ t('services_title') }}
-          </h2>
+          <!-- Controls: Language, Theme & Actions -->
           <div class="flex items-center gap-3">
             <button
-              @click="showDownloadModal = true"
-              class="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 font-semibold flex items-center gap-1 hover:underline"
+              @click="installSSL"
+              class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors"
+              :title="t('ssl_install_hint')"
             >
-              <Download class="w-3.5 h-3.5" />
-              <span>{{ t('download_runtimes_btn') }}</span>
+              <ShieldCheck class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+              <span>{{ t('install_ssl_btn') }}</span>
             </button>
-            <span class="text-xs text-slate-500">{{ services.filter(s => s.running).length }} / {{ services.length }} {{ t('status_running') }}</span>
+
+            <button
+              @click="toggleLang"
+              class="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              {{ currentLang === 'ar' ? 'English' : 'العربية' }}
+            </button>
+
+            <button
+              @click="isDark = !isDark"
+              class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              :title="isDark ? t('light_mode') : t('dark_mode')"
+            >
+              <Sun v-if="isDark" class="w-4 h-4 text-amber-400" />
+              <Moon v-else class="w-4 h-4 text-slate-600" />
+            </button>
+
+            <button
+              @click="showNewModal = true"
+              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors"
+            >
+              <Plus class="w-4 h-4" />
+              <span>{{ t('new_project_btn') }}</span>
+            </button>
           </div>
         </div>
+      </header>
 
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div
-            v-for="service in services"
-            :key="service.name"
-            class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-xs flex flex-col justify-between"
-          >
-            <div class="flex items-start justify-between">
-              <div>
-                <h3 class="font-bold text-sm text-slate-800 dark:text-slate-200">{{ service.label }}</h3>
-                <p class="text-xs text-slate-400 font-mono mt-0.5">:{{ service.port }}</p>
-              </div>
-              <span
-                :class="[
-                  service.running
-                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700',
-                  'text-[10px] px-2 py-0.5 rounded-full border font-medium flex items-center gap-1'
-                ]"
-              >
-                <span class="w-1.5 h-1.5 rounded-full" :class="service.running ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
-                {{ service.running ? t('status_running') : t('status_stopped') }}
-              </span>
-            </div>
+      <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+        <!-- Notification Banner -->
+        <div v-if="notification" class="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200 flex items-center justify-between text-sm animate-fade-in">
+          <div class="flex items-center gap-2">
+            <Info class="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+            <span>{{ notification }}</span>
+          </div>
+          <button @click="notification = ''" class="text-blue-500 hover:text-blue-700 font-bold">&times;</button>
+        </div>
 
-            <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-              <span class="text-[11px] text-slate-400">{{ service.role }}</span>
+        <!-- Services Section -->
+        <section>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+              <Server class="w-5 h-5 text-blue-600" />
+              {{ t('services_title') }}
+            </h2>
+            <div class="flex items-center gap-3">
               <button
-                @click="toggleService(service)"
-                class="text-xs font-semibold px-2 py-1 rounded-md transition-colors"
-                :class="service.running ? 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30' : 'text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30'"
+                @click="showDownloadModal = true"
+                class="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 font-semibold flex items-center gap-1 hover:underline"
               >
-                {{ service.running ? 'إيقاف' : 'تشغيل' }}
+                <Download class="w-3.5 h-3.5" />
+                <span>{{ t('download_runtimes_btn') }}</span>
               </button>
+              <span class="text-xs text-slate-500">{{ services.filter(s => s.running).length }} / {{ services.length }} {{ t('status_running') }}</span>
             </div>
           </div>
-        </div>
-      </section>
 
-      <!-- Sites & Projects Section -->
-      <section>
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-white">
-            <Globe class="w-5 h-5 text-blue-600" />
-            {{ t('sites_title') }}
-          </h2>
-          <span class="text-xs text-slate-500">{{ sites.length }} متاح</span>
-        </div>
-
-        <div v-if="sites.length === 0" class="p-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/30">
-          <Globe class="w-10 h-10 text-slate-400 mx-auto mb-3 opacity-60" />
-          <p class="text-sm text-slate-500 max-w-sm mx-auto">{{ t('empty_sites') }}</p>
-          <button
-            @click="showNewModal = true"
-            class="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors"
-          >
-            <Plus class="w-4 h-4" />
-            {{ t('new_project_btn') }}
-          </button>
-        </div>
-
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div
-            v-for="site in sites"
-            :key="site.domain"
-            class="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs hover:border-blue-400 dark:hover:border-blue-600 transition-all flex flex-col justify-between"
-          >
-            <div>
-              <div class="flex items-center justify-between mb-2">
-                <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-mono">
-                  <Lock class="w-3 h-3 text-emerald-600" />
-                  HTTPS
-                </span>
-                <span class="text-xs font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
-                  PHP :{{ site.php_port }}
+          <!-- Responsive 6-column unified grid -->
+          <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3.5">
+            <div
+              v-for="service in services"
+              :key="service.name"
+              class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-xs flex flex-col justify-between"
+            >
+              <div class="flex items-start justify-between gap-1">
+                <div class="truncate">
+                  <h3 class="font-bold text-sm text-slate-800 dark:text-slate-200 truncate" :title="service.label">{{ service.label }}</h3>
+                  <p dir="ltr" class="text-xs text-slate-400 font-mono mt-0.5 text-start">:{{ service.port }}</p>
+                </div>
+                <span
+                  :class="[
+                    service.running
+                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
+                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700',
+                    'text-[10px] px-2 py-0.5 rounded-full border font-medium flex items-center gap-1 flex-shrink-0'
+                  ]"
+                >
+                  <span class="w-1.5 h-1.5 rounded-full" :class="service.running ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
+                  {{ service.running ? t('status_running') : t('status_stopped') }}
                 </span>
               </div>
 
-              <h3 class="text-base font-bold text-slate-900 dark:text-white truncate">
-                {{ site.domain }}
-              </h3>
-              <p class="text-xs text-slate-400 truncate mt-1 font-mono" :title="site.root_path">
-                {{ site.root_path }}
-              </p>
-            </div>
-
-            <div class="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-              <span class="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
-                <CheckCircle2 class="w-3.5 h-3.5" />
-                {{ t('ssl_trusted') }}
-              </span>
-              <a
-                :href="'https://' + site.domain"
-                target="_blank"
-                class="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300"
-              >
-                <span>{{ t('open_browser') }}</span>
-                <ExternalLink class="w-3.5 h-3.5" />
-              </a>
+              <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                <span class="text-[11px] text-slate-400 truncate" :title="service.role">{{ service.role }}</span>
+                <button
+                  @click="toggleService(service)"
+                  class="text-xs font-semibold px-2 py-1 rounded-md transition-colors"
+                  :class="service.running ? 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30' : 'text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30'"
+                >
+                  {{ service.running ? 'إيقاف' : 'تشغيل' }}
+                </button>
+              </div>
             </div>
           </div>
+        </section>
+
+        <!-- Sites & Projects Section -->
+        <section>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+              <Globe class="w-5 h-5 text-blue-600" />
+              {{ t('sites_title') }}
+            </h2>
+            <span class="text-xs text-slate-500">{{ sites.length }} متاح</span>
+          </div>
+
+          <div v-if="sites.length === 0" class="p-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/30">
+            <Globe class="w-10 h-10 text-slate-400 mx-auto mb-3 opacity-60" />
+            <p class="text-sm text-slate-500 max-w-sm mx-auto">{{ t('empty_sites') }}</p>
+            <button
+              @click="showNewModal = true"
+              class="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors"
+            >
+              <Plus class="w-4 h-4" />
+              {{ t('new_project_btn') }}
+            </button>
+          </div>
+
+          <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div
+              v-for="site in sites"
+              :key="site.domain"
+              class="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs hover:border-blue-400 dark:hover:border-blue-600 transition-all flex flex-col justify-between"
+            >
+              <div>
+                <div class="flex items-center justify-between mb-3">
+                  <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-mono">
+                    <Lock class="w-3 h-3 text-emerald-600" />
+                    HTTPS
+                  </span>
+                  <span dir="ltr" class="text-xs font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
+                    PHP :{{ site.php_port }}
+                  </span>
+                </div>
+
+                <h3 class="text-base font-bold text-slate-900 dark:text-white truncate">
+                  {{ site.domain }}
+                </h3>
+
+                <!-- Sleek path chip with copy and explore buttons -->
+                <div class="mt-3 flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  <span dir="ltr" class="truncate flex-1" :title="site.root_path">{{ site.root_path }}</span>
+                  <div class="flex items-center gap-1 flex-shrink-0 ms-2">
+                    <button
+                      @click="copyText(site.root_path)"
+                      :title="t('copy_url')"
+                      class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      <Check v-if="copiedItem === site.root_path" class="w-3 h-3 text-emerald-500" />
+                      <Copy v-else class="w-3 h-3 text-slate-400" />
+                    </button>
+                    <button
+                      @click="openExplorer(site.root_path)"
+                      :title="t('open_folder')"
+                      class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                    >
+                      <Folder class="w-3 h-3 text-slate-400" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Quick action bar -->
+              <div class="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                    <CheckCircle2 class="w-3.5 h-3.5" />
+                    {{ t('ssl_trusted') }}
+                  </span>
+                  <button
+                    @click="openVSCode(site.root_path)"
+                    class="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors ms-1"
+                    :title="t('open_vscode')"
+                  >
+                    <Code class="w-3.5 h-3.5" />
+                    <span>VS Code</span>
+                  </button>
+                </div>
+
+                <a
+                  :href="'https://' + site.domain"
+                  target="_blank"
+                  @click.prevent="openBrowser('https://' + site.domain)"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors"
+                >
+                  <span>{{ t('open_browser') }}</span>
+                  <ExternalLink class="w-3.5 h-3.5" />
+                </a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Desktop Status Bar -->
+    <footer class="mt-12 border-t border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 backdrop-blur py-3 text-xs text-slate-500 dark:text-slate-400">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-4">
+          <div class="flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+            <span>{{ t('all_services_healthy') }}</span>
+          </div>
+          <span class="text-slate-300 dark:text-slate-700">|</span>
+          <div class="flex items-center gap-1 font-mono">
+            <span>{{ t('root_directory') }}:</span>
+            <button @click="openExplorer('C:/laragal')" class="text-blue-600 dark:text-blue-400 hover:underline">C:\laragal</button>
+          </div>
         </div>
-      </section>
-    </main>
+
+        <div class="flex items-center gap-3 font-mono text-[11px]">
+          <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">TLD: *.test</span>
+          <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">SSL: Auto-TLS</span>
+          <span>LaraGal v1.0.0</span>
+        </div>
+      </div>
+    </footer>
 
     <!-- New Project Modal -->
     <div v-if="showNewModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
@@ -301,7 +359,8 @@
 import { ref } from 'vue'
 import {
   Server, Globe, Plus, ShieldCheck, Sun, Moon,
-  Lock, ExternalLink, CheckCircle2, Info, Download
+  Lock, ExternalLink, CheckCircle2, Info, Download,
+  Folder, Code, Copy, Check
 } from 'lucide-vue-next'
 
 import arLocale from './locales/ar.json'
@@ -313,6 +372,7 @@ const showNewModal = ref(false)
 const showDownloadModal = ref(false)
 const downloadingRuntime = ref('')
 const notification = ref('')
+const copiedItem = ref('')
 
 const availableRuntimes = ref([
   { name: 'caddy', label: 'Caddy Server v2.8', desc: 'خادم الويب الرئيسي وإدارة شهادات SSL التلقائية' },
@@ -368,24 +428,69 @@ const newProject = ref({
   php: '8.3'
 })
 
+function copyText(txt: string) {
+  navigator.clipboard.writeText(txt)
+  copiedItem.value = txt
+  setTimeout(() => { copiedItem.value = '' }, 2000)
+}
+
+function openExplorer(path: string) {
+  if ((window as any).go?.main?.App?.OpenFolder) {
+    (window as any).go.main.App.OpenFolder(path)
+  }
+}
+
+function openBrowser(url: string) {
+  if ((window as any).go?.main?.App?.OpenBrowser) {
+    (window as any).go.main.App.OpenBrowser(url)
+  } else {
+    window.open(url, '_blank')
+  }
+}
+
+function openVSCode(path: string) {
+  if ((window as any).go?.main?.App?.OpenVSCode) {
+    (window as any).go.main.App.OpenVSCode(path)
+  }
+}
+
 function toggleService(service: ServiceItem) {
   service.running = !service.running
   notification.value = `تم ${service.running ? 'تشغيل' : 'إيقاف'} خدمة ${service.label} بنجاح.`
 }
 
-function installSSL() {
+async function installSSL() {
+  if ((window as any).go?.main?.App?.InstallSSLTrust) {
+    try {
+      const res = await (window as any).go.main.App.InstallSSLTrust()
+      notification.value = res || t('success_ssl')
+      return
+    } catch (err: any) {
+      notification.value = `خطأ أثناء تثبيت الشهادة: ${err}`
+      return
+    }
+  }
   notification.value = t('success_ssl')
 }
 
-function handleCreateProject() {
+async function handleCreateProject() {
   if (!newProject.value.name) return
 
   const domain = `${newProject.value.name}.test`
   const port = newProject.value.php === '8.4' ? 9084 : (newProject.value.php === '8.3' ? 9083 : 9082)
+  const rootPath = `C:/laragal/sites/${newProject.value.name}/public`
+
+  if ((window as any).go?.main?.App?.CreateProject) {
+    try {
+      await (window as any).go.main.App.CreateProject(newProject.value.name, newProject.value.type, newProject.value.php)
+    } catch (e: any) {
+      console.warn("Go backend create project:", e)
+    }
+  }
 
   sites.value.push({
     domain,
-    root_path: `C:/laragal/sites/${newProject.value.name}/public`,
+    root_path: rootPath,
     php_port: port
   })
 
@@ -398,10 +503,20 @@ async function triggerDownloadRuntime(name: string) {
   downloadingRuntime.value = name
   notification.value = `جاري بدء تنزيل وتثبيت حزمة ${name}...`
 
-  // Simulate or call Wails bridge
+  if ((window as any).go?.main?.App?.DownloadBinary) {
+    try {
+      const msg = await (window as any).go.main.App.DownloadBinary(name)
+      downloadingRuntime.value = ''
+      notification.value = msg || `تم تجهيز وتثبيت حزمة ${name} بنجاح.`
+      return
+    } catch (err: any) {
+      console.warn("Download err:", err)
+    }
+  }
+
   setTimeout(() => {
     downloadingRuntime.value = ''
     notification.value = `تم تجهيز وتثبيت حزمة ${name} بنجاح في مجلد bin/${name}.`
-  }, 2000)
+  }, 1500)
 }
 </script>

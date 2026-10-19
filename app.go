@@ -192,3 +192,15 @@ APP_DEBUG=true
 
 	return a.AddSite(domain, docRoot, phpVersion)
 }
+
+func (a *App) OpenFolder(folderPath string) error {
+	return exec.Command("explorer", filepath.FromSlash(folderPath)).Start()
+}
+
+func (a *App) OpenBrowser(targetURL string) error {
+	return exec.Command("rundll32", "url.dll,FileProtocolHandler", targetURL).Start()
+}
+
+func (a *App) OpenVSCode(folderPath string) error {
+	return exec.Command("cmd", "/c", "code", filepath.FromSlash(folderPath)).Start()
+}

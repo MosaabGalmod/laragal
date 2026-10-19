@@ -31,5 +31,11 @@
   "download_runtimes_btn": "Download Runtimes",
   "modal_download_title": "Manage & Download Portable Runtimes",
   "download_now": "Download & Setup",
-  "downloading": "Downloading..."
+  "downloading": "Downloading...",
+  "open_folder": "Open Folder",
+  "open_vscode": "Open in VS Code",
+  "copy_url": "Copy URL",
+  "copied": "Copied!",
+  "root_directory": "Root Projects Directory",
+  "all_services_healthy": "All services operational"
 }
