@@ -27,5 +27,9 @@
   "success_ssl": "Root CA certificate installed successfully in Windows Store.",
   "quick_links": "Quick Links",
   "mailpit_web": "Mailpit Web UI (1025 / 8025)",
-  "mysql_admin": "MySQL Database (3306)"
+  "mysql_admin": "MySQL Database (3306)",
+  "download_runtimes_btn": "Download Runtimes",
+  "modal_download_title": "Manage & Download Portable Runtimes",
+  "download_now": "Download & Setup",
+  "downloading": "Downloading..."
 }

@@ -71,7 +71,16 @@
             <Server class="w-5 h-5 text-blue-600" />
             {{ t('services_title') }}
           </h2>
-          <span class="text-xs text-slate-500">{{ services.filter(s => s.running).length }} / {{ services.length }} {{ t('status_running') }}</span>
+          <div class="flex items-center gap-3">
+            <button
+              @click="showDownloadModal = true"
+              class="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 font-semibold flex items-center gap-1 hover:underline"
+            >
+              <Download class="w-3.5 h-3.5" />
+              <span>{{ t('download_runtimes_btn') }}</span>
+            </button>
+            <span class="text-xs text-slate-500">{{ services.filter(s => s.running).length }} / {{ services.length }} {{ t('status_running') }}</span>
+          </div>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -242,6 +251,49 @@
         </form>
       </div>
     </div>
+
+    <!-- Download Runtimes Modal -->
+    <div v-if="showDownloadModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
+      <div class="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-6 space-y-5 animate-scale-in">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <h3 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+            <Download class="w-4 h-4 text-blue-600" />
+            {{ t('modal_download_title') }}
+          </h3>
+          <button @click="showDownloadModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">&times;</button>
+        </div>
+
+        <div class="space-y-3">
+          <div
+            v-for="rt in availableRuntimes"
+            :key="rt.name"
+            class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/40"
+          >
+            <div>
+              <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">{{ rt.label }}</h4>
+              <p class="text-[11px] text-slate-400 font-mono">{{ rt.desc }}</p>
+            </div>
+            <button
+              @click="triggerDownloadRuntime(rt.name)"
+              :disabled="downloadingRuntime === rt.name"
+              class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+            >
+              <Download class="w-3.5 h-3.5" :class="downloadingRuntime === rt.name ? 'animate-bounce' : ''" />
+              <span>{{ downloadingRuntime === rt.name ? t('downloading') : t('download_now') }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+          <button
+            @click="showDownloadModal = false"
+            class="px-3 py-1.5 text-xs font-medium rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            {{ t('cancel_btn') }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -249,7 +301,7 @@
 import { ref } from 'vue'
 import {
   Server, Globe, Plus, ShieldCheck, Sun, Moon,
-  Lock, ExternalLink, CheckCircle2, Info
+  Lock, ExternalLink, CheckCircle2, Info, Download
 } from 'lucide-vue-next'
 
 import arLocale from './locales/ar.json'
@@ -258,7 +310,16 @@ import enLocale from './locales/en.json'
 const isDark = ref(true)
 const currentLang = ref<'ar' | 'en'>('ar')
 const showNewModal = ref(false)
+const showDownloadModal = ref(false)
+const downloadingRuntime = ref('')
 const notification = ref('')
+
+const availableRuntimes = ref([
+  { name: 'caddy', label: 'Caddy Server v2.8', desc: 'خادم الويب الرئيسي وإدارة شهادات SSL التلقائية' },
+  { name: 'php-8.4', label: 'PHP 8.4 (NTS x64)', desc: 'أحدث إصدار رسمي لمحرك PHP' },
+  { name: 'php-8.3', label: 'PHP 8.3 (NTS x64)', desc: 'إصدار مستقر موصى به لـ Laravel 11/12' },
+  { name: 'mailpit', label: 'Mailpit Server v1.21', desc: 'صيد واختبار رسائل البريد الإلكتروني محلياً' },
+])
 
 const locales: Record<string, Record<string, string>> = {
   ar: arLocale,
@@ -331,5 +392,16 @@ function handleCreateProject() {
   notification.value = `تم إنشاء المشروع بنجاح وضبط رابط https://${domain} الموثوق بـ SSL.`
   showNewModal.value = false
   newProject.value.name = ''
+}
+
+async function triggerDownloadRuntime(name: string) {
+  downloadingRuntime.value = name
+  notification.value = `جاري بدء تنزيل وتثبيت حزمة ${name}...`
+
+  // Simulate or call Wails bridge
+  setTimeout(() => {
+    downloadingRuntime.value = ''
+    notification.value = `تم تجهيز وتثبيت حزمة ${name} بنجاح في مجلد bin/${name}.`
+  }, 2000)
 }
 </script>

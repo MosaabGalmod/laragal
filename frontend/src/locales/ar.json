@@ -27,5 +27,9 @@
   "success_ssl": "تم تثبيت شهادة الجذر بنجاح في متجر ويندوز.",
   "quick_links": "روابط سريعة",
   "mailpit_web": "بريد Mailpit (1025 / 8025)",
-  "mysql_admin": "قواعد البيانات MySQL (3306)"
+  "mysql_admin": "قواعد البيانات MySQL (3306)",
+  "download_runtimes_btn": "تنزيل الحزم المحمولة",
+  "modal_download_title": "إدارة وتنزيل الحزم المحمولة",
+  "download_now": "تنزيل وتثبيت",
+  "downloading": "جاري التنزيل..."
 }

@@ -10,7 +10,9 @@ import (
 
 	"github.com/laragal/laragal/internal/certs"
 	"github.com/laragal/laragal/internal/config"
+	"github.com/laragal/laragal/internal/downloader"
 	"github.com/laragal/laragal/internal/hosts"
+	"github.com/laragal/laragal/internal/privilege"
 	"github.com/laragal/laragal/internal/process"
 	"github.com/laragal/laragal/internal/projects"
 	"github.com/laragal/laragal/internal/services/caddy"
@@ -114,10 +116,42 @@ func (a *App) InstallSSLTrust() (string, error) {
 	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return string(out), err
+		// Attempt elevated execution via PowerShell Start-Process -Verb RunAs
+		elevatedCmd := privilege.BuildElevatedCertCommand(rootCertPath)
+		elCmd := exec.Command(elevatedCmd[0], elevatedCmd[1:]...)
+		elOut, elErr := elCmd.CombinedOutput()
+		if elErr != nil {
+			return string(out) + " " + string(elOut), elErr
+		}
 	}
 
 	return "تم تثبيت شهادة الجذر في متجر شهادات ويندوز بنجاح.", nil
+}
+
+func (a *App) DownloadBinary(name string) (string, error) {
+	url, err := downloader.GetDownloadURL(name)
+	if err != nil {
+		return "", err
+	}
+
+	tempDir := filepath.Join("data", "tmp")
+	_ = os.MkdirAll(tempDir, 0755)
+	zipPath := filepath.Join(tempDir, fmt.Sprintf("%s.zip", name))
+	destDir := filepath.Join("bin", name)
+
+	// Download zip
+	resp, err := exec.Command("powershell", "-NoProfile", "-Command", fmt.Sprintf("Invoke-WebRequest -Uri '%s' -OutFile '%s'", url, zipPath)).CombinedOutput()
+	if err != nil {
+		return string(resp), err
+	}
+
+	// Extract zip
+	if err := downloader.ExtractZip(zipPath, destDir); err != nil {
+		return "", err
+	}
+
+	_ = os.Remove(zipPath)
+	return fmt.Sprintf("تم تنزيل وتثبيت %s بنجاح في %s", name, destDir), nil
 }
 
 func (a *App) CreateProject(name string, projectType string, phpVersion string) error {
