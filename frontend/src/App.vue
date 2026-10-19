@@ -1,6 +1,6 @@
 <template>
   <div :dir="currentLang === 'ar' ? 'rtl' : 'ltr'" class="h-screen w-screen flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-150 select-none">
-    <!-- ================= 1. FIXED TITLE BAR (Physical LTR) ================= -->
+    <!-- ================= 1. FIXED TITLE BAR (Physical LTR for Window Controls) ================= -->
     <div
       dir="ltr"
       class="wails-drag h-10 w-full bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-3 text-xs font-medium z-40 flex-shrink-0 select-none"
@@ -68,11 +68,11 @@
       </div>
     </div>
 
-    <!-- ================= 2. FIXED MAIN HEADER (Brand on LEFT, Actions on RIGHT) ================= -->
-    <header dir="ltr" class="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur z-30">
+    <!-- ================= 2. FIXED MAIN HEADER (Direction-Aware: Logo on RIGHT in Arabic, on LEFT in English) ================= -->
+    <header class="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur z-30">
       <div class="w-full px-6 lg:px-8 py-3.5 flex items-center justify-between">
-        <!-- Physical LEFT: App Brand Anchor -->
-        <div class="flex items-center gap-3">
+        <!-- Brand Anchor: In RTL appears on the RIGHT; in LTR appears on the LEFT -->
+        <div class="flex items-center gap-3.5">
           <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-500 flex items-center justify-center text-white font-black text-xl shadow-md ring-2 ring-blue-500/20 flex-shrink-0">
             LG
           </div>
@@ -80,17 +80,17 @@
             <div class="flex items-center gap-2">
               <span class="text-xl font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
               <span class="text-[11px] px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
-                v1.0.3
+                v1.0.4
               </span>
             </div>
-            <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5" :dir="currentLang === 'ar' ? 'rtl' : 'ltr'">
+            <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 text-start">
               <span v-if="currentLang === 'ar'">بيئة التطوير المحلية لـ <bdi>PHP</bdi> و <bdi>Laravel</bdi></span>
               <span v-else>Local Development Environment for PHP &amp; Laravel</span>
             </p>
           </div>
         </div>
 
-        <!-- Physical RIGHT: Actions Toolbar -->
+        <!-- Actions Toolbar: In RTL appears on the LEFT; in LTR appears on the RIGHT -->
         <div class="flex items-center gap-2.5">
           <button
             @click="installSSL"
@@ -316,7 +316,7 @@
         <div class="flex items-center gap-3 font-mono text-[11px]">
           <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">TLD: *.test</span>
           <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">SSL: Auto-TLS</span>
-          <span class="text-slate-400 dark:text-slate-500 font-bold">LaraGal v1.0.3</span>
+          <span class="text-slate-400 dark:text-slate-500 font-bold">LaraGal v1.0.4</span>
         </div>
       </div>
     </footer>
@@ -445,7 +445,7 @@
           <div
             v-for="rt in availableRuntimes"
             :key="rt.name"
-            class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/80"
+            class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-850"
           >
             <div>
               <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">{{ rt.label }}</h4>
