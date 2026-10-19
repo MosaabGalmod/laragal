@@ -16,13 +16,16 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:  "LaraGal - Local Development Environment",
-		Width:  1024,
-		Height: 720,
+		Title:     "LaraGal - Local Development Environment",
+		Width:     1280,
+		Height:    820,
+		MinWidth:  960,
+		MinHeight: 640,
+		Frameless: true,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 15, G: 23, B: 42, A: 1},
+		BackgroundColour: &options.RGBA{R: 11, G: 15, B: 25, A: 1},
 		OnStartup:        app.startup,
 		OnShutdown:       app.shutdown,
 		Bind: []interface{}{

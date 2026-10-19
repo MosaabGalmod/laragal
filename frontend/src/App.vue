@@ -1,27 +1,104 @@
 <template>
-  <div :dir="currentLang === 'ar' ? 'rtl' : 'ltr'" :class="[isDark ? 'dark bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-800', 'min-h-screen flex flex-col justify-between transition-colors duration-200']">
+  <div :dir="currentLang === 'ar' ? 'rtl' : 'ltr'" class="min-h-screen flex flex-col justify-between bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-150 select-none">
     <div>
-      <!-- Header -->
-      <header class="border-b border-slate-200 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur sticky top-0 z-30">
-        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-          <div class="flex items-center space-x-3 rtl:space-x-reverse">
-            <div class="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-sm">
+      <!-- Custom Desktop Frameless Title Bar -->
+      <div
+        class="wails-drag h-10 w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-3 text-xs font-medium z-40 sticky top-0"
+      >
+        <!-- In Arabic (RTL): Window Controls on the LEFT -->
+        <div v-if="currentLang === 'ar'" class="flex items-center gap-1 wails-no-drag">
+          <button
+            @click="closeWindow"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:bg-rose-600 hover:text-white transition-colors"
+            title="إغلاق"
+          >
+            <X class="w-3.5 h-3.5" />
+          </button>
+          <button
+            @click="toggleMaximize"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-400 transition-colors"
+            title="تكبير / استعادة"
+          >
+            <Square class="w-3 h-3" />
+          </button>
+          <button
+            @click="minimizeWindow"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-400 transition-colors"
+            title="تصغير"
+          >
+            <Minus class="w-3.5 h-3.5" />
+          </button>
+        </div>
+
+        <!-- In English (LTR): App Logo on the LEFT -->
+        <div v-else class="flex items-center gap-2">
+          <div class="w-5 h-5 rounded bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">LG</div>
+          <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">LaraGal</span>
+        </div>
+
+        <!-- Title in center -->
+        <div class="text-[11px] text-slate-400 dark:text-slate-500 font-mono tracking-wide pointer-events-none">
+          LaraGal - {{ t('app_subtitle') }}
+        </div>
+
+        <!-- In Arabic (RTL): App Logo on the RIGHT -->
+        <div v-if="currentLang === 'ar'" class="flex items-center gap-2">
+          <span class="text-xs font-semibold text-slate-700 dark:text-slate-300">LaraGal</span>
+          <div class="w-5 h-5 rounded bg-blue-600 flex items-center justify-center text-[10px] font-bold text-white">LG</div>
+        </div>
+
+        <!-- In English (LTR): Window Controls on the RIGHT -->
+        <div v-else class="flex items-center gap-1 wails-no-drag">
+          <button
+            @click="minimizeWindow"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-400 transition-colors"
+            title="Minimize"
+          >
+            <Minus class="w-3.5 h-3.5" />
+          </button>
+          <button
+            @click="toggleMaximize"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 dark:text-slate-400 transition-colors"
+            title="Maximize"
+          >
+            <Square class="w-3 h-3" />
+          </button>
+          <button
+            @click="closeWindow"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 hover:bg-rose-600 hover:text-white transition-colors"
+            title="Close"
+          >
+            <X class="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+
+      <!-- Main Application Header -->
+      <header class="border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur z-30">
+        <div class="w-full px-6 lg:px-8 py-4 flex items-center justify-between">
+          <!-- Main Brand Anchor (Aligned at start of reading) -->
+          <div class="flex items-center space-x-3.5 rtl:space-x-reverse">
+            <div class="w-11 h-11 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-500 flex items-center justify-center text-white font-black text-xl shadow-md ring-2 ring-blue-500/20">
               LG
             </div>
             <div>
-              <h1 class="text-xl font-bold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-                {{ t('app_name') }}
-                <span class="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300 font-mono">v1.0</span>
-              </h1>
-              <p class="text-xs text-slate-500 dark:text-slate-400">{{ t('app_subtitle') }}</p>
+              <div class="flex items-center gap-2">
+                <h1 class="text-xl font-black tracking-tight text-slate-900 dark:text-white">
+                  {{ t('app_name') }}
+                </h1>
+                <span class="text-[11px] px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-semibold border border-blue-200 dark:border-blue-900">
+                  v1.0.1
+                </span>
+              </div>
+              <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">{{ t('app_subtitle') }}</p>
             </div>
           </div>
 
           <!-- Controls: Language, Theme & Actions -->
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2.5">
             <button
               @click="installSSL"
-              class="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 transition-colors"
+              class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 transition-colors"
               :title="t('ssl_install_hint')"
             >
               <ShieldCheck class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
@@ -30,14 +107,14 @@
 
             <button
               @click="toggleLang"
-              class="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              class="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
             >
               {{ currentLang === 'ar' ? 'English' : 'العربية' }}
             </button>
 
             <button
-              @click="isDark = !isDark"
-              class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              @click="toggleTheme"
+              class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
               :title="isDark ? t('light_mode') : t('dark_mode')"
             >
               <Sun v-if="isDark" class="w-4 h-4 text-amber-400" />
@@ -46,7 +123,7 @@
 
             <button
               @click="showNewModal = true"
-              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors"
+              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-all hover:shadow-blue-500/20"
             >
               <Plus class="w-4 h-4" />
               <span>{{ t('new_project_btn') }}</span>
@@ -55,21 +132,21 @@
         </div>
       </header>
 
-      <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+      <main class="w-full px-6 lg:px-8 py-6 space-y-7">
         <!-- Notification Banner -->
-        <div v-if="notification" class="p-4 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200 flex items-center justify-between text-sm animate-fade-in">
+        <div v-if="notification" class="p-3.5 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-200 flex items-center justify-between text-xs animate-fade-in shadow-xs">
           <div class="flex items-center gap-2">
             <Info class="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
             <span>{{ notification }}</span>
           </div>
-          <button @click="notification = ''" class="text-blue-500 hover:text-blue-700 font-bold">&times;</button>
+          <button @click="notification = ''" class="text-blue-500 hover:text-blue-700 font-bold px-1">&times;</button>
         </div>
 
         <!-- Services Section -->
         <section>
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-white">
-              <Server class="w-5 h-5 text-blue-600" />
+          <div class="flex items-center justify-between mb-3.5">
+            <h2 class="text-base font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+              <Server class="w-4 h-4 text-blue-600" />
               {{ t('services_title') }}
             </h2>
             <div class="flex items-center gap-3">
@@ -80,41 +157,42 @@
                 <Download class="w-3.5 h-3.5" />
                 <span>{{ t('download_runtimes_btn') }}</span>
               </button>
-              <span class="text-xs text-slate-500">{{ services.filter(s => s.running).length }} / {{ services.length }} {{ t('status_running') }}</span>
+              <span class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ services.filter(s => s.running).length }}/{{ services.length }} {{ t('status_running') }}</span>
             </div>
           </div>
 
-          <!-- Responsive 6-column unified grid -->
-          <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3.5">
+          <!-- Services Grid -->
+          <div class="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-3.5">
             <div
               v-for="service in services"
               :key="service.name"
-              class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/60 shadow-xs flex flex-col justify-between"
+              class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
             >
-              <div class="flex items-start justify-between gap-1">
-                <div class="truncate">
-                  <h3 class="font-bold text-sm text-slate-800 dark:text-slate-200 truncate" :title="service.label">{{ service.label }}</h3>
-                  <p dir="ltr" class="text-xs text-slate-400 font-mono mt-0.5 text-start">:{{ service.port }}</p>
+              <div>
+                <div class="flex items-start justify-between gap-1 mb-2">
+                  <span
+                    :class="[
+                      service.running
+                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                        : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700',
+                      'text-[10px] px-2 py-0.5 rounded-full border font-semibold flex items-center gap-1'
+                    ]"
+                  >
+                    <span class="w-1.5 h-1.5 rounded-full" :class="service.running ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
+                    {{ service.running ? t('status_running') : t('status_stopped') }}
+                  </span>
+                  <span dir="ltr" class="text-xs font-mono text-slate-400 dark:text-slate-400 font-medium">:{{ service.port }}</span>
                 </div>
-                <span
-                  :class="[
-                    service.running
-                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800'
-                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700',
-                    'text-[10px] px-2 py-0.5 rounded-full border font-medium flex items-center gap-1 flex-shrink-0'
-                  ]"
-                >
-                  <span class="w-1.5 h-1.5 rounded-full" :class="service.running ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
-                  {{ service.running ? t('status_running') : t('status_stopped') }}
-                </span>
+
+                <h3 class="font-bold text-sm text-slate-900 dark:text-slate-100 leading-snug">{{ service.label }}</h3>
+                <p class="text-[11px] text-slate-400 dark:text-slate-400 mt-1 line-clamp-1" :title="service.role">{{ service.role }}</p>
               </div>
 
-              <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
-                <span class="text-[11px] text-slate-400 truncate" :title="service.role">{{ service.role }}</span>
+              <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end">
                 <button
                   @click="toggleService(service)"
-                  class="text-xs font-semibold px-2 py-1 rounded-md transition-colors"
-                  :class="service.running ? 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30' : 'text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30'"
+                  class="text-xs font-bold px-2.5 py-1 rounded-md transition-colors"
+                  :class="service.running ? 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40' : 'text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40'"
                 >
                   {{ service.running ? 'إيقاف' : 'تشغيل' }}
                 </button>
@@ -125,39 +203,39 @@
 
         <!-- Sites & Projects Section -->
         <section>
-          <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-bold flex items-center gap-2 text-slate-900 dark:text-white">
-              <Globe class="w-5 h-5 text-blue-600" />
+          <div class="flex items-center justify-between mb-3.5">
+            <h2 class="text-base font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+              <Globe class="w-4 h-4 text-blue-600" />
               {{ t('sites_title') }}
             </h2>
-            <span class="text-xs text-slate-500">{{ sites.length }} متاح</span>
+            <span class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ sites.length }} متاح</span>
           </div>
 
-          <div v-if="sites.length === 0" class="p-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/30">
+          <div v-if="sites.length === 0" class="p-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/60">
             <Globe class="w-10 h-10 text-slate-400 mx-auto mb-3 opacity-60" />
-            <p class="text-sm text-slate-500 max-w-sm mx-auto">{{ t('empty_sites') }}</p>
+            <p class="text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">{{ t('empty_sites') }}</p>
             <button
               @click="showNewModal = true"
-              class="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors"
+              class="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors"
             >
               <Plus class="w-4 h-4" />
               {{ t('new_project_btn') }}
             </button>
           </div>
 
-          <div v-else class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             <div
               v-for="site in sites"
               :key="site.domain"
-              class="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs hover:border-blue-400 dark:hover:border-blue-600 transition-all flex flex-col justify-between"
+              class="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs hover:border-blue-500/50 dark:hover:border-blue-600 transition-all flex flex-col justify-between"
             >
               <div>
                 <div class="flex items-center justify-between mb-3">
-                  <span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-mono">
+                  <span class="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-mono font-semibold">
                     <Lock class="w-3 h-3 text-emerald-600" />
                     HTTPS
                   </span>
-                  <span dir="ltr" class="text-xs font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-medium">
+                  <span dir="ltr" class="text-xs font-mono px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold border border-slate-200 dark:border-slate-700">
                     PHP :{{ site.php_port }}
                   </span>
                 </div>
@@ -166,8 +244,8 @@
                   {{ site.domain }}
                 </h3>
 
-                <!-- Sleek path chip with copy and explore buttons -->
-                <div class="mt-3 flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                <!-- Monospace Path Box with Actions -->
+                <div class="mt-3 flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-[11px] font-mono text-slate-600 dark:text-slate-300">
                   <span dir="ltr" class="truncate flex-1" :title="site.root_path">{{ site.root_path }}</span>
                   <div class="flex items-center gap-1 flex-shrink-0 ms-2">
                     <button
@@ -190,15 +268,15 @@
               </div>
 
               <!-- Quick action bar -->
-              <div class="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+              <div class="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                 <div class="flex items-center gap-2">
-                  <span class="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1">
+                  <span class="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
                     <CheckCircle2 class="w-3.5 h-3.5" />
                     {{ t('ssl_trusted') }}
                   </span>
                   <button
                     @click="openVSCode(site.root_path)"
-                    class="hidden sm:inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors ms-1"
+                    class="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors ms-1"
                     :title="t('open_vscode')"
                   >
                     <Code class="w-3.5 h-3.5" />
@@ -210,7 +288,7 @@
                   :href="'https://' + site.domain"
                   target="_blank"
                   @click.prevent="openBrowser('https://' + site.domain)"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/60 transition-colors"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/80 transition-colors"
                 >
                   <span>{{ t('open_browser') }}</span>
                   <ExternalLink class="w-3.5 h-3.5" />
@@ -223,31 +301,31 @@
     </div>
 
     <!-- Desktop Status Bar -->
-    <footer class="mt-12 border-t border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 backdrop-blur py-3 text-xs text-slate-500 dark:text-slate-400">
-      <div class="max-w-7xl mx-auto px-4 sm:px-6 flex flex-wrap items-center justify-between gap-3">
+    <footer class="mt-8 border-t border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-900/90 backdrop-blur py-2.5 px-6 lg:px-8 text-xs text-slate-500 dark:text-slate-400">
+      <div class="w-full flex flex-wrap items-center justify-between gap-3">
         <div class="flex items-center gap-4">
           <div class="flex items-center gap-1.5">
             <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>{{ t('all_services_healthy') }}</span>
+            <span class="font-medium text-slate-700 dark:text-slate-300">{{ t('all_services_healthy') }}</span>
           </div>
           <span class="text-slate-300 dark:text-slate-700">|</span>
           <div class="flex items-center gap-1 font-mono">
             <span>{{ t('root_directory') }}:</span>
-            <button @click="openExplorer('C:/laragal')" class="text-blue-600 dark:text-blue-400 hover:underline">C:\laragal</button>
+            <button @click="openExplorer('C:/laragal')" class="text-blue-600 dark:text-blue-400 font-semibold hover:underline">C:\laragal</button>
           </div>
         </div>
 
         <div class="flex items-center gap-3 font-mono text-[11px]">
-          <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">TLD: *.test</span>
-          <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800">SSL: Auto-TLS</span>
-          <span>LaraGal v1.0.0</span>
+          <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">TLD: *.test</span>
+          <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">SSL: Auto-TLS</span>
+          <span class="text-slate-400 dark:text-slate-500">LaraGal v1.0.1</span>
         </div>
       </div>
     </footer>
 
     <!-- New Project Modal -->
-    <div v-if="showNewModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-      <div class="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-6 space-y-5 animate-scale-in">
+    <div v-if="showNewModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+      <div class="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 animate-scale-in">
         <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <h3 class="font-bold text-base text-slate-900 dark:text-white">{{ t('modal_new_title') }}</h3>
           <button @click="showNewModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">&times;</button>
@@ -255,22 +333,22 @@
 
         <form @submit.prevent="handleCreateProject" class="space-y-4">
           <div>
-            <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">{{ t('project_name') }}</label>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">{{ t('project_name') }}</label>
             <input
               v-model="newProject.name"
               type="text"
               required
               placeholder="my-laravel-app"
-              class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
             <p class="text-[11px] text-slate-400 mt-1">الرابط التلقائي: https://{{ newProject.name || 'name' }}.test</p>
           </div>
 
           <div>
-            <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">{{ t('project_type') }}</label>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">{{ t('project_type') }}</label>
             <select
               v-model="newProject.type"
-              class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
               <option value="laravel">{{ t('type_laravel') }}</option>
               <option value="wordpress">{{ t('type_wordpress') }}</option>
@@ -279,10 +357,10 @@
           </div>
 
           <div>
-            <label class="block text-xs font-medium text-slate-700 dark:text-slate-300 mb-1">{{ t('php_version') }}</label>
+            <label class="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">{{ t('php_version') }}</label>
             <select
               v-model="newProject.php"
-              class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
               <option value="8.4">PHP 8.4 (الأحدث)</option>
               <option value="8.3">PHP 8.3 (الموصى به لـ Laravel 11/12)</option>
@@ -295,7 +373,7 @@
             <button
               type="button"
               @click="showNewModal = false"
-              class="px-3 py-1.5 text-xs font-medium rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              class="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
             >
               {{ t('cancel_btn') }}
             </button>
@@ -311,8 +389,8 @@
     </div>
 
     <!-- Download Runtimes Modal -->
-    <div v-if="showDownloadModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs">
-      <div class="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xl p-6 space-y-5 animate-scale-in">
+    <div v-if="showDownloadModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+      <div class="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 animate-scale-in">
         <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
           <h3 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
             <Download class="w-4 h-4 text-blue-600" />
@@ -325,7 +403,7 @@
           <div
             v-for="rt in availableRuntimes"
             :key="rt.name"
-            class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-800/40"
+            class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-850"
           >
             <div>
               <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">{{ rt.label }}</h4>
@@ -345,7 +423,7 @@
         <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end">
           <button
             @click="showDownloadModal = false"
-            class="px-3 py-1.5 text-xs font-medium rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            class="px-3 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
           >
             {{ t('cancel_btn') }}
           </button>
@@ -356,11 +434,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import {
   Server, Globe, Plus, ShieldCheck, Sun, Moon,
   Lock, ExternalLink, CheckCircle2, Info, Download,
-  Folder, Code, Copy, Check
+  Folder, Code, Copy, Check, Minus, Square, X
 } from 'lucide-vue-next'
 
 import arLocale from './locales/ar.json'
@@ -373,6 +451,44 @@ const showDownloadModal = ref(false)
 const downloadingRuntime = ref('')
 const notification = ref('')
 const copiedItem = ref('')
+
+// Synchronize dark class to html document element
+watch(isDark, (val) => {
+  if (val) {
+    document.documentElement.classList.add('dark')
+  } else {
+    document.documentElement.classList.remove('dark')
+  }
+}, { immediate: true })
+
+function toggleTheme() {
+  isDark.value = !isDark.value
+}
+
+// Window control functions
+function closeWindow() {
+  if ((window as any).go?.main?.App?.CloseWindow) {
+    (window as any).go.main.App.CloseWindow()
+  } else if ((window as any).runtime?.Quit) {
+    (window as any).runtime.Quit()
+  }
+}
+
+function toggleMaximize() {
+  if ((window as any).go?.main?.App?.ToggleMaximizeWindow) {
+    (window as any).go.main.App.ToggleMaximizeWindow()
+  } else if ((window as any).runtime?.WindowToggleMaximise) {
+    (window as any).runtime.WindowToggleMaximise()
+  }
+}
+
+function minimizeWindow() {
+  if ((window as any).go?.main?.App?.MinimizeWindow) {
+    (window as any).go.main.App.MinimizeWindow()
+  } else if ((window as any).runtime?.WindowMinimise) {
+    (window as any).runtime.WindowMinimise()
+  }
+}
 
 const availableRuntimes = ref([
   { name: 'caddy', label: 'Caddy Server v2.8', desc: 'خادم الويب الرئيسي وإدارة شهادات SSL التلقائية' },
@@ -403,12 +519,12 @@ interface ServiceItem {
 }
 
 const services = ref<ServiceItem[]>([
-  { name: 'caddy', label: 'Caddy Web Server', port: 443, running: true, role: 'Auto-TLS Reverse Proxy' },
-  { name: 'php-8.4', label: 'PHP 8.4 FastCGI', port: 9084, running: true, role: 'FastCGI Daemon' },
-  { name: 'php-8.3', label: 'PHP 8.3 FastCGI', port: 9083, running: true, role: 'FastCGI Daemon' },
+  { name: 'caddy', label: 'Caddy Server', port: 443, running: true, role: 'Auto-TLS Reverse Proxy' },
+  { name: 'php-8.4', label: 'PHP 8.4', port: 9084, running: true, role: 'FastCGI Daemon' },
+  { name: 'php-8.3', label: 'PHP 8.3', port: 9083, running: true, role: 'FastCGI Daemon' },
   { name: 'mysql', label: 'MySQL Server', port: 3306, running: true, role: 'Portable Relational DB' },
   { name: 'redis', label: 'Redis Cache', port: 6379, running: false, role: 'In-Memory Cache' },
-  { name: 'mailpit', label: 'Mailpit Mail Catcher', port: 1025, running: true, role: 'Local SMTP & Web UI (:8025)' },
+  { name: 'mailpit', label: 'Mailpit Catcher', port: 1025, running: true, role: 'Local SMTP & Web UI (:8025)' },
 ])
 
 interface SiteItem {

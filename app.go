@@ -17,6 +17,7 @@ import (
 	"github.com/laragal/laragal/internal/projects"
 	"github.com/laragal/laragal/internal/services/caddy"
 	"github.com/laragal/laragal/internal/services/php"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type App struct {
@@ -203,4 +204,22 @@ func (a *App) OpenBrowser(targetURL string) error {
 
 func (a *App) OpenVSCode(folderPath string) error {
 	return exec.Command("cmd", "/c", "code", filepath.FromSlash(folderPath)).Start()
+}
+
+func (a *App) MinimizeWindow() {
+	if a.ctx != nil {
+		runtime.WindowMinimise(a.ctx)
+	}
+}
+
+func (a *App) ToggleMaximizeWindow() {
+	if a.ctx != nil {
+		runtime.WindowToggleMaximise(a.ctx)
+	}
+}
+
+func (a *App) CloseWindow() {
+	if a.ctx != nil {
+		runtime.Quit(a.ctx)
+	}
 }
