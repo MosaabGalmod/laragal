@@ -53,5 +53,12 @@
   "service_redis": "Redis Cache",
   "service_redis_desc": "Ultra-fast in-memory caching",
   "service_mailpit": "Mailpit Mail Catcher",
-  "service_mailpit_desc": "Local SMTP catcher & web mailbox"
+  "service_mailpit_desc": "Local SMTP catcher & web mailbox",
+  "val_name_required": "Please enter a project name.",
+  "val_name_invalid": "Project name may only contain lowercase letters, numbers, and hyphens (e.g. my-app).",
+  "val_name_exists": "A project with this domain already exists.",
+  "confirm_stop_title": "Confirm Service Stop",
+  "confirm_stop_msg": "Are you sure you want to stop this service? Sites depending on it may temporarily become unavailable.",
+  "confirm_btn": "Confirm",
+  "close_btn": "Close"
 }

@@ -53,5 +53,12 @@
   "service_redis": "مخزن Redis",
   "service_redis_desc": "ذاكرة التخزين المؤقت السريعة",
   "service_mailpit": "صائد البريد Mailpit",
-  "service_mailpit_desc": "صيد واختبار رسائل البريد محلياً"
+  "service_mailpit_desc": "صيد واختبار رسائل البريد محلياً",
+  "val_name_required": "يُرجى إدخال اسم المشروع.",
+  "val_name_invalid": "يجب أن يحتوي اسم المشروع على أحرف إنجليزية صغيرة وأرقام وشرطات فقط (مثال: my-app).",
+  "val_name_exists": "هذا المشروع مضاف بالفعل في قائمة المشاريع.",
+  "confirm_stop_title": "تأكيد إيقاف الخدمة",
+  "confirm_stop_msg": "هل أنت متأكد من رغبتك في إيقاف هذه الخدمة؟ قد تتوقف المواقع المرتبطة بها مؤقتاً.",
+  "confirm_btn": "تأكيد الإجراء",
+  "close_btn": "إغلاق"
 }
