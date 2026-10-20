@@ -7,11 +7,12 @@ import (
 )
 
 type AppConfig struct {
-	ProjectsPath string          `json:"projects_path"`
-	RecentPaths  []string        `json:"recent_paths,omitempty"`
-	DefaultPHP   string          `json:"default_php"`
-	DomainSuffix string          `json:"domain_suffix"`
-	Services     map[string]bool `json:"services"`
+	ProjectsPath string            `json:"projects_path"`
+	RecentPaths  []string          `json:"recent_paths,omitempty"`
+	DefaultPHP   string            `json:"default_php"`
+	DomainSuffix string            `json:"domain_suffix"`
+	Services     map[string]bool   `json:"services"`
+	ProjectPHP   map[string]string `json:"project_php,omitempty"`
 }
 
 func NewDefaultConfig() *AppConfig {
@@ -31,6 +32,7 @@ func NewDefaultConfig() *AppConfig {
 			"redis":   false,
 			"mailpit": true,
 		},
+		ProjectPHP: make(map[string]string),
 	}
 }
 
@@ -42,6 +44,9 @@ func LoadConfig(path string) (*AppConfig, error) {
 	var cfg AppConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
+	}
+	if cfg.ProjectPHP == nil {
+		cfg.ProjectPHP = make(map[string]string)
 	}
 	return &cfg, nil
 }

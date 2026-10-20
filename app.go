@@ -149,6 +149,59 @@ func (a *App) findPHPExecutable() string {
 	return ""
 }
 
+func (a *App) findPHPExecutableForVersion(version string) string {
+	normVer := projects.NormalizePHPVersion(version)
+	candidates := []string{
+		filepath.Join("bin", fmt.Sprintf("php-%s", normVer), "php-cgi.exe"),
+		filepath.Join("bin", fmt.Sprintf("php%s", strings.ReplaceAll(normVer, ".", "")), "php-cgi.exe"),
+		filepath.Join("bin", "php", "php-cgi.exe"),
+	}
+
+	if localApp := os.Getenv("LOCALAPPDATA"); localApp != "" {
+		wingetGlob := filepath.Join(localApp, "Microsoft", "WinGet", "Packages")
+		if entries, err := os.ReadDir(wingetGlob); err == nil {
+			for _, e := range entries {
+				lower := strings.ToLower(e.Name())
+				if strings.Contains(lower, "php") && strings.Contains(lower, normVer) {
+					wingetPHP := filepath.Join(wingetGlob, e.Name(), "php-cgi.exe")
+					if _, statErr := os.Stat(wingetPHP); statErr == nil {
+						candidates = append(candidates, wingetPHP)
+					}
+				}
+			}
+		}
+	}
+
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+
+	return a.findPHPExecutable()
+}
+
+func (a *App) ensurePHPServiceRunning(version string) error {
+	if a.supervisor == nil {
+		return nil
+	}
+	normVer := projects.NormalizePHPVersion(version)
+	port := projects.PHPPortForVersion(normVer)
+	serviceName := fmt.Sprintf("php-%s", normVer)
+
+	status, exists := a.supervisor.GetServiceStatus(serviceName)
+	if exists && status.Running {
+		return nil
+	}
+
+	phpExe := a.findPHPExecutableForVersion(normVer)
+	if phpExe == "" {
+		return fmt.Errorf("محرك PHP %s غير متوفر", normVer)
+	}
+
+	return a.supervisor.StartService(serviceName, phpExe, []string{"-b", fmt.Sprintf("127.0.0.1:%d", port)}, port)
+}
+
 func (a *App) findCaddyRootCert() string {
 	candidate1 := filepath.Join("data", "caddy", "pki", "authorities", "local", "root.crt")
 	if _, err := os.Stat(candidate1); err == nil {
@@ -222,15 +275,13 @@ func (a *App) ToggleService(name string) (bool, error) {
 		err := a.supervisor.StartService("caddy", caddyExe, []string{"run", "--config", caddyfilePath, "--adapter", "caddyfile"}, 443)
 		return err == nil, err
 
-	case "php-8.3", "php-8.4":
-		phpExe := a.findPHPExecutable()
+	case "php-8.1", "php-8.2", "php-8.3", "php-8.4":
+		ver := strings.TrimPrefix(name, "php-")
+		phpExe := a.findPHPExecutableForVersion(ver)
 		if phpExe == "" {
-			return false, fmt.Errorf("محرك PHP غير متوفر. يرجى تنزيله من قسم الحزم المحمولة.")
+			return false, fmt.Errorf("محرك PHP %s غير متوفر. يرجى تنزيله من قسم الحزم المحمولة.", ver)
 		}
-		port := 9083
-		if name == "php-8.4" {
-			port = 9084
-		}
+		port := projects.PHPPortForVersion(ver)
 		err := a.supervisor.StartService(name, phpExe, []string{"-b", fmt.Sprintf("127.0.0.1:%d", port)}, port)
 		return err == nil, err
 
@@ -772,6 +823,25 @@ func (a *App) SelectProjectsDirectory(lang string) (string, error) {
 	return a.cfg.ProjectsPath, nil
 }
 
+// SetProjectPHPVersion updates the PHP version for a specific project, ensures the PHP FastCGI service is running, and reloads Caddy
+func (a *App) SetProjectPHPVersion(projectPathOrDomain string, version string) ([]caddy.SiteDef, error) {
+	normVer := projects.NormalizePHPVersion(version)
+	cleanKey := filepath.ToSlash(filepath.Clean(projectPathOrDomain))
+
+	if a.cfg.ProjectPHP == nil {
+		a.cfg.ProjectPHP = make(map[string]string)
+	}
+	a.cfg.ProjectPHP[cleanKey] = normVer
+	_ = a.cfg.Save(a.cfgPath)
+
+	// Ensure the corresponding PHP FastCGI service is running
+	_ = a.ensurePHPServiceRunning(normVer)
+
+	// Rescan projects to update ports and reload Caddy
+	sites := a.ScanProjects()
+	return sites, nil
+}
+
 // ScanProjects scans the projects directory, identifies project types, and populates existing projects
 func (a *App) ScanProjects() []caddy.SiteDef {
 	if a.cfg.ProjectsPath == "" {
@@ -797,13 +867,29 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 		projectDir := filepath.Join(a.cfg.ProjectsPath, projectName)
 		detected := projects.DetectProject(projectDir, a.cfg.DefaultPHP, a.cfg.DomainSuffix)
 
+		phpVer := detected.PHPVersion
+		phpPort := detected.PHPPort
+
+		// Manual user override takes precedence over auto-detection
+		cleanKey := filepath.ToSlash(projectDir)
+		if overrideVer, exists := a.cfg.ProjectPHP[cleanKey]; exists && overrideVer != "" {
+			phpVer = projects.NormalizePHPVersion(overrideVer)
+			phpPort = projects.PHPPortForVersion(phpVer)
+		} else if overrideVer, exists := a.cfg.ProjectPHP[projectName]; exists && overrideVer != "" {
+			phpVer = projects.NormalizePHPVersion(overrideVer)
+			phpPort = projects.PHPPortForVersion(phpVer)
+		} else if overrideVer, exists := a.cfg.ProjectPHP[detected.Domain]; exists && overrideVer != "" {
+			phpVer = projects.NormalizePHPVersion(overrideVer)
+			phpPort = projects.PHPPortForVersion(phpVer)
+		}
+
 		scannedSites = append(scannedSites, caddy.SiteDef{
 			Name:        detected.Name,
 			Domain:      detected.Domain,
 			Path:        filepath.ToSlash(detected.Path),
 			RootPath:    filepath.ToSlash(detected.DocRoot),
-			PHPPort:     detected.PHPPort,
-			PHPVersion:  detected.PHPVersion,
+			PHPPort:     phpPort,
+			PHPVersion:  phpVer,
 			ProxyPort:   detected.ProxyPort,
 			ProjectType: string(detected.Type),
 			TypeLabel:   detected.TypeLabel,
@@ -812,6 +898,13 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 	}
 
 	a.sites = scannedSites
+
+	// Ensure needed PHP FastCGI instances are running for all PHP sites
+	for _, s := range a.sites {
+		if s.IsWeb && s.PHPPort > 0 && s.PHPVersion != "" {
+			_ = a.ensurePHPServiceRunning(s.PHPVersion)
+		}
+	}
 
 	// 1. Write updated Caddyfile
 	_ = a.ReloadCaddy()

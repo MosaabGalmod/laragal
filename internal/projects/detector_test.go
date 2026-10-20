@@ -189,4 +189,64 @@ func TestDetectProject(t *testing.T) {
 	if resFlutter.Type != TypeFlutter || !resFlutter.IsWeb || filepath.Base(resFlutter.DocRoot) != "web" {
 		t.Fatalf("Expected Flutter project with TypeFlutter and docroot build/web, got: %+v", resFlutter)
 	}
+
+	// 17. PHP project with composer.json requiring PHP 8.4
+	php84Dir := filepath.Join(tempDir, "laravel-84")
+	_ = os.MkdirAll(filepath.Join(php84Dir, "public"), 0755)
+	_ = os.WriteFile(filepath.Join(php84Dir, "artisan"), []byte("<?php"), 0644)
+	_ = os.WriteFile(filepath.Join(php84Dir, "composer.json"), []byte(`{"require":{"php":"^8.4","laravel/framework":"^11.0"}}`), 0644)
+
+	res84 := DetectProject(php84Dir, "8.3", ".test")
+	if res84.Type != TypeLaravel || res84.PHPVersion != "8.4" || res84.PHPPort != 9084 {
+		t.Fatalf("Expected Laravel with PHP 8.4 and port 9084, got: %+v", res84)
+	}
+
+	// 18. PHP project with .php-version file
+	phpVerDir := filepath.Join(tempDir, "custom-php-ver")
+	_ = os.MkdirAll(filepath.Join(phpVerDir, "public"), 0755)
+	_ = os.WriteFile(filepath.Join(phpVerDir, "public", "index.php"), []byte("<?php"), 0644)
+	_ = os.WriteFile(filepath.Join(phpVerDir, ".php-version"), []byte("8.2\n"), 0644)
+
+	resVer := DetectProject(phpVerDir, "8.3", ".test")
+	if resVer.PHPVersion != "8.2" || resVer.PHPPort != 9082 {
+		t.Fatalf("Expected PHP 8.2 and port 9082 from .php-version, got: %+v", resVer)
+	}
+
+	// 19. PHP project with .laragal file
+	laragalDir := filepath.Join(tempDir, "laragal-config-php")
+	_ = os.MkdirAll(filepath.Join(laragalDir, "public"), 0755)
+	_ = os.WriteFile(filepath.Join(laragalDir, "public", "index.php"), []byte("<?php"), 0644)
+	_ = os.WriteFile(filepath.Join(laragalDir, ".laragal"), []byte(`{"php":"8.1"}`), 0644)
+
+	resLaragal := DetectProject(laragalDir, "8.3", ".test")
+	if resLaragal.PHPVersion != "8.1" || resLaragal.PHPPort != 9081 {
+		t.Fatalf("Expected PHP 8.1 and port 9081 from .laragal, got: %+v", resLaragal)
+	}
+}
+
+func TestParsePHPConstraint(t *testing.T) {
+	cases := []struct {
+		input    string
+		expected string
+	}{
+		{"^8.4", "8.4"},
+		{"^8.4.0", "8.4"},
+		{">=8.4", "8.4"},
+		{"^8.3", "8.3"},
+		{"8.3.*", "8.3"},
+		{"^8.2", "8.2"},
+		{"~8.2.0", "8.2"},
+		{"^8.1", "8.1"},
+		{"8.1.*", "8.1"},
+		{"^8.0", "8.1"},
+		{"^7.4", "8.1"},
+		{"*", ""},
+	}
+
+	for _, c := range cases {
+		got := ParsePHPConstraint(c.input)
+		if got != c.expected {
+			t.Errorf("ParsePHPConstraint(%q) = %q; expected %q", c.input, got, c.expected)
+		}
+	}
 }

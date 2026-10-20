@@ -445,10 +445,25 @@
                   {{ t('non_web_badge') }}
                 </span>
 
-                <span v-if="site.is_web" dir="ltr" class="text-xs font-mono px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
-                  <span v-if="site.project_type === 'laravel'">Laravel • {{ site.php_version || 'PHP 8.3' }}</span>
-                  <span v-else-if="site.project_type === 'php'">{{ site.php_version || 'PHP 8.3' }}</span>
-                  <span v-else-if="site.project_type === 'go'">Go • Proxy :{{ site.proxy_port || 8080 }}</span>
+                <!-- Interactive PHP Version Selector for PHP Projects -->
+                <div v-if="isPhpProject(site)" dir="ltr" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-blue-50/90 dark:bg-blue-950/70 border border-blue-200 dark:border-blue-900/80 text-xs font-mono">
+                  <span v-if="site.project_type === 'laravel'" class="font-bold text-blue-700 dark:text-blue-300">Laravel •</span>
+                  <span v-else-if="site.project_type === 'wordpress'" class="font-bold text-blue-700 dark:text-blue-300">WordPress •</span>
+                  <select
+                    :value="extractPhpVersionNumber(site.php_version)"
+                    @change="updateSitePHPVersion(site, $event)"
+                    class="bg-transparent text-blue-800 dark:text-blue-200 font-bold focus:outline-none cursor-pointer text-xs"
+                    :title="t('change_php_hint')"
+                  >
+                    <option class="bg-white dark:bg-slate-900 text-slate-800 dark:text-white" value="8.4">PHP 8.4</option>
+                    <option class="bg-white dark:bg-slate-900 text-slate-800 dark:text-white" value="8.3">PHP 8.3</option>
+                    <option class="bg-white dark:bg-slate-900 text-slate-800 dark:text-white" value="8.2">PHP 8.2</option>
+                    <option class="bg-white dark:bg-slate-900 text-slate-800 dark:text-white" value="8.1">PHP 8.1</option>
+                  </select>
+                </div>
+
+                <span v-else-if="site.is_web" dir="ltr" class="text-xs font-mono px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
+                  <span v-if="site.project_type === 'go'">Go • Proxy :{{ site.proxy_port || 8080 }}</span>
                   <span v-else-if="site.project_type === 'rust'">Rust • Proxy :{{ site.proxy_port || 8080 }}</span>
                   <span v-else-if="site.project_type === 'dotnet'">.NET • Proxy :{{ site.proxy_port || 5000 }}</span>
                   <span v-else-if="site.project_type === 'python'">Python • Proxy :{{ site.proxy_port || 8000 }}</span>
@@ -1128,6 +1143,44 @@ function getDocRootRelative(site: SiteItem): string {
     return sub ? `/${sub}` : ''
   }
   return ''
+}
+
+function isPhpProject(site: SiteItem): boolean {
+  return Boolean(site.is_web && (site.project_type === 'laravel' || site.project_type === 'wordpress' || site.project_type === 'php' || (site.php_port || 0) > 0))
+}
+
+function extractPhpVersionNumber(ver?: string): string {
+  if (!ver) return '8.3'
+  const clean = ver.replace(/PHP\s*/i, '').trim()
+  if (clean.startsWith('8.4')) return '8.4'
+  if (clean.startsWith('8.3')) return '8.3'
+  if (clean.startsWith('8.2')) return '8.2'
+  if (clean.startsWith('8.1')) return '8.1'
+  return clean || '8.3'
+}
+
+async function updateSitePHPVersion(site: SiteItem, event: Event) {
+  const target = event.target as HTMLSelectElement
+  const newVer = target.value
+  const targetPath = site.path || site.root_path || site.domain
+  if (!targetPath || !newVer) return
+
+  if ((window as any).go?.main?.App?.SetProjectPHPVersion) {
+    try {
+      const updated = await (window as any).go.main.App.SetProjectPHPVersion(targetPath, newVer)
+      site.php_version = `PHP ${newVer}`
+      site.php_port = newVer === '8.4' ? 9084 : (newVer === '8.3' ? 9083 : (newVer === '8.2' ? 9082 : 9081))
+      notification.value = `${t('php_version_changed')} ${site.domain} ➔ PHP ${newVer}`
+      if (Array.isArray(updated)) {
+        sites.value = updated.map(mapSiteItem)
+      }
+    } catch (e: any) {
+      notification.value = `${t('error_changing_php')}: ${e?.message || e}`
+    }
+  } else {
+    site.php_version = `PHP ${newVer}`
+    notification.value = `${t('php_version_changed')} ${site.domain} ➔ PHP ${newVer}`
+  }
 }
 
 let toastTimer: any = null

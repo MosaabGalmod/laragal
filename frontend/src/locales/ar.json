@@ -105,5 +105,8 @@
   "browse_windows_btn": "استعراض عبر مستكشف ويندوز...",
   "quick_paths": "المجلدات المقترحة والسابقة",
   "start_app_btn": "تشغيل التطبيق",
-  "stop_app_btn": "إيقاف التطبيق"
+  "stop_app_btn": "إيقاف التطبيق",
+  "change_php_hint": "تغيير إصدار PHP المستخدم لهذا المشروع",
+  "php_version_changed": "تم تغيير إصدار PHP بنجاح لمشروع",
+  "error_changing_php": "تعذر تغيير إصدار PHP"
 }

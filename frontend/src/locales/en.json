@@ -105,5 +105,8 @@
   "browse_windows_btn": "Browse via Windows Explorer...",
   "quick_paths": "Recent & Suggested Paths",
   "start_app_btn": "Start App",
-  "stop_app_btn": "Stop App"
+  "stop_app_btn": "Stop App",
+  "change_php_hint": "Change PHP version for this project",
+  "php_version_changed": "PHP version updated successfully for",
+  "error_changing_php": "Could not change PHP version"
 }

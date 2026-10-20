@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -72,6 +73,147 @@ func findFirstExistingDir(baseDir string, subDirs ...string) string {
 	return baseDir
 }
 
+// PHPPortForVersion returns the FastCGI port for a given PHP version string
+func PHPPortForVersion(version string) int {
+	v := strings.TrimSpace(strings.ToLower(version))
+	v = strings.TrimPrefix(v, "php")
+	v = strings.TrimSpace(v)
+	switch {
+	case strings.HasPrefix(v, "8.4"):
+		return 9084
+	case strings.HasPrefix(v, "8.3"):
+		return 9083
+	case strings.HasPrefix(v, "8.2"):
+		return 9082
+	case strings.HasPrefix(v, "8.1"):
+		return 9081
+	default:
+		return 9083
+	}
+}
+
+// NormalizePHPVersion returns a standard string like "8.3", "8.4", etc.
+func NormalizePHPVersion(version string) string {
+	v := strings.TrimSpace(strings.ToLower(version))
+	v = strings.TrimPrefix(v, "php")
+	v = strings.TrimSpace(v)
+	switch {
+	case strings.HasPrefix(v, "8.4"):
+		return "8.4"
+	case strings.HasPrefix(v, "8.3"):
+		return "8.3"
+	case strings.HasPrefix(v, "8.2"):
+		return "8.2"
+	case strings.HasPrefix(v, "8.1"):
+		return "8.1"
+	default:
+		if v != "" {
+			return v
+		}
+		return "8.3"
+	}
+}
+
+type composerFile struct {
+	Require map[string]string `json:"require"`
+}
+
+// DetectComposerPHPVersion parses composer.json and extracts the required PHP version
+func DetectComposerPHPVersion(composerPath string) string {
+	data, err := os.ReadFile(composerPath)
+	if err != nil {
+		return ""
+	}
+	var comp composerFile
+	if err := json.Unmarshal(data, &comp); err != nil {
+		return ""
+	}
+	phpReq, ok := comp.Require["php"]
+	if !ok || phpReq == "" {
+		return ""
+	}
+	return ParsePHPConstraint(phpReq)
+}
+
+// ParsePHPConstraint maps a composer PHP constraint like "^8.4", "~8.2.0", "8.1.*" to a normalized version string
+func ParsePHPConstraint(constraint string) string {
+	c := strings.ToLower(strings.TrimSpace(constraint))
+	if c == "" {
+		return ""
+	}
+
+	// Direct match checks from highest to lowest supported versions
+	if strings.Contains(c, "8.4") {
+		return "8.4"
+	}
+	if strings.Contains(c, "8.3") {
+		return "8.3"
+	}
+	if strings.Contains(c, "8.2") {
+		return "8.2"
+	}
+	if strings.Contains(c, "8.1") {
+		return "8.1"
+	}
+
+	// Legacy constraints
+	if strings.Contains(c, "8.0") || strings.Contains(c, "7.4") || strings.Contains(c, "7.3") {
+		return "8.1"
+	}
+
+	return ""
+}
+
+// DetectProjectPHPVersion detects the required PHP version from:
+// 1. .php-version file
+// 2. .laragal file
+// 3. composer.json require.php
+// 4. Fallback to defaultPHP
+func DetectProjectPHPVersion(projectDir string, defaultPHP string) (string, int) {
+	// 1. Check .php-version file
+	phpVerFile := filepath.Join(projectDir, ".php-version")
+	if fileExists(phpVerFile) {
+		if data, err := os.ReadFile(phpVerFile); err == nil {
+			trimmed := strings.TrimSpace(string(data))
+			if trimmed != "" {
+				norm := NormalizePHPVersion(trimmed)
+				return norm, PHPPortForVersion(norm)
+			}
+		}
+	}
+
+	// 2. Check .laragal file
+	laragalFile := filepath.Join(projectDir, ".laragal")
+	if fileExists(laragalFile) {
+		if data, err := os.ReadFile(laragalFile); err == nil {
+			trimmed := strings.TrimSpace(string(data))
+			if trimmed != "" {
+				var lcfg struct {
+					PHP string `json:"php"`
+				}
+				if err := json.Unmarshal(data, &lcfg); err == nil && lcfg.PHP != "" {
+					norm := NormalizePHPVersion(lcfg.PHP)
+					return norm, PHPPortForVersion(norm)
+				}
+				norm := NormalizePHPVersion(trimmed)
+				return norm, PHPPortForVersion(norm)
+			}
+		}
+	}
+
+	// 3. Check composer.json require.php
+	composerPath := filepath.Join(projectDir, "composer.json")
+	if fileExists(composerPath) {
+		if detected := DetectComposerPHPVersion(composerPath); detected != "" {
+			return detected, PHPPortForVersion(detected)
+		}
+	}
+
+	// 4. Fallback to defaultPHP
+	normDefault := NormalizePHPVersion(defaultPHP)
+	return normDefault, PHPPortForVersion(normDefault)
+}
+
 // detectSingleDir checks whether a specific directory contains web artifacts
 func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) DetectedProject {
 	name := filepath.Base(cleanDir)
@@ -90,11 +232,12 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 
 	// 1. Check for Laravel (artisan or composer.json with laravel/framework)
 	if fileExists(filepath.Join(cleanDir, "artisan")) {
+		phpVer, phpPort := DetectProjectPHPVersion(cleanDir, defaultPHP)
 		result.Type = TypeLaravel
 		result.TypeLabel = "Laravel"
 		result.IsWeb = true
-		result.PHPVersion = defaultPHP
-		result.PHPPort = 9083
+		result.PHPVersion = phpVer
+		result.PHPPort = phpPort
 		result.Domain = name + domainSuffix
 		result.DocRoot = findFirstExistingDir(cleanDir, "public")
 		return result
@@ -106,11 +249,12 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		fileExists(filepath.Join(cleanDir, "wp-login.php")) ||
 		fileExists(filepath.Join(cleanDir, "wp-settings.php")) ||
 		dirExists(filepath.Join(cleanDir, "wp-content")) {
+		phpVer, phpPort := DetectProjectPHPVersion(cleanDir, defaultPHP)
 		result.Type = TypeWordPress
 		result.TypeLabel = "WordPress"
 		result.IsWeb = true
-		result.PHPVersion = defaultPHP
-		result.PHPPort = 9083
+		result.PHPVersion = phpVer
+		result.PHPPort = phpPort
 		result.Domain = name + domainSuffix
 		return result
 	}
@@ -118,14 +262,15 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 	// 3. Check composer.json (Laravel, Symfony, WordPress Bedrock, or any PHP composer project)
 	composerPath := filepath.Join(cleanDir, "composer.json")
 	if fileExists(composerPath) {
+		phpVer, phpPort := DetectProjectPHPVersion(cleanDir, defaultPHP)
 		data, _ := os.ReadFile(composerPath)
 		content := strings.ToLower(string(data))
 		if strings.Contains(content, "laravel/framework") || strings.Contains(content, "laravel/lumen-framework") {
 			result.Type = TypeLaravel
 			result.TypeLabel = "Laravel"
 			result.IsWeb = true
-			result.PHPVersion = defaultPHP
-			result.PHPPort = 9083
+			result.PHPVersion = phpVer
+			result.PHPPort = phpPort
 			result.Domain = name + domainSuffix
 			result.DocRoot = findFirstExistingDir(cleanDir, "public")
 			return result
@@ -134,8 +279,8 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 			result.Type = TypeWordPress
 			result.TypeLabel = "WordPress"
 			result.IsWeb = true
-			result.PHPVersion = defaultPHP
-			result.PHPPort = 9083
+			result.PHPVersion = phpVer
+			result.PHPPort = phpPort
 			result.Domain = name + domainSuffix
 			result.DocRoot = findFirstExistingDir(cleanDir, "web", "public")
 			return result
@@ -145,8 +290,8 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		result.Type = TypePHP
 		result.TypeLabel = "PHP"
 		result.IsWeb = true
-		result.PHPVersion = defaultPHP
-		result.PHPPort = 9083
+		result.PHPVersion = phpVer
+		result.PHPPort = phpPort
 		result.Domain = name + domainSuffix
 		result.DocRoot = findFirstExistingDir(cleanDir, "public", "web", "public_html", "htdocs", "webroot")
 		return result
@@ -163,11 +308,12 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 	}
 	for _, entryPath := range phpEntryCandidates {
 		if fileExists(entryPath) {
+			phpVer, phpPort := DetectProjectPHPVersion(cleanDir, defaultPHP)
 			result.Type = TypePHP
 			result.TypeLabel = "PHP"
 			result.IsWeb = true
-			result.PHPVersion = defaultPHP
-			result.PHPPort = 9083
+			result.PHPVersion = phpVer
+			result.PHPPort = phpPort
 			result.Domain = name + domainSuffix
 			result.DocRoot = filepath.Dir(entryPath)
 			return result
@@ -408,11 +554,12 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 	if err == nil {
 		for _, e := range entries {
 			if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ".php") {
+				phpVer, phpPort := DetectProjectPHPVersion(cleanDir, defaultPHP)
 				result.Type = TypePHP
 				result.TypeLabel = "PHP"
 				result.IsWeb = true
-				result.PHPVersion = defaultPHP
-				result.PHPPort = 9083
+				result.PHPVersion = phpVer
+				result.PHPPort = phpPort
 				result.Domain = name + domainSuffix
 				return result
 			}
