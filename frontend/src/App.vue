@@ -81,7 +81,7 @@
             <div class="flex items-center gap-2">
               <span class="text-xl font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
               <span class="text-[11px] px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
-                v1.0.11
+                v1.0.12
               </span>
             </div>
             <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 text-start">
@@ -888,6 +888,8 @@ onMounted(async () => {
   }
   await loadRecentDirectories()
   await loadSites()
+  await loadServices()
+  await checkPortConflicts()
 })
 
 const availableRuntimes = ref([
@@ -1002,23 +1004,74 @@ function validateProjectName(): boolean {
   return true
 }
 
+async function loadServices() {
+  if ((window as any).go?.main?.App?.GetServices) {
+    try {
+      const live = await (window as any).go.main.App.GetServices()
+      if (Array.isArray(live)) {
+        for (const ls of live) {
+          const match = services.value.find(s => s.id === ls.name)
+          if (match) {
+            match.running = Boolean(ls.running)
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not load services:", e)
+    }
+  }
+}
+
+async function checkPortConflicts() {
+  if ((window as any).go?.main?.App?.CheckPortConflict) {
+    try {
+      const msg = await (window as any).go.main.App.CheckPortConflict(443)
+      if (msg) {
+        notification.value = msg
+      }
+    } catch (e) {
+      console.warn("CheckPortConflict err:", e)
+    }
+  }
+}
+
 // Custom service toggle with custom confirmation modal (No native confirm())
-function promptToggleService(service: ServiceItem) {
+async function promptToggleService(service: ServiceItem) {
   if (service.running) {
     // Open custom accessible confirmation modal
     confirmService.value = service
   } else {
-    service.running = true
-    notification.value = `تم تشغيل ${t(service.name_key)} بنجاح.`
+    if ((window as any).go?.main?.App?.ToggleService) {
+      try {
+        const running = await (window as any).go.main.App.ToggleService(service.id)
+        service.running = running
+        notification.value = `تم تشغيل ${t(service.name_key)} بنجاح.`
+      } catch (err: any) {
+        notification.value = `تعذر تشغيل ${t(service.name_key)}: ${err?.message || err}`
+      }
+    } else {
+      service.running = true
+      notification.value = `تم تشغيل ${t(service.name_key)} بنجاح.`
+    }
   }
 }
 
-function executeStopService() {
+async function executeStopService() {
   if (!confirmService.value) return
   const s = confirmService.value
-  s.running = false
+  if ((window as any).go?.main?.App?.ToggleService) {
+    try {
+      const running = await (window as any).go.main.App.ToggleService(s.id)
+      s.running = running
+      notification.value = `تم إيقاف ${t(s.name_key)} بنجاح.`
+    } catch (err: any) {
+      notification.value = `تعذر إيقاف ${t(s.name_key)}: ${err?.message || err}`
+    }
+  } else {
+    s.running = false
+    notification.value = `تم إيقاف ${t(s.name_key)} بنجاح.`
+  }
   confirmService.value = null
-  notification.value = `تم إيقاف ${t(s.name_key)} بنجاح.`
 }
 
 async function installSSL() {

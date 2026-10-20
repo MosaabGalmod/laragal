@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -51,10 +53,160 @@ func (a *App) startup(ctx context.Context) {
 	_ = os.MkdirAll(a.cfg.ProjectsPath, 0755)
 	a.initTray()
 	a.ScanProjects()
+	a.StartServices()
 }
 
 func (a *App) shutdown(ctx context.Context) {
 	_ = a.supervisor.StopAll()
+}
+
+func (a *App) findCaddyExecutable() string {
+	localCaddy := filepath.Join("bin", "caddy", "caddy.exe")
+	if _, err := os.Stat(localCaddy); err == nil {
+		return localCaddy
+	}
+	if path, err := exec.LookPath("caddy.exe"); err == nil {
+		return path
+	}
+	if path, err := exec.LookPath("caddy"); err == nil {
+		return path
+	}
+	return ""
+}
+
+func (a *App) findPHPExecutable() string {
+	candidates := []string{
+		filepath.Join("bin", "php-8.4", "php-cgi.exe"),
+		filepath.Join("bin", "php-8.3", "php-cgi.exe"),
+		filepath.Join("bin", "php", "php-cgi.exe"),
+	}
+
+	if localApp := os.Getenv("LOCALAPPDATA"); localApp != "" {
+		wingetGlob := filepath.Join(localApp, "Microsoft", "WinGet", "Packages")
+		if entries, err := os.ReadDir(wingetGlob); err == nil {
+			for _, e := range entries {
+				if strings.Contains(strings.ToLower(e.Name()), "php") {
+					wingetPHP := filepath.Join(wingetGlob, e.Name(), "php-cgi.exe")
+					if _, statErr := os.Stat(wingetPHP); statErr == nil {
+						candidates = append(candidates, wingetPHP)
+					}
+				}
+			}
+		}
+	}
+
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+
+	if path, err := exec.LookPath("php-cgi.exe"); err == nil {
+		return path
+	}
+	if path, err := exec.LookPath("php-cgi"); err == nil {
+		return path
+	}
+	return ""
+}
+
+func (a *App) findCaddyRootCert() string {
+	candidate1 := filepath.Join("data", "caddy", "pki", "authorities", "local", "root.crt")
+	if _, err := os.Stat(candidate1); err == nil {
+		return candidate1
+	}
+
+	if appData := os.Getenv("APPDATA"); appData != "" {
+		candidate2 := filepath.Join(appData, "caddy", "pki", "authorities", "local", "root.crt")
+		if _, err := os.Stat(candidate2); err == nil {
+			_ = os.MkdirAll(filepath.Dir(candidate1), 0755)
+			if data, readErr := os.ReadFile(candidate2); readErr == nil {
+				_ = os.WriteFile(candidate1, data, 0644)
+			}
+			return candidate2
+		}
+	}
+	return ""
+}
+
+func (a *App) StartServices() {
+	// 1. Start PHP FastCGI (port 9083)
+	phpExe := a.findPHPExecutable()
+	if phpExe != "" {
+		_ = a.supervisor.StartService("php-8.3", phpExe, []string{"-b", "127.0.0.1:9083"}, 9083)
+	}
+
+	// 2. Start Caddy on 443
+	caddyExe := a.findCaddyExecutable()
+	if caddyExe != "" {
+		caddyDir := filepath.Join("data", "caddy")
+		_ = os.MkdirAll(caddyDir, 0755)
+		caddyfilePath := filepath.Join(caddyDir, "Caddyfile")
+		_ = a.supervisor.StartService("caddy", caddyExe, []string{"run", "--config", caddyfilePath, "--adapter", "caddyfile"}, 443)
+	}
+
+	// 3. Start Mailpit (if present)
+	mailpitExe := filepath.Join("bin", "mailpit", "mailpit.exe")
+	if _, err := os.Stat(mailpitExe); err == nil {
+		_ = a.supervisor.StartService("mailpit", mailpitExe, []string{"--smtp-bind-addr", "127.0.0.1:1025", "--ui-bind-addr", "127.0.0.1:8025"}, 1025)
+	}
+}
+
+func (a *App) ToggleService(name string) (bool, error) {
+	status, exists := a.supervisor.GetServiceStatus(name)
+	if exists && status.Running {
+		err := a.supervisor.StopService(name)
+		return false, err
+	}
+
+	switch name {
+	case "caddy":
+		caddyExe := a.findCaddyExecutable()
+		if caddyExe == "" {
+			return false, fmt.Errorf("خادم Caddy غير مثبت بعد. يرجى تنزيله من قسم الحزم المحمولة.")
+		}
+		caddyDir := filepath.Join("data", "caddy")
+		_ = os.MkdirAll(caddyDir, 0755)
+		caddyfilePath := filepath.Join(caddyDir, "Caddyfile")
+		err := a.supervisor.StartService("caddy", caddyExe, []string{"run", "--config", caddyfilePath, "--adapter", "caddyfile"}, 443)
+		return err == nil, err
+
+	case "php-8.3", "php-8.4":
+		phpExe := a.findPHPExecutable()
+		if phpExe == "" {
+			return false, fmt.Errorf("محرك PHP غير متوفر. يرجى تنزيله من قسم الحزم المحمولة.")
+		}
+		port := 9083
+		if name == "php-8.4" {
+			port = 9084
+		}
+		err := a.supervisor.StartService(name, phpExe, []string{"-b", fmt.Sprintf("127.0.0.1:%d", port)}, port)
+		return err == nil, err
+
+	case "mailpit":
+		mailpitExe := filepath.Join("bin", "mailpit", "mailpit.exe")
+		if _, err := os.Stat(mailpitExe); err != nil {
+			return false, fmt.Errorf("صائد البريد Mailpit غير مثبت بعد.")
+		}
+		err := a.supervisor.StartService("mailpit", mailpitExe, []string{"--smtp-bind-addr", "127.0.0.1:1025", "--ui-bind-addr", "127.0.0.1:8025"}, 1025)
+		return err == nil, err
+	}
+
+	return false, fmt.Errorf("الخدمة %s غير معروفة", name)
+}
+
+func (a *App) CheckPortConflict(port int) string {
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 200*time.Millisecond)
+	if err == nil {
+		_ = conn.Close()
+		for _, s := range a.GetServices() {
+			if s.Running && s.Port == port {
+				return ""
+			}
+		}
+		return fmt.Sprintf("تنبيه: المنفذ %d مستخدم حالياً من قِبل برنامج آخر على جهازك (مثل خادم محلي قديم).", port)
+	}
+	return ""
 }
 
 func (a *App) GetServices() []process.ServiceStatus {
@@ -112,9 +264,9 @@ func (a *App) AddSite(domain string, rootPath string, phpVersion string) error {
 }
 
 func (a *App) InstallSSLTrust() (string, error) {
-	rootCertPath := filepath.Join("data", "caddy", "pki", "authorities", "local", "root.crt")
-	if _, err := os.Stat(rootCertPath); os.IsNotExist(err) {
-		return "لم يتم العثور على شهادة الجذر لـ Caddy بعد. يرجى تشغيل خادم Caddy أولاً.", nil
+	rootCertPath := a.findCaddyRootCert()
+	if rootCertPath == "" {
+		return "لم يتم العثور على شهادة الجذر لـ Caddy بعد. يرجى تشغيل خادم Caddy أولاً لتوليدها.", nil
 	}
 
 	fingerprint, err := certs.ReadCertFingerprint(rootCertPath)

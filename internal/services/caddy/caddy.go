@@ -23,6 +23,7 @@ func GenerateCaddyfile(sites []SiteDef, adminPort int) string {
 	sb.WriteString("{\n")
 	sb.WriteString(fmt.Sprintf("    admin localhost:%d\n", adminPort))
 	sb.WriteString("    local_certs\n")
+	sb.WriteString("    skip_install_trust\n")
 	sb.WriteString("    auto_https disable_redirects\n")
 	sb.WriteString("}\n\n")
 
