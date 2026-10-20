@@ -9,7 +9,7 @@ import (
 func TestDetectProject(t *testing.T) {
 	tempDir := t.TempDir()
 
-	// 1. Laravel project
+	// 1. Laravel project (artisan)
 	laravelDir := filepath.Join(tempDir, "my-laravel")
 	_ = os.MkdirAll(filepath.Join(laravelDir, "public"), 0755)
 	_ = os.WriteFile(filepath.Join(laravelDir, "artisan"), []byte("<?php"), 0644)
@@ -33,7 +33,20 @@ func TestDetectProject(t *testing.T) {
 		t.Fatalf("Expected PHP project, got: %+v", resPHP)
 	}
 
-	// 3. Static HTML project
+	// 3. Composer PHP project (e.g. Symfony or custom app)
+	composerDir := filepath.Join(tempDir, "symfony-app")
+	_ = os.MkdirAll(filepath.Join(composerDir, "public"), 0755)
+	_ = os.WriteFile(filepath.Join(composerDir, "composer.json"), []byte(`{"require":{"symfony/framework-bundle":"^6.0"}}`), 0644)
+
+	resComposer := DetectProject(composerDir, "8.3", ".test")
+	if resComposer.Type != TypePHP || !resComposer.IsWeb || resComposer.PHPPort != 9083 {
+		t.Fatalf("Expected PHP project for composer.json, got: %+v", resComposer)
+	}
+	if filepath.Base(resComposer.DocRoot) != "public" {
+		t.Fatalf("Expected docroot public for composer app, got: %s", resComposer.DocRoot)
+	}
+
+	// 4. Static HTML project
 	staticDir := filepath.Join(tempDir, "my-static")
 	_ = os.MkdirAll(staticDir, 0755)
 	_ = os.WriteFile(filepath.Join(staticDir, "index.html"), []byte("<h1>Hello</h1>"), 0644)
@@ -43,7 +56,17 @@ func TestDetectProject(t *testing.T) {
 		t.Fatalf("Expected Static project with port 0, got: %+v", resStatic)
 	}
 
-	// 4. Non-web directory (e.g. skills, markdown prompts, tools)
+	// 5. Node.js Vite project
+	nodeDir := filepath.Join(tempDir, "vue-app")
+	_ = os.MkdirAll(filepath.Join(nodeDir, "dist"), 0755)
+	_ = os.WriteFile(filepath.Join(nodeDir, "package.json"), []byte(`{"name":"vue-app","dependencies":{"vue":"^3.0","vite":"^5.0"}}`), 0644)
+
+	resNode := DetectProject(nodeDir, "8.3", ".test")
+	if resNode.Type != TypeNode || !resNode.IsWeb || resNode.PHPPort != 0 {
+		t.Fatalf("Expected Node.js project with port 0, got: %+v", resNode)
+	}
+
+	// 6. Non-web directory (e.g. skills, markdown prompts, tools)
 	nonWebDir := filepath.Join(tempDir, "anti-ai-slop")
 	_ = os.MkdirAll(nonWebDir, 0755)
 	_ = os.WriteFile(filepath.Join(nonWebDir, "SKILL.md"), []byte("# Anti AI Slop"), 0644)

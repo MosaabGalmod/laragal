@@ -39,6 +39,16 @@ func dirExists(path string) bool {
 	return err == nil && info.IsDir()
 }
 
+func findFirstExistingDir(baseDir string, subDirs ...string) string {
+	for _, sub := range subDirs {
+		target := filepath.Join(baseDir, sub)
+		if dirExists(target) {
+			return target
+		}
+	}
+	return baseDir
+}
+
 // DetectProject inspects a folder to determine whether it is a web application and its specific stack
 func DetectProject(projectDir string, defaultPHP string, domainSuffix string) DetectedProject {
 	cleanDir := filepath.Clean(projectDir)
@@ -64,14 +74,16 @@ func DetectProject(projectDir string, defaultPHP string, domainSuffix string) De
 		result.PHPVersion = defaultPHP
 		result.PHPPort = 9083
 		result.Domain = name + domainSuffix
-		if dirExists(filepath.Join(cleanDir, "public")) {
-			result.DocRoot = filepath.Join(cleanDir, "public")
-		}
+		result.DocRoot = findFirstExistingDir(cleanDir, "public")
 		return result
 	}
 
 	// 2. Check for WordPress
-	if fileExists(filepath.Join(cleanDir, "wp-config.php")) || dirExists(filepath.Join(cleanDir, "wp-content")) {
+	if fileExists(filepath.Join(cleanDir, "wp-config.php")) ||
+		fileExists(filepath.Join(cleanDir, "wp-load.php")) ||
+		fileExists(filepath.Join(cleanDir, "wp-login.php")) ||
+		fileExists(filepath.Join(cleanDir, "wp-settings.php")) ||
+		dirExists(filepath.Join(cleanDir, "wp-content")) {
 		result.Type = TypeWordPress
 		result.TypeLabel = "WordPress"
 		result.IsWeb = true
@@ -81,101 +93,136 @@ func DetectProject(projectDir string, defaultPHP string, domainSuffix string) De
 		return result
 	}
 
-	// 3. Check composer.json for PHP frameworks
+	// 3. Check composer.json (Laravel, Symfony, WordPress Bedrock, or any PHP composer project)
 	composerPath := filepath.Join(cleanDir, "composer.json")
 	if fileExists(composerPath) {
 		data, _ := os.ReadFile(composerPath)
 		content := strings.ToLower(string(data))
-		if strings.Contains(content, "laravel/framework") {
+		if strings.Contains(content, "laravel/framework") || strings.Contains(content, "laravel/lumen-framework") {
 			result.Type = TypeLaravel
 			result.TypeLabel = "Laravel"
 			result.IsWeb = true
 			result.PHPVersion = defaultPHP
 			result.PHPPort = 9083
 			result.Domain = name + domainSuffix
-			if dirExists(filepath.Join(cleanDir, "public")) {
-				result.DocRoot = filepath.Join(cleanDir, "public")
-			}
+			result.DocRoot = findFirstExistingDir(cleanDir, "public")
+			return result
+		}
+		if strings.Contains(content, "roots/bedrock") || strings.Contains(content, "johnpbloch/wordpress") {
+			result.Type = TypeWordPress
+			result.TypeLabel = "WordPress"
+			result.IsWeb = true
+			result.PHPVersion = defaultPHP
+			result.PHPPort = 9083
+			result.Domain = name + domainSuffix
+			result.DocRoot = findFirstExistingDir(cleanDir, "web", "public")
+			return result
+		}
+
+		// Any other project with composer.json is a PHP web application
+		result.Type = TypePHP
+		result.TypeLabel = "PHP"
+		result.IsWeb = true
+		result.PHPVersion = defaultPHP
+		result.PHPPort = 9083
+		result.Domain = name + domainSuffix
+		result.DocRoot = findFirstExistingDir(cleanDir, "public", "web", "public_html", "htdocs", "webroot")
+		return result
+	}
+
+	// 4. Check for PHP entry points in common public roots or project root
+	phpEntryCandidates := []string{
+		filepath.Join(cleanDir, "public", "index.php"),
+		filepath.Join(cleanDir, "web", "index.php"),
+		filepath.Join(cleanDir, "public_html", "index.php"),
+		filepath.Join(cleanDir, "htdocs", "index.php"),
+		filepath.Join(cleanDir, "webroot", "index.php"),
+		filepath.Join(cleanDir, "index.php"),
+	}
+	for _, entryPath := range phpEntryCandidates {
+		if fileExists(entryPath) {
+			result.Type = TypePHP
+			result.TypeLabel = "PHP"
+			result.IsWeb = true
+			result.PHPVersion = defaultPHP
+			result.PHPPort = 9083
+			result.Domain = name + domainSuffix
+			result.DocRoot = filepath.Dir(entryPath)
 			return result
 		}
 	}
 
-	// 4. Check for PHP entry points (index.php in public/ or root)
-	publicIndexPHP := filepath.Join(cleanDir, "public", "index.php")
-	rootIndexPHP := filepath.Join(cleanDir, "index.php")
-	if fileExists(publicIndexPHP) {
-		result.Type = TypePHP
-		result.TypeLabel = "PHP"
-		result.IsWeb = true
-		result.PHPVersion = defaultPHP
-		result.PHPPort = 9083
-		result.Domain = name + domainSuffix
-		result.DocRoot = filepath.Join(cleanDir, "public")
-		return result
-	}
-	if fileExists(rootIndexPHP) {
-		result.Type = TypePHP
-		result.TypeLabel = "PHP"
-		result.IsWeb = true
-		result.PHPVersion = defaultPHP
-		result.PHPPort = 9083
-		result.Domain = name + domainSuffix
-		return result
+	// 5. Check for Static HTML sites (index.html, index.htm, default.html) in dist/, public/, build/, or root
+	htmlDirCandidates := []string{"dist", "public", "build", "out", "web", ""}
+	htmlFileNames := []string{"index.html", "index.htm", "default.html", "default.htm"}
+	for _, sub := range htmlDirCandidates {
+		targetDir := cleanDir
+		if sub != "" {
+			targetDir = filepath.Join(cleanDir, sub)
+		}
+		for _, fName := range htmlFileNames {
+			if fileExists(filepath.Join(targetDir, fName)) {
+				result.Type = TypeStatic
+				result.TypeLabel = "HTML / ثابت"
+				result.IsWeb = true
+				result.Domain = name + domainSuffix
+				result.DocRoot = targetDir
+				result.PHPPort = 0
+				return result
+			}
+		}
 	}
 
-	// 5. Check for Static HTML sites (index.html in root, dist/, or public/)
-	distIndexHTML := filepath.Join(cleanDir, "dist", "index.html")
-	publicIndexHTML := filepath.Join(cleanDir, "public", "index.html")
-	rootIndexHTML := filepath.Join(cleanDir, "index.html")
-
-	if fileExists(distIndexHTML) {
-		result.Type = TypeStatic
-		result.TypeLabel = "HTML / ثابت"
-		result.IsWeb = true
-		result.Domain = name + domainSuffix
-		result.DocRoot = filepath.Join(cleanDir, "dist")
-		return result
+	// 6. Check for Node.js web applications (package.json or frontend config files)
+	frontendConfigFiles := []string{
+		"vite.config.js", "vite.config.ts", "vite.config.mjs",
+		"next.config.js", "next.config.ts", "next.config.mjs",
+		"nuxt.config.js", "nuxt.config.ts",
+		"astro.config.mjs", "astro.config.ts",
+		"svelte.config.js", "svelte.config.ts",
+		"webpack.config.js", "angular.json",
 	}
-	if fileExists(publicIndexHTML) {
-		result.Type = TypeStatic
-		result.TypeLabel = "HTML / ثابت"
-		result.IsWeb = true
-		result.Domain = name + domainSuffix
-		result.DocRoot = filepath.Join(cleanDir, "public")
-		return result
-	}
-	if fileExists(rootIndexHTML) {
-		result.Type = TypeStatic
-		result.TypeLabel = "HTML / ثابت"
-		result.IsWeb = true
-		result.Domain = name + domainSuffix
-		return result
+	hasFrontendConfig := false
+	for _, cfg := range frontendConfigFiles {
+		if fileExists(filepath.Join(cleanDir, cfg)) {
+			hasFrontendConfig = true
+			break
+		}
 	}
 
-	// 6. Check for Node.js web applications (package.json with build scripts or web frameworks)
 	pkgPath := filepath.Join(cleanDir, "package.json")
-	if fileExists(pkgPath) {
-		data, _ := os.ReadFile(pkgPath)
-		content := strings.ToLower(string(data))
-		isWebNode := strings.Contains(content, "vite") ||
-			strings.Contains(content, "next") ||
-			strings.Contains(content, "nuxt") ||
-			strings.Contains(content, "react") ||
-			strings.Contains(content, "vue") ||
-			strings.Contains(content, "astro") ||
-			strings.Contains(content, "svelte") ||
-			strings.Contains(content, "express")
+	if hasFrontendConfig || fileExists(pkgPath) {
+		isWebNode := hasFrontendConfig
+		if !isWebNode && fileExists(pkgPath) {
+			data, _ := os.ReadFile(pkgPath)
+			content := strings.ToLower(string(data))
+			isWebNode = strings.Contains(content, "vite") ||
+				strings.Contains(content, "next") ||
+				strings.Contains(content, "nuxt") ||
+				strings.Contains(content, "react") ||
+				strings.Contains(content, "vue") ||
+				strings.Contains(content, "astro") ||
+				strings.Contains(content, "svelte") ||
+				strings.Contains(content, "express") ||
+				strings.Contains(content, "hono") ||
+				strings.Contains(content, "fastify") ||
+				strings.Contains(content, "remix") ||
+				strings.Contains(content, "angular") ||
+				strings.Contains(content, "gatsby") ||
+				strings.Contains(content, "webpack") ||
+				strings.Contains(content, "tailwind") ||
+				strings.Contains(content, "\"dev\":") ||
+				strings.Contains(content, "\"start\":") ||
+				strings.Contains(content, "\"build\":")
+		}
 
 		if isWebNode {
 			result.Type = TypeNode
 			result.TypeLabel = "Node.js"
 			result.IsWeb = true
 			result.Domain = name + domainSuffix
-			if dirExists(filepath.Join(cleanDir, "dist")) {
-				result.DocRoot = filepath.Join(cleanDir, "dist")
-			} else if dirExists(filepath.Join(cleanDir, "build")) {
-				result.DocRoot = filepath.Join(cleanDir, "build")
-			}
+			result.DocRoot = findFirstExistingDir(cleanDir, "dist", "build", "public", "out")
+			result.PHPPort = 0
 			return result
 		}
 	}
@@ -196,6 +243,23 @@ func DetectProject(projectDir string, defaultPHP string, domainSuffix string) De
 		}
 	}
 
-	// 8. Otherwise: folder is NOT a website (e.g. skills, docs, markdown, CLI tools)
+	// 8. Check if folder contains any .html / .htm files in top-level
+	if err == nil {
+		for _, e := range entries {
+			if !e.IsDir() {
+				lowerName := strings.ToLower(e.Name())
+				if strings.HasSuffix(lowerName, ".html") || strings.HasSuffix(lowerName, ".htm") {
+					result.Type = TypeStatic
+					result.TypeLabel = "HTML / ثابت"
+					result.IsWeb = true
+					result.Domain = name + domainSuffix
+					result.PHPPort = 0
+					return result
+				}
+			}
+		}
+	}
+
+	// 9. Otherwise: folder is NOT a website (e.g. skills, docs, markdown, CLI tools)
 	return result
 }

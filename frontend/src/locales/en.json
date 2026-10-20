@@ -85,5 +85,7 @@
   "local_folder_badge": "Local Folder",
   "web_count": "Web Sites",
   "non_web_count": "Other Folders",
-  "open_folder_btn": "Open Folder"
+  "open_folder_btn": "Open Folder",
+  "no_web_sites_in_dir": "No web projects found in this directory, but other folders are available to browse.",
+  "show_all_folders": "View All Folders"
 }

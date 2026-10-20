@@ -85,5 +85,7 @@
   "local_folder_badge": "مجلد محلي",
   "web_count": "موقع ويب",
   "non_web_count": "مجلدات أخرى",
-  "open_folder_btn": "فتح المجلد"
+  "open_folder_btn": "فتح المجلد",
+  "no_web_sites_in_dir": "لم يتم العثور على مواقع ويب في هذا المجلد، لكن توجد مجلدات أخرى متاحة للتصفح.",
+  "show_all_folders": "عرض كل المجلدات"
 }

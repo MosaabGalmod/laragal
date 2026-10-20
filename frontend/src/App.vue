@@ -81,7 +81,7 @@
             <div class="flex items-center gap-2">
               <span class="text-xl font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
               <span class="text-[11px] px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
-                v1.0.10
+                v1.0.11
               </span>
             </div>
             <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 text-start">
@@ -274,14 +274,29 @@
 
         <div v-if="filteredSites.length === 0" class="p-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/60">
           <Globe class="w-10 h-10 text-slate-400 mx-auto mb-3 opacity-60" />
-          <p class="text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">{{ t('empty_sites') }}</p>
-          <button
-            @click="openNewModal"
-            class="mt-4 inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors"
-          >
-            <Plus class="w-4 h-4" />
-            {{ t('new_project_btn') }}
-          </button>
+          <p class="text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+            <span v-if="activeFilter === 'web' && sites.length > 0">
+              {{ t('no_web_sites_in_dir') }}
+            </span>
+            <span v-else>{{ t('empty_sites') }}</span>
+          </p>
+          <div class="mt-4 flex items-center justify-center gap-2">
+            <button
+              v-if="activeFilter === 'web' && sites.length > 0"
+              @click="activeFilter = 'all'"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+            >
+              <Folder class="w-3.5 h-3.5" />
+              <span>{{ t('show_all_folders') }} ({{ sites.length }})</span>
+            </button>
+            <button
+              @click="openNewModal"
+              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors"
+            >
+              <Plus class="w-4 h-4" />
+              {{ t('new_project_btn') }}
+            </button>
+          </div>
         </div>
 
         <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -727,17 +742,81 @@ function minimizeWindow() {
   }
 }
 
+interface SiteItem {
+  name?: string
+  domain: string
+  root_path: string
+  php_version?: string
+  php_port?: number
+  project_type?: string
+  type_label?: string
+  is_web?: boolean
+}
+
+function mapSiteItem(item: any): SiteItem {
+  const isWeb = item.is_web !== undefined ? Boolean(item.is_web) : (item.IsWeb !== undefined ? Boolean(item.IsWeb) : true)
+  const projectType = item.project_type || item.ProjectType || (isWeb ? 'php' : 'non_web')
+  let typeLabel = item.type_label || item.TypeLabel || ''
+  if (!typeLabel) {
+    if (projectType === 'laravel') typeLabel = 'Laravel'
+    else if (projectType === 'wordpress') typeLabel = 'WordPress'
+    else if (projectType === 'php') typeLabel = 'PHP'
+    else if (projectType === 'static') typeLabel = 'HTML / ثابت'
+    else if (projectType === 'node') typeLabel = 'Node.js'
+    else typeLabel = 'غير ويب / ملفات'
+  }
+  const rawPhp = item.php_version || item.PHPVersion || ''
+  const phpVersion = rawPhp ? (rawPhp.startsWith('PHP') ? rawPhp : `PHP ${rawPhp}`) : (isWeb && projectType !== 'static' && projectType !== 'node' ? 'PHP 8.3' : '')
+
+  return {
+    name: item.name || item.Name || item.domain || item.Domain || '',
+    domain: item.domain || item.Domain || '',
+    root_path: item.root_path || item.RootPath || '',
+    php_version: phpVersion,
+    php_port: item.php_port !== undefined ? item.php_port : (item.PHPPort !== undefined ? item.PHPPort : (isWeb && projectType !== 'static' && projectType !== 'node' ? 9083 : 0)),
+    project_type: projectType,
+    type_label: typeLabel,
+    is_web: isWeb,
+  }
+}
+
+const sites = ref<SiteItem[]>([])
+const activeFilter = ref<'web' | 'all' | 'laravel' | 'php' | 'non_web'>('web')
+const isSyncingHosts = ref(false)
+
+const webSites = computed(() => sites.value.filter(s => s.is_web))
+const webSitesCount = computed(() => webSites.value.length)
+const laravelSitesCount = computed(() => sites.value.filter(s => s.project_type === 'laravel').length)
+const phpSitesCount = computed(() => sites.value.filter(s => s.project_type === 'php').length)
+const nonWebCount = computed(() => sites.value.filter(s => !s.is_web).length)
+
+const filteredSites = computed(() => {
+  if (activeFilter.value === 'web') {
+    return sites.value.filter(s => s.is_web)
+  }
+  if (activeFilter.value === 'laravel') {
+    return sites.value.filter(s => s.project_type === 'laravel')
+  }
+  if (activeFilter.value === 'php') {
+    return sites.value.filter(s => s.project_type === 'php')
+  }
+  if (activeFilter.value === 'non_web') {
+    return sites.value.filter(s => !s.is_web)
+  }
+  return sites.value
+})
+
 async function loadSites() {
   if ((window as any).go?.main?.App?.GetSites) {
     try {
       const s = await (window as any).go.main.App.GetSites()
       if (Array.isArray(s)) {
-        sites.value = s.map((item: any) => ({
-          domain: item.domain || item.Domain,
-          root_path: item.root_path || item.RootPath,
-          php_version: `PHP ${item.php_version || item.PHPVersion || '8.3'}`,
-          php_port: item.php_port || item.PHPPort || 9083
-        }))
+        sites.value = s.map(mapSiteItem)
+        if (webSitesCount.value === 0 && sites.value.length > 0 && activeFilter.value === 'web') {
+          activeFilter.value = 'all'
+        } else if (webSitesCount.value > 0 && activeFilter.value === 'all') {
+          activeFilter.value = 'web'
+        }
       }
     } catch (e) {
       console.warn("Could not load sites:", e)
@@ -768,12 +847,12 @@ async function switchRecentDirectory(event: Event) {
       projectsDirectory.value = chosen
       notification.value = `${t('projects_dir_updated')} ${chosen}`
       if (Array.isArray(s)) {
-        sites.value = s.map((item: any) => ({
-          domain: item.domain || item.Domain,
-          root_path: item.root_path || item.RootPath,
-          php_version: `PHP ${item.php_version || item.PHPVersion || '8.3'}`,
-          php_port: item.php_port || item.PHPPort || 9083
-        }))
+        sites.value = s.map(mapSiteItem)
+        if (webSitesCount.value === 0 && sites.value.length > 0) {
+          activeFilter.value = 'all'
+        } else {
+          activeFilter.value = 'web'
+        }
       }
       await loadRecentDirectories()
     } catch (e: any) {
@@ -848,42 +927,6 @@ const services = ref<ServiceItem[]>([
   { id: 'mailpit', name_key: 'service_mailpit', desc_key: 'service_mailpit_desc', port: 1025, running: true },
 ])
 
-interface SiteItem {
-  name?: string
-  domain: string
-  root_path: string
-  php_version?: string
-  php_port?: number
-  project_type?: string
-  type_label?: string
-  is_web?: boolean
-}
-
-const sites = ref<SiteItem[]>([])
-const activeFilter = ref<'web' | 'all' | 'laravel' | 'php' | 'non_web'>('web')
-const isSyncingHosts = ref(false)
-
-const webSites = computed(() => sites.value.filter(s => s.is_web))
-const webSitesCount = computed(() => webSites.value.length)
-const laravelSitesCount = computed(() => sites.value.filter(s => s.project_type === 'laravel').length)
-const phpSitesCount = computed(() => sites.value.filter(s => s.project_type === 'php').length)
-const nonWebCount = computed(() => sites.value.filter(s => !s.is_web).length)
-
-const filteredSites = computed(() => {
-  if (activeFilter.value === 'web') {
-    return sites.value.filter(s => s.is_web)
-  }
-  if (activeFilter.value === 'laravel') {
-    return sites.value.filter(s => s.project_type === 'laravel')
-  }
-  if (activeFilter.value === 'php') {
-    return sites.value.filter(s => s.project_type === 'php')
-  }
-  if (activeFilter.value === 'non_web') {
-    return sites.value.filter(s => !s.is_web)
-  }
-  return sites.value
-})
 
 async function syncHostsNow() {
   isSyncingHosts.value = true
@@ -1004,17 +1047,22 @@ async function handleCreateProject() {
   if ((window as any).go?.main?.App?.CreateProject) {
     try {
       await (window as any).go.main.App.CreateProject(projectName, newProject.value.type, newProject.value.php)
+      await loadSites()
     } catch (e: any) {
       console.warn("Go backend create project:", e)
     }
+  } else {
+    sites.value.push(mapSiteItem({
+      name: projectName,
+      domain,
+      root_path: rootPath,
+      php_version: `PHP ${newProject.value.php}`,
+      php_port: port,
+      project_type: newProject.value.type,
+      type_label: newProject.value.type === 'laravel' ? 'Laravel' : 'PHP',
+      is_web: true,
+    }))
   }
-
-  sites.value.push({
-    domain,
-    root_path: rootPath,
-    php_version: `PHP ${newProject.value.php}`,
-    php_port: port
-  })
 
   notification.value = `تم إنشاء المشروع «${projectName}» بنجاح وضبط رابط https://${domain} الموثوق بـ SSL.`
   showNewModal.value = false
