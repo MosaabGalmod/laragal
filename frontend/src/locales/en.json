@@ -73,5 +73,17 @@
   "confirm_quit_msg": "Are you sure you want to stop all local services (Caddy, PHP, MySQL, Mailpit) and quit LaraGal?",
   "maximize_restore": "Maximize / Restore",
   "minimize": "Minimize",
-  "recent_directories": "Recent Folders"
+  "recent_directories": "Recent Folders",
+  "sync_hosts_btn": "Sync Domains",
+  "sync_hosts_hint": "Sync .test domains to Windows hosts file and flush DNS",
+  "filter_all": "All",
+  "filter_web": "Web Sites",
+  "filter_laravel": "Laravel",
+  "filter_php": "PHP",
+  "filter_non_web": "Non-Web",
+  "non_web_badge": "Non-Web / Files",
+  "local_folder_badge": "Local Folder",
+  "web_count": "Web Sites",
+  "non_web_count": "Other Folders",
+  "open_folder_btn": "Open Folder"
 }

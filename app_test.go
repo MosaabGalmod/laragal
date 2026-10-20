@@ -54,6 +54,7 @@ func TestScanProjects(t *testing.T) {
 	// Create test project folders:
 	// 1. laravel-app with public/ directory
 	// 2. simple-php with direct index.php
+	// 3. docs-folder (non-web directory)
 	laravelDir := filepath.Join(tempDir, "laravel-app", "public")
 	_ = os.MkdirAll(laravelDir, 0755)
 	_ = os.WriteFile(filepath.Join(laravelDir, "index.php"), []byte("<?php echo 'laravel';"), 0644)
@@ -61,6 +62,10 @@ func TestScanProjects(t *testing.T) {
 	simpleDir := filepath.Join(tempDir, "simple-php")
 	_ = os.MkdirAll(simpleDir, 0755)
 	_ = os.WriteFile(filepath.Join(simpleDir, "index.php"), []byte("<?php echo 'simple';"), 0644)
+
+	docsDir := filepath.Join(tempDir, "docs-folder")
+	_ = os.MkdirAll(docsDir, 0755)
+	_ = os.WriteFile(filepath.Join(docsDir, "README.md"), []byte("# Docs"), 0644)
 
 	cfg := config.NewDefaultConfig()
 	cfg.ProjectsPath = tempDir
@@ -71,26 +76,42 @@ func TestScanProjects(t *testing.T) {
 	}
 
 	sites := app.ScanProjects()
-	if len(sites) != 2 {
-		t.Fatalf("expected 2 sites scanned, got %d", len(sites))
+	if len(sites) != 3 {
+		t.Fatalf("expected 3 directories scanned, got %d", len(sites))
 	}
 
 	foundLaravel := false
 	foundSimple := false
+	foundDocsNonWeb := false
 	for _, s := range sites {
 		if s.Domain == "laravel-app.test" {
 			foundLaravel = true
+			if !s.IsWeb {
+				t.Errorf("expected laravel-app to be web site")
+			}
 			if !filepath.IsAbs(filepath.FromSlash(s.RootPath)) {
 				t.Errorf("expected absolute root path, got %s", s.RootPath)
 			}
 		}
 		if s.Domain == "simple-php.test" {
 			foundSimple = true
+			if !s.IsWeb {
+				t.Errorf("expected simple-php to be web site")
+			}
+		}
+		if s.Name == "docs-folder" {
+			foundDocsNonWeb = true
+			if s.IsWeb {
+				t.Errorf("expected docs-folder to NOT be a web site")
+			}
+			if s.Domain != "" {
+				t.Errorf("expected non-web site domain to be empty, got %s", s.Domain)
+			}
 		}
 	}
 
-	if !foundLaravel || !foundSimple {
-		t.Errorf("did not find expected sites: laravel=%v, simple=%v", foundLaravel, foundSimple)
+	if !foundLaravel || !foundSimple || !foundDocsNonWeb {
+		t.Errorf("did not find expected sites: laravel=%v, simple=%v, docs=%v", foundLaravel, foundSimple, foundDocsNonWeb)
 	}
 }
 

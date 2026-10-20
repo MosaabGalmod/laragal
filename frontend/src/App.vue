@@ -94,6 +94,16 @@
         <!-- Actions Toolbar: In RTL appears on the LEFT; in LTR appears on the RIGHT -->
         <div class="flex items-center gap-2.5">
           <button
+            @click="syncHostsNow"
+            :disabled="isSyncingHosts"
+            class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/80 transition-colors"
+            :title="t('sync_hosts_hint')"
+          >
+            <RefreshCw class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" :class="{ 'animate-spin': isSyncingHosts }" />
+            <span>{{ t('sync_hosts_btn') }}</span>
+          </button>
+
+          <button
             @click="installSSL"
             class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 transition-colors"
             :title="t('ssl_install_hint')"
@@ -203,15 +213,66 @@
 
       <!-- Sites & Projects Section -->
       <section>
-        <div class="flex items-center justify-between mb-3.5">
-          <h2 class="text-base font-bold flex items-center gap-2 text-slate-900 dark:text-white">
-            <Globe class="w-4 h-4 text-blue-600" />
-            {{ t('sites_title') }}
-          </h2>
-          <span class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ sites.length }} {{ t('available_count') }}</span>
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
+          <div class="flex items-center gap-3">
+            <h2 class="text-base font-bold flex items-center gap-2 text-slate-900 dark:text-white">
+              <Globe class="w-4 h-4 text-blue-600" />
+              {{ t('sites_title') }}
+            </h2>
+            <div class="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-mono">
+              <span class="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-900">
+                {{ webSitesCount }} {{ t('web_count') }}
+              </span>
+              <span v-if="nonWebCount > 0" class="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                {{ nonWebCount }} {{ t('non_web_count') }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Filter tabs -->
+          <div class="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs font-semibold self-start md:self-auto">
+            <button
+              @click="activeFilter = 'web'"
+              class="px-2.5 py-1 rounded-lg transition-all"
+              :class="activeFilter === 'web' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
+            >
+              {{ t('filter_web') }} ({{ webSitesCount }})
+            </button>
+            <button
+              v-if="laravelSitesCount > 0"
+              @click="activeFilter = 'laravel'"
+              class="px-2.5 py-1 rounded-lg transition-all"
+              :class="activeFilter === 'laravel' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
+            >
+              Laravel ({{ laravelSitesCount }})
+            </button>
+            <button
+              v-if="phpSitesCount > 0"
+              @click="activeFilter = 'php'"
+              class="px-2.5 py-1 rounded-lg transition-all"
+              :class="activeFilter === 'php' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
+            >
+              PHP ({{ phpSitesCount }})
+            </button>
+            <button
+              v-if="nonWebCount > 0"
+              @click="activeFilter = 'non_web'"
+              class="px-2.5 py-1 rounded-lg transition-all"
+              :class="activeFilter === 'non_web' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
+            >
+              {{ t('filter_non_web') }} ({{ nonWebCount }})
+            </button>
+            <button
+              @click="activeFilter = 'all'"
+              class="px-2.5 py-1 rounded-lg transition-all"
+              :class="activeFilter === 'all' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
+            >
+              {{ t('filter_all') }} ({{ sites.length }})
+            </button>
+          </div>
         </div>
 
-        <div v-if="sites.length === 0" class="p-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/60">
+        <div v-if="filteredSites.length === 0" class="p-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/60">
           <Globe class="w-10 h-10 text-slate-400 mx-auto mb-3 opacity-60" />
           <p class="text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">{{ t('empty_sites') }}</p>
           <button
@@ -225,23 +286,36 @@
 
         <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           <div
-            v-for="site in sites"
-            :key="site.domain"
-            class="p-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs hover:border-blue-500/50 dark:hover:border-blue-600 transition-all flex flex-col justify-between"
+            v-for="site in filteredSites"
+            :key="site.domain || site.root_path"
+            class="p-5 rounded-2xl border bg-white dark:bg-slate-900 shadow-xs transition-all flex flex-col justify-between"
+            :class="site.is_web ? 'border-slate-200 dark:border-slate-800 hover:border-blue-500/50 dark:hover:border-blue-600' : 'border-dashed border-slate-300 dark:border-slate-800 opacity-90'"
           >
             <div>
               <div class="flex items-center justify-between mb-3">
-                <span class="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-mono font-bold">
+                <span v-if="site.is_web" class="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-mono font-bold">
                   <Lock class="w-3 h-3 text-emerald-600" />
                   HTTPS
                 </span>
-                <span dir="ltr" class="text-xs font-mono px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
-                  {{ site.php_version || 'PHP 8.3' }}
+                <span v-else class="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 font-sans font-semibold">
+                  <Folder class="w-3 h-3 text-slate-400" />
+                  {{ t('non_web_badge') }}
+                </span>
+
+                <span v-if="site.is_web" dir="ltr" class="text-xs font-mono px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
+                  <span v-if="site.project_type === 'laravel'">Laravel • {{ site.php_version || 'PHP 8.3' }}</span>
+                  <span v-else-if="site.project_type === 'php'">{{ site.php_version || 'PHP 8.3' }}</span>
+                  <span v-else-if="site.project_type === 'static'">HTML / ثابت</span>
+                  <span v-else-if="site.project_type === 'node'">Node.js</span>
+                  <span v-else>{{ site.type_label || site.php_version || 'Web' }}</span>
+                </span>
+                <span v-else class="text-xs font-sans px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                  {{ t('local_folder_badge') }}
                 </span>
               </div>
 
               <h3 class="text-base font-bold text-slate-900 dark:text-white truncate">
-                {{ site.domain }}
+                {{ site.is_web ? site.domain : (site.name || site.domain) }}
               </h3>
 
               <!-- Monospace Path Box with Actions -->
@@ -270,9 +344,13 @@
             <!-- Quick action bar -->
             <div class="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div class="flex items-center gap-2">
-                <span class="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
+                <span v-if="site.is_web" class="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
                   <CheckCircle2 class="w-3.5 h-3.5" />
                   {{ t('ssl_trusted') }}
+                </span>
+                <span v-else class="text-[11px] text-slate-500 dark:text-slate-400 font-semibold flex items-center gap-1">
+                  <Folder class="w-3.5 h-3.5" />
+                  {{ t('local_folder_badge') }}
                 </span>
                 <button
                   @click="openVSCode(site.root_path)"
@@ -285,6 +363,7 @@
               </div>
 
               <a
+                v-if="site.is_web"
                 :href="'https://' + site.domain"
                 target="_blank"
                 @click.prevent="openBrowser('https://' + site.domain)"
@@ -293,6 +372,14 @@
                 <span>{{ t('open_browser') }}</span>
                 <ExternalLink class="w-3.5 h-3.5" />
               </a>
+              <button
+                v-else
+                @click="openExplorer(site.root_path)"
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+              >
+                <span>{{ t('open_folder_btn') }}</span>
+                <FolderOpen class="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
         </div>
@@ -554,12 +641,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import {
   Server, Globe, Plus, ShieldCheck, Sun, Moon,
   Lock, ExternalLink, CheckCircle2, Info, Download,
   Folder, Code, Copy, Check, Minus, Square, X,
-  AlertCircle, AlertTriangle, FolderOpen, Power
+  AlertCircle, AlertTriangle, FolderOpen, Power, RefreshCw
 } from 'lucide-vue-next'
 
 import arLocale from './locales/ar.json'
@@ -762,13 +849,57 @@ const services = ref<ServiceItem[]>([
 ])
 
 interface SiteItem {
+  name?: string
   domain: string
   root_path: string
-  php_version: string
-  php_port: number
+  php_version?: string
+  php_port?: number
+  project_type?: string
+  type_label?: string
+  is_web?: boolean
 }
 
 const sites = ref<SiteItem[]>([])
+const activeFilter = ref<'web' | 'all' | 'laravel' | 'php' | 'non_web'>('web')
+const isSyncingHosts = ref(false)
+
+const webSites = computed(() => sites.value.filter(s => s.is_web))
+const webSitesCount = computed(() => webSites.value.length)
+const laravelSitesCount = computed(() => sites.value.filter(s => s.project_type === 'laravel').length)
+const phpSitesCount = computed(() => sites.value.filter(s => s.project_type === 'php').length)
+const nonWebCount = computed(() => sites.value.filter(s => !s.is_web).length)
+
+const filteredSites = computed(() => {
+  if (activeFilter.value === 'web') {
+    return sites.value.filter(s => s.is_web)
+  }
+  if (activeFilter.value === 'laravel') {
+    return sites.value.filter(s => s.project_type === 'laravel')
+  }
+  if (activeFilter.value === 'php') {
+    return sites.value.filter(s => s.project_type === 'php')
+  }
+  if (activeFilter.value === 'non_web') {
+    return sites.value.filter(s => !s.is_web)
+  }
+  return sites.value
+})
+
+async function syncHostsNow() {
+  isSyncingHosts.value = true
+  try {
+    if ((window as any).go?.main?.App?.SyncHosts) {
+      const msg = await (window as any).go.main.App.SyncHosts()
+      notification.value = msg
+    } else {
+      notification.value = 'تمت مزامنة النطاقات مع ملف hosts وتحديث DNS بنجاح.'
+    }
+  } catch (err: any) {
+    notification.value = `حدث خطأ أثناء مزامنة النطاقات: ${err?.message || err}`
+  } finally {
+    isSyncingHosts.value = false
+  }
+}
 
 const newProject = ref({
   name: '',

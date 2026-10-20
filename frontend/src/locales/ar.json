@@ -73,5 +73,17 @@
   "confirm_quit_msg": "هل تريد إيقاف جميع الخدمات المحلية (Caddy، PHP، MySQL، Mailpit) والخروج النهائي من LaraGal؟",
   "maximize_restore": "تكبير / استعادة",
   "minimize": "تصغير",
-  "recent_directories": "المجلدات السابقة"
+  "recent_directories": "المجلدات السابقة",
+  "sync_hosts_btn": "مزامنة النطاقات",
+  "sync_hosts_hint": "مزامنة نطاقات .test مع ملف hosts المحلي وتحديث كاش DNS لنظام ويندوز",
+  "filter_all": "الكل",
+  "filter_web": "مواقع ويب",
+  "filter_laravel": "Laravel",
+  "filter_php": "PHP",
+  "filter_non_web": "غير ويب / أدوات",
+  "non_web_badge": "غير ويب / ملفات",
+  "local_folder_badge": "مجلد محلي",
+  "web_count": "موقع ويب",
+  "non_web_count": "مجلدات أخرى",
+  "open_folder_btn": "فتح المجلد"
 }

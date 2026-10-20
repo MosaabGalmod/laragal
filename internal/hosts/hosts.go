@@ -3,6 +3,8 @@ package hosts
 import (
 	"fmt"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -32,28 +34,63 @@ func SyncHostsContent(content string, domains []string) string {
 
 	cleaned := strings.TrimRight(strings.Join(lines, "\n"), "\r\n")
 
-	if len(domains) == 0 {
+	// Filter unique non-empty domains
+	seen := make(map[string]bool)
+	uniqueDomains := make([]string, 0, len(domains))
+	for _, d := range domains {
+		domain := strings.TrimSpace(d)
+		if domain != "" && !seen[domain] {
+			seen[domain] = true
+			uniqueDomains = append(uniqueDomains, domain)
+		}
+	}
+
+	if len(uniqueDomains) == 0 {
 		return cleaned + "\n"
 	}
 
 	var block strings.Builder
 	block.WriteString("\n" + BeginMarker + "\n")
-	for _, domain := range domains {
-		d := strings.TrimSpace(domain)
-		if d != "" {
-			block.WriteString(fmt.Sprintf("127.0.0.1 %s\n", d))
-		}
+	for _, domain := range uniqueDomains {
+		block.WriteString(fmt.Sprintf("127.0.0.1 %s\n", domain))
 	}
 	block.WriteString(EndMarker + "\n")
 
 	return cleaned + block.String()
 }
 
+// UpdateSystemHosts writes domains to the Windows hosts file and flushes DNS
 func UpdateSystemHosts(domains []string) error {
 	data, err := os.ReadFile(SystemHostsPath)
 	if err != nil {
 		return fmt.Errorf("failed to read hosts file: %w", err)
 	}
 	newContent := SyncHostsContent(string(data), domains)
-	return os.WriteFile(SystemHostsPath, []byte(newContent), 0644)
+
+	// 1. Attempt direct write (succeeds if running with Administrator rights)
+	writeErr := os.WriteFile(SystemHostsPath, []byte(newContent), 0644)
+	if writeErr == nil {
+		_ = exec.Command("ipconfig", "/flushdns").Run()
+		return nil
+	}
+
+	// 2. Fallback to elevated PowerShell copy if permissions are denied
+	tempFile := filepath.Join(os.TempDir(), "laragal_hosts.tmp")
+	if err := os.WriteFile(tempFile, []byte(newContent), 0644); err != nil {
+		return fmt.Errorf("failed to write temp hosts file: %w", err)
+	}
+
+	psScript := fmt.Sprintf(
+		`Start-Process powershell -ArgumentList '-NoProfile -Command Copy-Item -Path \"%s\" -Destination \"%s\" -Force' -Verb RunAs -Wait`,
+		strings.ReplaceAll(tempFile, `\`, `\\`),
+		strings.ReplaceAll(SystemHostsPath, `\`, `\\`),
+	)
+	cmd := exec.Command("powershell", "-NoProfile", "-Command", psScript)
+	if elevErr := cmd.Run(); elevErr != nil {
+		return fmt.Errorf("failed to elevate hosts update: %w (direct write error: %v)", elevErr, writeErr)
+	}
+
+	_ = exec.Command("ipconfig", "/flushdns").Run()
+	_ = os.Remove(tempFile)
+	return nil
 }

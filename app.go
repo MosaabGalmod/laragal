@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/laragal/laragal/internal/certs"
 	"github.com/laragal/laragal/internal/config"
@@ -84,18 +86,27 @@ func (a *App) AddSite(domain string, rootPath string, phpVersion string) error {
 	}
 
 	newSite := caddy.SiteDef{
-		Domain:   domain,
-		RootPath: rootPath,
-		PHPPort:  phpPort,
+		Name:        strings.TrimSuffix(domain, a.cfg.DomainSuffix),
+		Domain:      domain,
+		RootPath:    rootPath,
+		PHPPort:     phpPort,
+		PHPVersion:  phpVersion,
+		ProjectType: "laravel",
+		TypeLabel:   "Laravel",
+		IsWeb:       true,
 	}
 
 	a.sites = append(a.sites, newSite)
 
-	domains := make([]string, 0, len(a.sites))
+	_ = a.ReloadCaddy()
+
+	webDomains := make([]string, 0, len(a.sites))
 	for _, s := range a.sites {
-		domains = append(domains, s.Domain)
+		if s.IsWeb && s.Domain != "" {
+			webDomains = append(webDomains, s.Domain)
+		}
 	}
-	_ = hosts.UpdateSystemHosts(domains)
+	_ = hosts.UpdateSystemHosts(webDomains)
 
 	return nil
 }
@@ -346,7 +357,7 @@ func (a *App) SelectProjectsDirectory() (string, error) {
 	return a.cfg.ProjectsPath, nil
 }
 
-// ScanProjects scans the projects directory and populates existing projects
+// ScanProjects scans the projects directory, identifies project types, and populates existing projects
 func (a *App) ScanProjects() []caddy.SiteDef {
 	if a.cfg.ProjectsPath == "" {
 		return a.sites
@@ -369,33 +380,82 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 		}
 
 		projectDir := filepath.Join(a.cfg.ProjectsPath, projectName)
-		docRoot := projectDir
-		publicDir := filepath.Join(projectDir, "public")
-		if info, err := os.Stat(publicDir); err == nil && info.IsDir() {
-			docRoot = publicDir
-		}
-
-		domain := projectName + a.cfg.DomainSuffix
-		phpPort := 9083 // default PHP 8.3
+		detected := projects.DetectProject(projectDir, a.cfg.DefaultPHP, a.cfg.DomainSuffix)
 
 		scannedSites = append(scannedSites, caddy.SiteDef{
-			Domain:   domain,
-			RootPath: filepath.ToSlash(docRoot),
-			PHPPort:  phpPort,
+			Name:        detected.Name,
+			Domain:      detected.Domain,
+			RootPath:    filepath.ToSlash(detected.DocRoot),
+			PHPPort:     detected.PHPPort,
+			PHPVersion:  detected.PHPVersion,
+			ProjectType: string(detected.Type),
+			TypeLabel:   detected.TypeLabel,
+			IsWeb:       detected.IsWeb,
 		})
 	}
 
 	a.sites = scannedSites
 
-	// Update system hosts file for all scanned domains
-	domains := make([]string, 0, len(a.sites))
+	// 1. Write updated Caddyfile
+	_ = a.ReloadCaddy()
+
+	// 2. Update system hosts file for all active web domains
+	webDomains := make([]string, 0)
 	for _, s := range a.sites {
-		domains = append(domains, s.Domain)
+		if s.IsWeb && s.Domain != "" {
+			webDomains = append(webDomains, s.Domain)
+		}
 	}
-	if len(domains) > 0 {
-		_ = hosts.UpdateSystemHosts(domains)
+	if len(webDomains) > 0 {
+		_ = hosts.UpdateSystemHosts(webDomains)
 	}
 
 	return a.sites
+}
+
+// ReloadCaddy writes the updated Caddyfile configuration and reloads Caddy if running
+func (a *App) ReloadCaddy() error {
+	caddyDir := filepath.Join("data", "caddy")
+	_ = os.MkdirAll(caddyDir, 0755)
+	caddyfilePath := filepath.Join(caddyDir, "Caddyfile")
+	caddyContent := caddy.GenerateCaddyfile(a.sites, 2019)
+	if err := os.WriteFile(caddyfilePath, []byte(caddyContent), 0644); err != nil {
+		return err
+	}
+
+	// Also write to data/Caddyfile for standard root access
+	_ = os.WriteFile(filepath.Join("data", "Caddyfile"), []byte(caddyContent), 0644)
+
+	// Attempt live reload via Caddy admin API
+	req, err := http.NewRequest("POST", "http://localhost:2019/load", strings.NewReader(caddyContent))
+	if err == nil {
+		req.Header.Set("Content-Type", "text/caddyfile")
+		client := &http.Client{Timeout: 1 * time.Second}
+		resp, postErr := client.Do(req)
+		if postErr == nil {
+			_ = resp.Body.Close()
+		}
+	}
+
+	return nil
+}
+
+// SyncHosts synchronizes the active web domains to the Windows hosts file and flushes DNS cache
+func (a *App) SyncHosts() (string, error) {
+	webDomains := make([]string, 0)
+	for _, s := range a.sites {
+		if s.IsWeb && s.Domain != "" {
+			webDomains = append(webDomains, s.Domain)
+		}
+	}
+	if len(webDomains) == 0 {
+		return "لا توجد مواقع ويب نشطة تتطلب مزامنة في ملف hosts.", nil
+	}
+
+	if err := hosts.UpdateSystemHosts(webDomains); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("تمت مزامنة %d نطاق بنجاح مع ملف hosts المحلي وتحديث كاش DNS.", len(webDomains)), nil
 }
 
