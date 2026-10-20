@@ -230,6 +230,11 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		Domain:     "",
 	}
 
+	// 0. Ignore non-web skills, agent rule repositories, and desktop solutions
+	if fileExists(filepath.Join(cleanDir, "SKILL.md")) && !fileExists(filepath.Join(cleanDir, "artisan")) && !fileExists(filepath.Join(cleanDir, "public", "index.php")) && !fileExists(filepath.Join(cleanDir, "index.php")) && !fileExists(filepath.Join(cleanDir, "index.html")) {
+		return result
+	}
+
 	// 1. Check for Laravel (artisan or composer.json with laravel/framework)
 	if fileExists(filepath.Join(cleanDir, "artisan")) {
 		phpVer, phpPort := DetectProjectPHPVersion(cleanDir, defaultPHP)
@@ -518,24 +523,20 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		if !isWebNode && fileExists(pkgPath) {
 			data, _ := os.ReadFile(pkgPath)
 			content := strings.ToLower(string(data))
-			isWebNode = strings.Contains(content, "vite") ||
-				strings.Contains(content, "next") ||
-				strings.Contains(content, "nuxt") ||
-				strings.Contains(content, "react") ||
-				strings.Contains(content, "vue") ||
-				strings.Contains(content, "astro") ||
-				strings.Contains(content, "svelte") ||
-				strings.Contains(content, "express") ||
-				strings.Contains(content, "hono") ||
-				strings.Contains(content, "fastify") ||
-				strings.Contains(content, "remix") ||
-				strings.Contains(content, "angular") ||
-				strings.Contains(content, "gatsby") ||
-				strings.Contains(content, "webpack") ||
-				strings.Contains(content, "tailwind") ||
-				strings.Contains(content, "\"dev\":") ||
-				strings.Contains(content, "\"start\":") ||
-				strings.Contains(content, "\"build\":")
+			isWebNode = strings.Contains(content, "\"vite\"") ||
+				strings.Contains(content, "\"next\"") ||
+				strings.Contains(content, "\"nuxt\"") ||
+				strings.Contains(content, "\"react\"") ||
+				strings.Contains(content, "\"vue\"") ||
+				strings.Contains(content, "\"astro\"") ||
+				strings.Contains(content, "\"svelte\"") ||
+				strings.Contains(content, "\"express\"") ||
+				strings.Contains(content, "\"hono\"") ||
+				strings.Contains(content, "\"fastify\"") ||
+				strings.Contains(content, "\"remix\"") ||
+				strings.Contains(content, "\"@angular/core\"") ||
+				strings.Contains(content, "\"gatsby\"") ||
+				(strings.Contains(content, "\"dev\":") && (dirExists(filepath.Join(cleanDir, "src")) || dirExists(filepath.Join(cleanDir, "public"))))
 		}
 
 		if isWebNode {
@@ -566,20 +567,22 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		}
 	}
 
-	// 8. Check if folder contains any .html / .htm files in top-level
-	if err == nil {
-		for _, e := range entries {
-			if !e.IsDir() {
-				lowerName := strings.ToLower(e.Name())
-				if strings.HasSuffix(lowerName, ".html") || strings.HasSuffix(lowerName, ".htm") {
-					result.Type = TypeStatic
-					result.TypeLabel = "HTML / ثابت"
-					result.IsWeb = true
-					result.Domain = name + domainSuffix
-					result.PHPPort = 0
-					return result
-				}
-			}
+	// 8. Check for standard static HTML entry points
+	staticEntryCandidates := []string{
+		filepath.Join(cleanDir, "index.html"),
+		filepath.Join(cleanDir, "index.htm"),
+		filepath.Join(cleanDir, "dist", "index.html"),
+		filepath.Join(cleanDir, "public", "index.html"),
+	}
+	for _, entry := range staticEntryCandidates {
+		if fileExists(entry) {
+			result.Type = TypeStatic
+			result.TypeLabel = "HTML / ثابت"
+			result.IsWeb = true
+			result.Domain = name + domainSuffix
+			result.DocRoot = filepath.Dir(entry)
+			result.PHPPort = 0
+			return result
 		}
 	}
 

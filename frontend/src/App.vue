@@ -488,6 +488,20 @@
                 <span class="truncate flex-1 text-left select-all" :title="site.path || site.root_path">{{ site.path || site.root_path }}</span>
                 <div class="flex items-center gap-1 flex-shrink-0 ms-2">
                   <button
+                    @click="openDiagnosticsModal(site)"
+                    :title="t('diagnose_project_btn')"
+                    class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-amber-500 transition-colors"
+                  >
+                    <Wrench class="w-3 h-3" />
+                  </button>
+                  <button
+                    @click="openSettingsModal(site)"
+                    :title="t('project_settings_btn')"
+                    class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors"
+                  >
+                    <Settings class="w-3 h-3" />
+                  </button>
+                  <button
                     @click="copyText(site.path || site.root_path)"
                     :title="t('copy_url')"
                     class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
@@ -905,6 +919,334 @@
         </form>
       </div>
     </div>
+
+    <!-- ================= 10. PROJECT SETTINGS & OVERRIDES MODAL ================= -->
+    <div v-if="showSettingsModal && selectedSiteForConfig" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+      <div class="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 animate-scale-in">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <h3 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+            <Settings class="w-4 h-4 text-blue-500" />
+            {{ t('modal_settings_title') }}
+          </h3>
+          <button @click="showSettingsModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg leading-none cursor-pointer">&times;</button>
+        </div>
+
+        <div class="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1">
+          <div class="flex items-center justify-between text-xs">
+            <span class="font-bold text-slate-700 dark:text-slate-200">{{ selectedSiteForConfig.name || selectedSiteForConfig.domain }}</span>
+            <span dir="ltr" class="font-mono text-[11px] text-blue-600 dark:text-blue-400">{{ selectedSiteForConfig.domain }}</span>
+          </div>
+          <p dir="ltr" class="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
+            {{ selectedSiteForConfig.path || selectedSiteForConfig.root_path }}
+          </p>
+        </div>
+
+        <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+          {{ t('modal_settings_desc') }}
+        </p>
+
+        <form novalidate @submit.prevent="applyProjectSettings" class="space-y-4">
+          <!-- Project Type Selector -->
+          <div>
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              {{ t('setting_project_type') }}
+            </label>
+            <select
+              v-model="settingsForm.type"
+              class="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">كشف تلقائي (Auto-Detect)</option>
+              <option value="laravel">Laravel (PHP FastCGI)</option>
+              <option value="wordpress">WordPress (PHP FastCGI)</option>
+              <option value="php">PHP عادي / Custom</option>
+              <option value="node">Node.js (Next, Nuxt, Vite, Express)</option>
+              <option value="go">Go Application (Proxy)</option>
+              <option value="rust">Rust Application (Proxy)</option>
+              <option value="dotnet">.NET / C# Application (Proxy)</option>
+              <option value="python">Python (FastAPI, Flask, Django)</option>
+              <option value="flutter">Flutter Web</option>
+              <option value="static">صفحات ثابتة (HTML / CSS / JS)</option>
+              <option value="non_web">غير ويب / مجلد محلي فقط</option>
+            </select>
+          </div>
+
+          <!-- Document Root Subfolder -->
+          <div>
+            <div class="flex items-center justify-between mb-1">
+              <label class="text-xs font-bold text-slate-700 dark:text-slate-300">
+                {{ t('setting_docroot') }}
+              </label>
+              <div class="flex items-center gap-1">
+                <span class="text-[10px] text-slate-400">سريع:</span>
+                <button
+                  type="button"
+                  @click="settingsForm.doc_root = 'public'"
+                  class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-slate-600 dark:text-slate-300 cursor-pointer"
+                >
+                  public
+                </button>
+                <button
+                  type="button"
+                  @click="settingsForm.doc_root = 'dist'"
+                  class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-slate-600 dark:text-slate-300 cursor-pointer"
+                >
+                  dist
+                </button>
+                <button
+                  type="button"
+                  @click="settingsForm.doc_root = ''"
+                  class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-slate-600 dark:text-slate-300 cursor-pointer"
+                >
+                  الجذر (.)
+                </button>
+              </div>
+            </div>
+            <input
+              v-model="settingsForm.doc_root"
+              type="text"
+              dir="ltr"
+              class="w-full px-3 py-2 rounded-xl text-xs font-mono border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="مثال: public أو dist أو اتركه فارغاً"
+            />
+            <p class="text-[10px] text-slate-400 mt-1">
+              {{ t('setting_docroot_hint') }}
+            </p>
+          </div>
+
+          <!-- Proxy Port (if applicable) -->
+          <div v-if="settingsForm.type !== 'non_web' && settingsForm.type !== 'static'">
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              {{ t('setting_proxy_port') }}
+            </label>
+            <input
+              v-model.number="settingsForm.proxy_port"
+              type="number"
+              dir="ltr"
+              class="w-full px-3 py-2 rounded-xl text-xs font-mono border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="0 (افتراضي للتطبيقات الخلفية، مثل: 8080 أو 3000)"
+            />
+          </div>
+
+          <!-- PHP Version Selector (if PHP type) -->
+          <div v-if="settingsForm.type === 'laravel' || settingsForm.type === 'wordpress' || settingsForm.type === 'php' || (!settingsForm.type && isPhpProject(selectedSiteForConfig))">
+            <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              إصدار PHP المخصص
+            </label>
+            <select
+              v-model="settingsForm.php_version"
+              dir="ltr"
+              class="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">الافتراضي العام للبرنامج</option>
+              <option value="PHP 8.4">PHP 8.4</option>
+              <option value="PHP 8.3">PHP 8.3</option>
+              <option value="PHP 8.2">PHP 8.2</option>
+              <option value="PHP 8.1">PHP 8.1</option>
+            </select>
+          </div>
+
+          <!-- Ignore toggle -->
+          <div class="pt-2">
+            <label class="inline-flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                v-model="settingsForm.is_ignored"
+                class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+              />
+              <span class="text-xs text-slate-600 dark:text-slate-400">إخفاء هذا المجلد من قائمة المشاريع كلياً</span>
+            </label>
+          </div>
+
+          <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              @click="showSettingsModal = false"
+              class="px-4 py-2 text-xs font-semibold rounded-xl text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              {{ t('cancel_btn') }}
+            </button>
+            <button
+              type="submit"
+              class="px-5 py-2 text-xs font-bold rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors cursor-pointer"
+            >
+              {{ t('save_settings_btn') }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- ================= 11. PROJECT DIAGNOSTICS & TROUBLESHOOTING MODAL ================= -->
+    <div v-if="showDiagModal && selectedSiteForDiag" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+      <div class="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 animate-scale-in max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <h3 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+            <Wrench class="w-4 h-4 text-amber-500" />
+            {{ t('modal_diag_title') }}
+          </h3>
+          <button @click="showDiagModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-lg leading-none cursor-pointer">&times;</button>
+        </div>
+
+        <!-- Project Badge & Retest button -->
+        <div class="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60">
+          <div>
+            <div class="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-2">
+              <span>{{ selectedSiteForDiag.name || selectedSiteForDiag.domain }}</span>
+              <span dir="ltr" class="text-[11px] font-mono text-blue-600 dark:text-blue-400">({{ selectedSiteForDiag.domain }})</span>
+            </div>
+            <p dir="ltr" class="text-[10px] font-mono text-slate-500 dark:text-slate-400 truncate max-w-xs mt-0.5">
+              {{ selectedSiteForDiag.path || selectedSiteForDiag.root_path }}
+            </p>
+          </div>
+          <button
+            type="button"
+            @click="runDiagnostics(selectedSiteForDiag)"
+            :disabled="isDiagnosing"
+            class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
+            :title="'إعادة الفحص'"
+          >
+            <RefreshCw class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" :class="{ 'animate-spin': isDiagnosing }" />
+            <span>إعادة الفحص</span>
+          </button>
+        </div>
+
+        <div v-if="isDiagnosing" class="py-12 text-center">
+          <RefreshCw class="w-8 h-8 text-blue-600 animate-spin mx-auto mb-2" />
+          <p class="text-xs text-slate-500">جاري فحص ملفات ومنافذ المشروع...</p>
+        </div>
+
+        <div v-else-if="diagResult" class="space-y-4">
+          <!-- Overall Status Banner -->
+          <div
+            class="p-3.5 rounded-xl border flex items-center gap-3"
+            :class="diagResult.status === 'healthy'
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-200'
+              : (diagResult.status === 'warning'
+                ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200'
+                : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200')"
+          >
+            <CheckCircle2 v-if="diagResult.status === 'healthy'" class="w-5 h-5 flex-shrink-0 text-emerald-600 dark:text-emerald-400" />
+            <AlertTriangle v-else-if="diagResult.status === 'warning'" class="w-5 h-5 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+            <AlertCircle v-else class="w-5 h-5 flex-shrink-0 text-rose-600 dark:text-rose-400" />
+            <div class="text-xs">
+              <span class="font-bold block">
+                {{ diagResult.status === 'healthy' ? t('diag_status_healthy') : (diagResult.status === 'warning' ? t('diag_status_warning') : t('diag_status_error')) }}
+              </span>
+              <span class="text-[11px] opacity-80">
+                النوع: {{ diagResult.project_type }} • {{ diagResult.php_version || 'FastCGI/Proxy' }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Checks Checklist -->
+          <div class="rounded-xl border border-slate-200 dark:border-slate-800 divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+            <!-- 1. DocRoot check -->
+            <div class="p-3 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <Check v-if="diagResult.doc_root_exists" class="w-4 h-4 text-emerald-500" />
+                <X v-else class="w-4 h-4 text-rose-500" />
+                <span class="font-semibold text-slate-800 dark:text-slate-200">{{ t('diag_docroot_check') }}</span>
+              </div>
+              <span dir="ltr" class="font-mono text-[11px] text-slate-500 max-w-[200px] truncate" :title="diagResult.doc_root">
+                {{ diagResult.doc_root }}
+              </span>
+            </div>
+
+            <!-- 2. Index file check -->
+            <div class="p-3 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <Check v-if="diagResult.has_index_file" class="w-4 h-4 text-emerald-500" />
+                <AlertTriangle v-else class="w-4 h-4 text-amber-500" />
+                <span class="font-semibold text-slate-800 dark:text-slate-200">{{ t('diag_index_check') }}</span>
+              </div>
+              <span dir="ltr" class="font-mono text-[11px]" :class="diagResult.has_index_file ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'">
+                {{ diagResult.index_file || 'مفقود' }}
+              </span>
+            </div>
+
+            <!-- 3. .env file check (PHP / Laravel) -->
+            <div v-if="diagResult.project_type === 'laravel' || diagResult.project_type === 'php' || diagResult.project_type === 'wordpress'" class="p-3 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <Check v-if="diagResult.has_env_file" class="w-4 h-4 text-emerald-500" />
+                <AlertCircle v-else class="w-4 h-4 text-amber-500" />
+                <span class="font-semibold text-slate-800 dark:text-slate-200">{{ t('diag_env_check') }}</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span v-if="diagResult.has_env_file" class="text-emerald-600 dark:text-emerald-400 font-bold">موجود</span>
+                <button
+                  v-else
+                  type="button"
+                  @click="triggerFixEnv"
+                  :disabled="isFixingEnv"
+                  class="px-2 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-950 dark:hover:bg-amber-900 dark:text-amber-200 font-bold text-[11px] transition-colors cursor-pointer"
+                >
+                  <span v-if="isFixingEnv">جاري الإنشاء...</span>
+                  <span v-else>{{ t('fix_env_btn') }}</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- 4. Dependencies check -->
+            <div v-if="diagResult.project_type === 'laravel' || diagResult.project_type === 'php' || diagResult.project_type === 'node'" class="p-3 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <Check v-if="diagResult.has_vendor_dir || diagResult.has_node_modules" class="w-4 h-4 text-emerald-500" />
+                <AlertTriangle v-else class="w-4 h-4 text-amber-500" />
+                <span class="font-semibold text-slate-800 dark:text-slate-200">{{ t('diag_deps_check') }}</span>
+              </div>
+              <span class="font-mono text-[11px]" :class="(diagResult.has_vendor_dir || diagResult.has_node_modules) ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'">
+                {{ (diagResult.has_vendor_dir ? 'vendor/ مثبت' : (diagResult.has_node_modules ? 'node_modules مثبت' : 'غير مثبتة')) }}
+              </span>
+            </div>
+
+            <!-- 5. Port Connection check -->
+            <div class="p-3 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <Check v-if="diagResult.is_port_active" class="w-4 h-4 text-emerald-500" />
+                <X v-else class="w-4 h-4 text-rose-500" />
+                <span class="font-semibold text-slate-800 dark:text-slate-200">{{ t('diag_port_check') }}</span>
+              </div>
+              <span dir="ltr" class="font-mono text-[11px]" :class="diagResult.is_port_active ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'">
+                {{ diagResult.php_port > 0 ? `PHP FastCGI :${diagResult.php_port}` : `Proxy :${diagResult.proxy_port}` }}
+                ({{ diagResult.is_port_active ? 'متصل ومتاح' : 'غير متصل' }})
+              </span>
+            </div>
+          </div>
+
+          <!-- Issues & Suggestions -->
+          <div v-if="diagResult.issues && diagResult.issues.length > 0" class="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 space-y-1.5">
+            <span class="text-xs font-bold text-rose-700 dark:text-rose-300 block">{{ t('issues_found_title') }}</span>
+            <ul class="text-xs text-rose-600 dark:text-rose-400 space-y-1 list-disc list-inside">
+              <li v-for="(issue, idx) in diagResult.issues" :key="idx">{{ issue }}</li>
+            </ul>
+          </div>
+
+          <div v-if="diagResult.suggestions && diagResult.suggestions.length > 0" class="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 space-y-1.5">
+            <span class="text-xs font-bold text-blue-700 dark:text-blue-300 block">{{ t('suggestions_title') }}</span>
+            <ul class="text-xs text-blue-600 dark:text-blue-400 space-y-1 list-disc list-inside">
+              <li v-for="(sug, idx) in diagResult.suggestions" :key="idx">{{ sug }}</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+          <button
+            type="button"
+            @click="openSettingsModal(selectedSiteForDiag)"
+            class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
+          >
+            <Settings class="w-3.5 h-3.5" />
+            <span>تعديل إعدادات المشروع</span>
+          </button>
+          <button
+            type="button"
+            @click="showDiagModal = false"
+            class="px-5 py-2 text-xs font-bold rounded-xl bg-blue-600 text-white hover:bg-blue-700 transition-colors cursor-pointer"
+          >
+            {{ t('close_btn') }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -914,7 +1256,8 @@ import {
   Server, Globe, Plus, ShieldCheck, Sun, Moon,
   Lock, ExternalLink, CheckCircle2, Info, Download,
   Folder, Code, Copy, Check, Minus, Square, X,
-  AlertCircle, AlertTriangle, FolderOpen, Power, RefreshCw
+  AlertCircle, AlertTriangle, FolderOpen, Power, RefreshCw,
+  Settings, Wrench
 } from 'lucide-vue-next'
 
 import arLocale from './locales/ar.json'
@@ -936,6 +1279,22 @@ const recentDirectories = ref<string[]>([])
 const runningProjects = ref<Record<string, boolean>>({})
 const showDirModal = ref(false)
 const customDirInput = ref('')
+
+const showSettingsModal = ref(false)
+const selectedSiteForConfig = ref<SiteItem | null>(null)
+const settingsForm = ref({
+  type: '',
+  doc_root: '',
+  proxy_port: 0,
+  php_version: '',
+  is_ignored: false,
+})
+
+const showDiagModal = ref(false)
+const selectedSiteForDiag = ref<SiteItem | null>(null)
+const diagResult = ref<any | null>(null)
+const isDiagnosing = ref(false)
+const isFixingEnv = ref(false)
 
 const normalizedProjectsDir = computed(() => {
   return (projectsDirectory.value || '').replace(/\\/g, '/')
@@ -1181,6 +1540,108 @@ async function updateSitePHPVersion(site: SiteItem, event: Event) {
     site.php_version = `PHP ${newVer}`
     notification.value = `${t('php_version_changed')} ${site.domain} ➔ PHP ${newVer}`
   }
+}
+
+function openSettingsModal(site: SiteItem) {
+  selectedSiteForConfig.value = site
+  const relDoc = getDocRootRelative(site).replace(/^\//, '')
+  settingsForm.value = {
+    type: site.project_type || '',
+    doc_root: relDoc,
+    proxy_port: site.proxy_port || 0,
+    php_version: site.php_version ? `PHP ${extractPhpVersionNumber(site.php_version)}` : '',
+    is_ignored: false,
+  }
+  showSettingsModal.value = true
+}
+
+async function applyProjectSettings() {
+  if (!selectedSiteForConfig.value) return
+  const site = selectedSiteForConfig.value
+  const targetPath = site.path || site.root_path || site.domain
+
+  const payload = {
+    type: settingsForm.value.type,
+    doc_root: settingsForm.value.doc_root.trim(),
+    proxy_port: Number(settingsForm.value.proxy_port) || 0,
+    php_version: settingsForm.value.php_version,
+    is_ignored: settingsForm.value.is_ignored,
+  }
+
+  if ((window as any).go?.main?.App?.SaveProjectSettings) {
+    try {
+      const updated = await (window as any).go.main.App.SaveProjectSettings(targetPath, payload)
+      if (Array.isArray(updated)) {
+        sites.value = updated.map(mapSiteItem)
+      }
+      notification.value = t('settings_saved')
+    } catch (e: any) {
+      notification.value = `خطأ أثناء حفظ الإعدادات: ${e?.message || e}`
+    }
+  } else {
+    notification.value = t('settings_saved')
+  }
+
+  showSettingsModal.value = false
+}
+
+async function runDiagnostics(site: SiteItem) {
+  const targetPath = site.path || site.root_path || site.domain
+  isDiagnosing.value = true
+  if ((window as any).go?.main?.App?.DiagnoseProject) {
+    try {
+      const res = await (window as any).go.main.App.DiagnoseProject(targetPath)
+      diagResult.value = res
+    } catch (e: any) {
+      console.warn("Diagnostics error:", e)
+    }
+  } else {
+    diagResult.value = {
+      project_path: targetPath,
+      domain: site.domain,
+      project_type: site.project_type || 'php',
+      php_version: site.php_version || 'PHP 8.3',
+      php_port: site.php_port || 9083,
+      proxy_port: site.proxy_port || 0,
+      doc_root: site.root_path,
+      doc_root_exists: true,
+      has_index_file: true,
+      index_file: 'index.php',
+      has_env_file: true,
+      has_vendor_dir: true,
+      is_port_active: true,
+      status: 'healthy',
+      issues: [],
+      suggestions: [],
+    }
+  }
+  isDiagnosing.value = false
+}
+
+async function openDiagnosticsModal(site: SiteItem) {
+  selectedSiteForDiag.value = site
+  showDiagModal.value = true
+  await runDiagnostics(site)
+}
+
+async function triggerFixEnv() {
+  if (!selectedSiteForDiag.value) return
+  const targetPath = selectedSiteForDiag.value.path || selectedSiteForDiag.value.root_path || selectedSiteForDiag.value.domain
+  isFixingEnv.value = true
+  if ((window as any).go?.main?.App?.FixProjectEnv) {
+    try {
+      const ok = await (window as any).go.main.App.FixProjectEnv(targetPath)
+      if (ok) {
+        notification.value = t('env_fixed_success')
+        await runDiagnostics(selectedSiteForDiag.value)
+      } else {
+        notification.value = t('env_fix_failed')
+      }
+    } catch (e: any) {
+      notification.value = `تعذر إنشاء .env: ${e?.message || e}`
+    }
+  }
+  isFixingEnv.value = false
 }
 
 let toastTimer: any = null

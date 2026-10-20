@@ -6,13 +6,22 @@ import (
 	"path/filepath"
 )
 
+type ProjectCustomSettings struct {
+	Type       string `json:"type,omitempty"`
+	DocRoot    string `json:"doc_root,omitempty"`
+	ProxyPort  int    `json:"proxy_port,omitempty"`
+	PHPVersion string `json:"php_version,omitempty"`
+	IsIgnored  bool   `json:"is_ignored,omitempty"`
+}
+
 type AppConfig struct {
-	ProjectsPath string            `json:"projects_path"`
-	RecentPaths  []string          `json:"recent_paths,omitempty"`
-	DefaultPHP   string            `json:"default_php"`
-	DomainSuffix string            `json:"domain_suffix"`
-	Services     map[string]bool   `json:"services"`
-	ProjectPHP   map[string]string `json:"project_php,omitempty"`
+	ProjectsPath     string                           `json:"projects_path"`
+	RecentPaths      []string                         `json:"recent_paths,omitempty"`
+	DefaultPHP       string                           `json:"default_php"`
+	DomainSuffix     string                           `json:"domain_suffix"`
+	Services         map[string]bool                  `json:"services"`
+	ProjectPHP       map[string]string                `json:"project_php,omitempty"`
+	ProjectOverrides map[string]ProjectCustomSettings `json:"project_overrides,omitempty"`
 }
 
 func NewDefaultConfig() *AppConfig {
@@ -32,7 +41,8 @@ func NewDefaultConfig() *AppConfig {
 			"redis":   false,
 			"mailpit": true,
 		},
-		ProjectPHP: make(map[string]string),
+		ProjectPHP:       make(map[string]string),
+		ProjectOverrides: make(map[string]ProjectCustomSettings),
 	}
 }
 
@@ -47,6 +57,9 @@ func LoadConfig(path string) (*AppConfig, error) {
 	}
 	if cfg.ProjectPHP == nil {
 		cfg.ProjectPHP = make(map[string]string)
+	}
+	if cfg.ProjectOverrides == nil {
+		cfg.ProjectOverrides = make(map[string]ProjectCustomSettings)
 	}
 	return &cfg, nil
 }

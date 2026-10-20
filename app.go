@@ -496,6 +496,11 @@ func fileExists(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
+func dirExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
 func findExecutableCandidate(dir string, name string) string {
 	candidates := []string{
 		filepath.Join(dir, name+".exe"),
@@ -842,6 +847,213 @@ func (a *App) SetProjectPHPVersion(projectPathOrDomain string, version string) (
 	return sites, nil
 }
 
+// SaveProjectSettings updates manual project overrides (type, docroot, proxy_port, php_version, is_ignored)
+func (a *App) SaveProjectSettings(projectPath string, settings config.ProjectCustomSettings) ([]caddy.SiteDef, error) {
+	cleanKey := filepath.ToSlash(filepath.Clean(projectPath))
+
+	if a.cfg.ProjectOverrides == nil {
+		a.cfg.ProjectOverrides = make(map[string]config.ProjectCustomSettings)
+	}
+	a.cfg.ProjectOverrides[cleanKey] = settings
+
+	if settings.PHPVersion != "" {
+		if a.cfg.ProjectPHP == nil {
+			a.cfg.ProjectPHP = make(map[string]string)
+		}
+		a.cfg.ProjectPHP[cleanKey] = projects.NormalizePHPVersion(settings.PHPVersion)
+		_ = a.ensurePHPServiceRunning(settings.PHPVersion)
+	}
+
+	_ = a.cfg.Save(a.cfgPath)
+
+	sites := a.ScanProjects()
+	return sites, nil
+}
+
+type ProjectDiagnostics struct {
+	ProjectPath    string   `json:"project_path"`
+	Domain         string   `json:"domain"`
+	ProjectType    string   `json:"project_type"`
+	PHPVersion     string   `json:"php_version"`
+	PHPPort        int      `json:"php_port"`
+	ProxyPort      int      `json:"proxy_port"`
+	DocRoot        string   `json:"doc_root"`
+	DocRootExists  bool     `json:"doc_root_exists"`
+	HasIndexFile   bool     `json:"has_index_file"`
+	IndexFile      string   `json:"index_file,omitempty"`
+	HasEnvFile     bool     `json:"has_env_file"`
+	HasVendorDir   bool     `json:"has_vendor_dir"`
+	HasNodeModules bool     `json:"has_node_modules"`
+	IsPortActive   bool     `json:"is_port_active"`
+	Status         string   `json:"status"` // "healthy", "warning", "error"
+	Issues         []string `json:"issues"`
+	Suggestions    []string `json:"suggestions"`
+}
+
+// DiagnoseProject analyzes a project configuration, checks disk files, ports, and env
+func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
+	cleanPath := filepath.Clean(projectPath)
+	pName := filepath.Base(cleanPath)
+
+	var matchedSite *caddy.SiteDef
+	for i := range a.sites {
+		if filepath.Clean(a.sites[i].Path) == cleanPath || filepath.Clean(a.sites[i].RootPath) == cleanPath || a.sites[i].Name == pName {
+			matchedSite = &a.sites[i]
+			break
+		}
+	}
+
+	pType := "php"
+	domain := pName + a.cfg.DomainSuffix
+	docRoot := cleanPath
+	phpPort := 9083
+	phpVer := a.cfg.DefaultPHP
+	proxyPort := 0
+
+	if matchedSite != nil {
+		pType = matchedSite.ProjectType
+		domain = matchedSite.Domain
+		docRoot = filepath.Clean(matchedSite.RootPath)
+		phpPort = matchedSite.PHPPort
+		phpVer = matchedSite.PHPVersion
+		proxyPort = matchedSite.ProxyPort
+	}
+
+	diag := ProjectDiagnostics{
+		ProjectPath: filepath.ToSlash(cleanPath),
+		Domain:      domain,
+		ProjectType: pType,
+		PHPVersion:  phpVer,
+		PHPPort:     phpPort,
+		ProxyPort:   proxyPort,
+		DocRoot:     filepath.ToSlash(docRoot),
+		Status:      "healthy",
+		Issues:      make([]string, 0),
+		Suggestions: make([]string, 0),
+	}
+
+	// 1. Check Document Root
+	if _, err := os.Stat(docRoot); err == nil {
+		diag.DocRootExists = true
+	} else {
+		diag.DocRootExists = false
+		diag.Status = "error"
+		diag.Issues = append(diag.Issues, fmt.Sprintf("مجلد الويب المحدد (%s) غير موجود على القرص.", filepath.Base(docRoot)))
+		diag.Suggestions = append(diag.Suggestions, "يرجى تعديل مجلد الويب واختيار المسار الصحيح للمشروع (مثل public أو dist).")
+	}
+
+	// Check index file in docRoot
+	indexCandidates := []string{"index.php", "index.html", "index.htm"}
+	for _, idx := range indexCandidates {
+		if fileExists(filepath.Join(docRoot, idx)) {
+			diag.HasIndexFile = true
+			diag.IndexFile = idx
+			break
+		}
+	}
+	if !diag.HasIndexFile && pType != "go" && pType != "rust" && pType != "dotnet" && pType != "python" {
+		diag.Status = "warning"
+		diag.Issues = append(diag.Issues, "لم يتم العثور على ملف بداية (index.php أو index.html) داخل مجلد الويب.")
+		diag.Suggestions = append(diag.Suggestions, "تأكد من اختيار المجلد الفرعي الذي يحتوي على ملف التشغيل (مثل مجلد public).")
+	}
+
+	// 2. Check PHP projects (.env, vendor, fastcgi)
+	if pType == "laravel" || pType == "wordpress" || pType == "php" {
+		envPath := filepath.Join(cleanPath, ".env")
+		if fileExists(envPath) {
+			diag.HasEnvFile = true
+		} else {
+			diag.HasEnvFile = false
+			if pType == "laravel" {
+				diag.Status = "warning"
+				diag.Issues = append(diag.Issues, "ملف إعدادات البيئة (.env) غير موجود.")
+				if fileExists(filepath.Join(cleanPath, ".env.example")) {
+					diag.Suggestions = append(diag.Suggestions, "يمكنك إنشاء ملف .env تلقائياً بنقرة واحدة من زر «إنشاء .env».")
+				} else {
+					diag.Suggestions = append(diag.Suggestions, "قم بإنشاء ملف .env وضبط مفتاح التطبيق وقاعدة البيانات.")
+				}
+			}
+		}
+
+		vendorPath := filepath.Join(cleanPath, "vendor", "autoload.php")
+		if fileExists(vendorPath) {
+			diag.HasVendorDir = true
+		} else {
+			diag.HasVendorDir = false
+			if fileExists(filepath.Join(cleanPath, "composer.json")) {
+				diag.Status = "warning"
+				diag.Issues = append(diag.Issues, "حزم وتبعية المشروع غير مثبتة (vendor/autoload.php مفقود).")
+				diag.Suggestions = append(diag.Suggestions, "يرجى تشغيل أمر «composer install» في مجلد المشروع لتثبيت التبعيات.")
+			}
+		}
+
+		if phpPort > 0 {
+			if a.IsPortListening(phpPort) {
+				diag.IsPortActive = true
+			} else {
+				diag.IsPortActive = false
+				diag.Status = "error"
+				diag.Issues = append(diag.Issues, fmt.Sprintf("خادم PHP FastCGI غير متصل على المنفذ :%d.", phpPort))
+				diag.Suggestions = append(diag.Suggestions, "تأكد من تشغيل خدمة PHP أو اختيار إصدار PHP متوفر على جهازك.")
+			}
+		}
+	}
+
+	// 3. Check Proxy projects (Go, Rust, .NET, Python, Node)
+	if proxyPort > 0 {
+		if a.IsPortListening(proxyPort) {
+			diag.IsPortActive = true
+		} else {
+			diag.IsPortActive = false
+			if diag.Status != "error" {
+				diag.Status = "warning"
+			}
+			diag.Issues = append(diag.Issues, fmt.Sprintf("خادم التطبيق غير مشغل على المنفذ :%d.", proxyPort))
+			diag.Suggestions = append(diag.Suggestions, "اضغط على زر «تشغيل التطبيق» في بطاقة المشروع لتشغيل خادم التطبيق الداخلي.")
+		}
+	}
+
+	// 4. Node projects (node_modules)
+	if pType == "node" {
+		if dirExists(filepath.Join(cleanPath, "node_modules")) {
+			diag.HasNodeModules = true
+		} else if fileExists(filepath.Join(cleanPath, "package.json")) {
+			diag.HasNodeModules = false
+			diag.Status = "warning"
+			diag.Issues = append(diag.Issues, "مجلد الحزم node_modules غير موجود.")
+			diag.Suggestions = append(diag.Suggestions, "قم بتشغيل أمر «npm install» أو بناء المشروع «npm run build».")
+		}
+	}
+
+	return diag
+}
+
+// FixProjectEnv creates .env from .env.example if missing
+func (a *App) FixProjectEnv(projectPath string) (bool, error) {
+	cleanPath := filepath.Clean(projectPath)
+	envPath := filepath.Join(cleanPath, ".env")
+	examplePath := filepath.Join(cleanPath, ".env.example")
+
+	if fileExists(envPath) {
+		return true, nil
+	}
+
+	if !fileExists(examplePath) {
+		return false, fmt.Errorf("ملف .env.example غير موجود في المجلد")
+	}
+
+	data, err := os.ReadFile(examplePath)
+	if err != nil {
+		return false, err
+	}
+
+	if err := os.WriteFile(envPath, data, 0644); err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
 // ScanProjects scans the projects directory, identifies project types, and populates existing projects
 func (a *App) ScanProjects() []caddy.SiteDef {
 	if a.cfg.ProjectsPath == "" {
@@ -867,11 +1079,81 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 		projectDir := filepath.Join(a.cfg.ProjectsPath, projectName)
 		detected := projects.DetectProject(projectDir, a.cfg.DefaultPHP, a.cfg.DomainSuffix)
 
+		cleanKey := filepath.ToSlash(projectDir)
+		isWeb := detected.IsWeb
+		projectType := string(detected.Type)
+		typeLabel := detected.TypeLabel
+		docRoot := detected.DocRoot
 		phpVer := detected.PHPVersion
 		phpPort := detected.PHPPort
+		proxyPort := detected.ProxyPort
 
-		// Manual user override takes precedence over auto-detection
-		cleanKey := filepath.ToSlash(projectDir)
+		// 1. Check if user configured manual overrides for this project
+		if a.cfg.ProjectOverrides != nil {
+			var override config.ProjectCustomSettings
+			var hasOverride bool
+			if ov, ok := a.cfg.ProjectOverrides[cleanKey]; ok {
+				override = ov
+				hasOverride = true
+			} else if ov, ok := a.cfg.ProjectOverrides[projectName]; ok {
+				override = ov
+				hasOverride = true
+			} else if ov, ok := a.cfg.ProjectOverrides[detected.Domain]; ok {
+				override = ov
+				hasOverride = true
+			}
+
+			if hasOverride {
+				if override.IsIgnored || override.Type == "non_web" {
+					isWeb = false
+					projectType = "non_web"
+					typeLabel = "غير ويب / ملفات"
+				} else {
+					if override.Type != "" {
+						projectType = override.Type
+						isWeb = true
+						switch override.Type {
+						case "laravel":
+							typeLabel = "Laravel"
+						case "wordpress":
+							typeLabel = "WordPress"
+						case "php":
+							typeLabel = "PHP"
+						case "go":
+							typeLabel = "Go"
+						case "rust":
+							typeLabel = "Rust"
+						case "dotnet":
+							typeLabel = ".NET"
+						case "python":
+							typeLabel = "Python"
+						case "node":
+							typeLabel = "Node.js"
+						case "static":
+							typeLabel = "HTML / ثابت"
+						default:
+							typeLabel = override.Type
+						}
+					}
+					if override.DocRoot != "" {
+						if filepath.IsAbs(override.DocRoot) {
+							docRoot = filepath.Clean(override.DocRoot)
+						} else {
+							docRoot = filepath.Join(projectDir, override.DocRoot)
+						}
+					}
+					if override.ProxyPort > 0 {
+						proxyPort = override.ProxyPort
+					}
+					if override.PHPVersion != "" {
+						phpVer = projects.NormalizePHPVersion(override.PHPVersion)
+						phpPort = projects.PHPPortForVersion(phpVer)
+					}
+				}
+			}
+		}
+
+		// 2. Standalone ProjectPHP overrides fallback
 		if overrideVer, exists := a.cfg.ProjectPHP[cleanKey]; exists && overrideVer != "" {
 			phpVer = projects.NormalizePHPVersion(overrideVer)
 			phpPort = projects.PHPPortForVersion(phpVer)
@@ -887,13 +1169,13 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 			Name:        detected.Name,
 			Domain:      detected.Domain,
 			Path:        filepath.ToSlash(detected.Path),
-			RootPath:    filepath.ToSlash(detected.DocRoot),
+			RootPath:    filepath.ToSlash(docRoot),
 			PHPPort:     phpPort,
 			PHPVersion:  phpVer,
-			ProxyPort:   detected.ProxyPort,
-			ProjectType: string(detected.Type),
-			TypeLabel:   detected.TypeLabel,
-			IsWeb:       detected.IsWeb,
+			ProxyPort:   proxyPort,
+			ProjectType: projectType,
+			TypeLabel:   typeLabel,
+			IsWeb:       isWeb,
 		})
 	}
 
