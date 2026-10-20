@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 
 	"github.com/wailsapp/wails/v2"
@@ -24,6 +25,7 @@ func main() {
 		MinHeight:         640,
 		Frameless:         true,
 		HideWindowOnClose: true,
+		StartHidden:       true,
 		SingleInstanceLock: &options.SingleInstanceLock{
 			UniqueId: "laragal-instance-lock-5e4a8f29-1b3a-4d72-8c9b",
 			OnSecondInstanceLaunch: func(data options.SecondInstanceData) {
@@ -36,9 +38,12 @@ func main() {
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
-		BackgroundColour: &options.RGBA{R: 11, G: 15, B: 25, A: 1},
+		BackgroundColour: &options.RGBA{R: 248, G: 250, B: 252, A: 1},
 		OnStartup:        app.startup,
-		OnShutdown:       app.shutdown,
+		OnDomReady: func(ctx context.Context) {
+			runtime.WindowShow(ctx)
+		},
+		OnShutdown: app.shutdown,
 		Bind: []interface{}{
 			app,
 		},

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -48,16 +49,45 @@ func NewApp() *App {
 	}
 }
 
+func (a *App) getCacheFilePath() string {
+	return filepath.Join("data", "sites_cache.json")
+}
+
+func (a *App) loadSitesCache() {
+	data, err := os.ReadFile(a.getCacheFilePath())
+	if err != nil {
+		return
+	}
+	var cached []caddy.SiteDef
+	if err := json.Unmarshal(data, &cached); err == nil && len(cached) > 0 {
+		a.sites = cached
+	}
+}
+
+func (a *App) saveSitesCache() {
+	if len(a.sites) == 0 {
+		return
+	}
+	_ = os.MkdirAll("data", 0755)
+	if data, err := json.MarshalIndent(a.sites, "", "  "); err == nil {
+		_ = os.WriteFile(a.getCacheFilePath(), data, 0644)
+	}
+}
+
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	_ = os.MkdirAll(a.cfg.ProjectsPath, 0755)
 	a.initTray()
-	a.ScanProjects()
 
-	// Launch background services and hosts synchronization asynchronously
+	// Load cached sites immediately so the UI displays existing projects with 0ms delay!
+	a.loadSitesCache()
+
+	// Launch background services, project scanning, and hosts synchronization asynchronously
 	// so the Wails window and Vue frontend render immediately with zero delay!
 	go func() {
 		a.StartServices()
+		a.ScanProjects()
+		a.saveSitesCache()
 		if a.ctx != nil {
 			runtime.EventsEmit(a.ctx, "services-updated", a.GetServices())
 			runtime.EventsEmit(a.ctx, "sites-updated", a.sites)
@@ -135,6 +165,18 @@ func (a *App) findCaddyRootCert() string {
 			return candidate2
 		}
 	}
+
+	if localAppData := os.Getenv("LOCALAPPDATA"); localAppData != "" {
+		candidate3 := filepath.Join(localAppData, "caddy", "pki", "authorities", "local", "root.crt")
+		if _, err := os.Stat(candidate3); err == nil {
+			_ = os.MkdirAll(filepath.Dir(candidate1), 0755)
+			if data, readErr := os.ReadFile(candidate3); readErr == nil {
+				_ = os.WriteFile(candidate1, data, 0644)
+			}
+			return candidate3
+		}
+	}
+
 	return ""
 }
 
@@ -288,11 +330,21 @@ func (a *App) InstallSSLTrust() (string, error) {
 		return "شهادة الجذر المحلية موثوقة بالفعل في نظام ويندوز.", nil
 	}
 
+	// 1. Try native caddy trust if available
+	caddyExe := a.findCaddyExecutable()
+	if caddyExe != "" {
+		_ = winutil.Command(caddyExe, "trust").Run()
+		if trustedNow, _ := certs.IsCertTrustedInWindowsStore(fingerprint); trustedNow {
+			return "تم تثبيت شهادة الجذر في متجر شهادات ويندوز بنجاح.", nil
+		}
+	}
+
+	// 2. Direct certutil command
 	cmdArgs := certs.BuildTrustCertCommand(rootCertPath)
 	cmd := winutil.Command(cmdArgs[0], cmdArgs[1:]...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		// Attempt elevated execution via PowerShell Start-Process -Verb RunAs
+		// 3. Fallback to elevated PowerShell Import-Certificate
 		elevatedCmd := privilege.BuildElevatedCertCommand(rootCertPath)
 		elCmd := winutil.Command(elevatedCmd[0], elevatedCmd[1:]...)
 		elOut, elErr := elCmd.CombinedOutput()
@@ -587,16 +639,18 @@ func (a *App) ReloadCaddy() error {
 	// Also write to data/Caddyfile for standard root access
 	_ = os.WriteFile(filepath.Join("data", "Caddyfile"), []byte(caddyContent), 0644)
 
-	// Attempt live reload via Caddy admin API
-	req, err := http.NewRequest("POST", "http://localhost:2019/load", strings.NewReader(caddyContent))
-	if err == nil {
-		req.Header.Set("Content-Type", "text/caddyfile")
-		client := &http.Client{Timeout: 1 * time.Second}
-		resp, postErr := client.Do(req)
-		if postErr == nil {
-			_ = resp.Body.Close()
+	// Attempt live reload via Caddy admin API asynchronously so it never delays UI or caller
+	go func(content string) {
+		req, err := http.NewRequest("POST", "http://localhost:2019/load", strings.NewReader(content))
+		if err == nil {
+			req.Header.Set("Content-Type", "text/caddyfile")
+			client := &http.Client{Timeout: 500 * time.Millisecond}
+			resp, postErr := client.Do(req)
+			if postErr == nil {
+				_ = resp.Body.Close()
+			}
 		}
-	}
+	}(caddyContent)
 
 	return nil
 }
