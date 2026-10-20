@@ -3,9 +3,10 @@ package hosts
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/laragal/laragal/internal/winutil"
 )
 
 const (
@@ -59,7 +60,7 @@ func SyncHostsContent(content string, domains []string) string {
 	return cleaned + block.String()
 }
 
-// UpdateSystemHosts writes domains to the Windows hosts file and flushes DNS
+// UpdateSystemHosts writes domains to the Windows hosts file and flushes DNS without flashing windows
 func UpdateSystemHosts(domains []string) error {
 	data, err := os.ReadFile(SystemHostsPath)
 	if err != nil {
@@ -67,10 +68,15 @@ func UpdateSystemHosts(domains []string) error {
 	}
 	newContent := SyncHostsContent(string(data), domains)
 
+	// If content is already identical, do not touch the file or run any commands
+	if strings.TrimSpace(newContent) == strings.TrimSpace(string(data)) {
+		return nil
+	}
+
 	// 1. Attempt direct write (succeeds if running with Administrator rights)
 	writeErr := os.WriteFile(SystemHostsPath, []byte(newContent), 0644)
 	if writeErr == nil {
-		_ = exec.Command("ipconfig", "/flushdns").Run()
+		_ = winutil.Command("ipconfig", "/flushdns").Run()
 		return nil
 	}
 
@@ -81,16 +87,16 @@ func UpdateSystemHosts(domains []string) error {
 	}
 
 	psScript := fmt.Sprintf(
-		`Start-Process powershell -ArgumentList '-NoProfile -Command Copy-Item -Path \"%s\" -Destination \"%s\" -Force' -Verb RunAs -Wait`,
+		`Start-Process powershell -ArgumentList '-NoProfile -Command Copy-Item -Path \"%s\" -Destination \"%s\" -Force' -Verb RunAs -WindowStyle Hidden -Wait`,
 		strings.ReplaceAll(tempFile, `\`, `\\`),
 		strings.ReplaceAll(SystemHostsPath, `\`, `\\`),
 	)
-	cmd := exec.Command("powershell", "-NoProfile", "-Command", psScript)
+	cmd := winutil.Command("powershell", "-NoProfile", "-Command", psScript)
 	if elevErr := cmd.Run(); elevErr != nil {
 		return fmt.Errorf("failed to elevate hosts update: %w (direct write error: %v)", elevErr, writeErr)
 	}
 
-	_ = exec.Command("ipconfig", "/flushdns").Run()
+	_ = winutil.Command("ipconfig", "/flushdns").Run()
 	_ = os.Remove(tempFile)
 	return nil
 }

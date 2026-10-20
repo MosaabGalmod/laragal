@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -19,6 +18,7 @@ import (
 	"github.com/laragal/laragal/internal/projects"
 	"github.com/laragal/laragal/internal/services/caddy"
 	"github.com/laragal/laragal/internal/services/php"
+	"github.com/laragal/laragal/internal/winutil"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -128,12 +128,12 @@ func (a *App) InstallSSLTrust() (string, error) {
 	}
 
 	cmdArgs := certs.BuildTrustCertCommand(rootCertPath)
-	cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+	cmd := winutil.Command(cmdArgs[0], cmdArgs[1:]...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		// Attempt elevated execution via PowerShell Start-Process -Verb RunAs
 		elevatedCmd := privilege.BuildElevatedCertCommand(rootCertPath)
-		elCmd := exec.Command(elevatedCmd[0], elevatedCmd[1:]...)
+		elCmd := winutil.Command(elevatedCmd[0], elevatedCmd[1:]...)
 		elOut, elErr := elCmd.CombinedOutput()
 		if elErr != nil {
 			return string(out) + " " + string(elOut), elErr
@@ -155,7 +155,7 @@ func (a *App) DownloadBinary(name string) (string, error) {
 	destDir := filepath.Join("bin", name)
 
 	// Download zip
-	resp, err := exec.Command("powershell", "-NoProfile", "-Command", fmt.Sprintf("Invoke-WebRequest -Uri '%s' -OutFile '%s'", url, zipPath)).CombinedOutput()
+	resp, err := winutil.Command("powershell", "-NoProfile", "-Command", fmt.Sprintf("Invoke-WebRequest -Uri '%s' -OutFile '%s'", url, zipPath)).CombinedOutput()
 	if err != nil {
 		return string(resp), err
 	}
@@ -211,17 +211,17 @@ APP_DEBUG=true
 func (a *App) OpenFolder(folderPath string) error {
 	cleanPath := filepath.FromSlash(folderPath)
 	_ = os.MkdirAll(cleanPath, 0755)
-	return exec.Command("explorer", cleanPath).Start()
+	return winutil.Command("explorer", cleanPath).Start()
 }
 
 func (a *App) OpenBrowser(targetURL string) error {
-	return exec.Command("rundll32", "url.dll,FileProtocolHandler", targetURL).Start()
+	return winutil.Command("rundll32", "url.dll,FileProtocolHandler", targetURL).Start()
 }
 
 func (a *App) OpenVSCode(folderPath string) error {
 	cleanPath := filepath.FromSlash(folderPath)
 	_ = os.MkdirAll(cleanPath, 0755)
-	return exec.Command("cmd", "/c", "code", cleanPath).Start()
+	return winutil.Command("cmd", "/c", "code", cleanPath).Start()
 }
 
 func (a *App) MinimizeWindow() {
@@ -334,7 +334,7 @@ func (a *App) SelectProjectsDirectory() (string, error) {
 		} else {
 			psScript = `Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'اختر مجلد المشاريع لـ LaraGal'; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }`
 		}
-		out, psErr := exec.Command("powershell", "-NoProfile", "-Command", psScript).Output()
+		out, psErr := winutil.Command("powershell", "-NoProfile", "-Command", psScript).Output()
 		if psErr == nil {
 			trimmed := strings.TrimSpace(string(out))
 			if trimmed != "" {

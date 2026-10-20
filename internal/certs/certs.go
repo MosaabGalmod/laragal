@@ -7,8 +7,9 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
+
+	"github.com/laragal/laragal/internal/winutil"
 )
 
 func ReadCertFingerprint(certPath string) (string, error) {
@@ -33,7 +34,7 @@ func BuildTrustCertCommand(certPath string) []string {
 }
 
 func IsCertTrustedInWindowsStore(fingerprint string) (bool, error) {
-	cmd := exec.Command("certutil", "-verifystore", "Root", fingerprint)
+	cmd := winutil.Command("certutil", "-verifystore", "Root", fingerprint)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return false, nil

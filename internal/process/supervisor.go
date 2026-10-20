@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os/exec"
 	"sync"
+
+	"github.com/laragal/laragal/internal/winutil"
 )
 
 type ServiceStatus struct {
@@ -37,7 +39,7 @@ func (s *Supervisor) StartService(name string, exe string, args []string, port i
 		return fmt.Errorf("service %s is already running", name)
 	}
 
-	cmd := exec.Command(exe, args...)
+	cmd := winutil.Command(exe, args...)
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start service %s: %w", name, err)
 	}

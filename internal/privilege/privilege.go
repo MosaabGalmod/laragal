@@ -11,8 +11,10 @@ func BuildElevatedCertCommand(certPath string) []string {
 	return []string{
 		"powershell",
 		"-NoProfile",
+		"-WindowStyle",
+		"Hidden",
 		"-Command",
-		fmt.Sprintf("Start-Process certutil -ArgumentList @('-addstore', '-f', 'Root', '%s') -Verb RunAs -Wait", certPath),
+		fmt.Sprintf("Start-Process certutil -ArgumentList @('-addstore', '-f', 'Root', '%s') -Verb RunAs -WindowStyle Hidden -Wait", certPath),
 	}
 }
 

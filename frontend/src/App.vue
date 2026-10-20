@@ -81,7 +81,7 @@
             <div class="flex items-center gap-2">
               <span class="text-xl font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
               <span class="text-[11px] px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
-                v1.0.8
+                v1.0.10
               </span>
             </div>
             <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 text-start">
