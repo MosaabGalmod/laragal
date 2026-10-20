@@ -53,7 +53,16 @@ func (a *App) startup(ctx context.Context) {
 	_ = os.MkdirAll(a.cfg.ProjectsPath, 0755)
 	a.initTray()
 	a.ScanProjects()
-	a.StartServices()
+
+	// Launch background services and hosts synchronization asynchronously
+	// so the Wails window and Vue frontend render immediately with zero delay!
+	go func() {
+		a.StartServices()
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "services-updated", a.GetServices())
+			runtime.EventsEmit(a.ctx, "sites-updated", a.sites)
+		}
+	}()
 }
 
 func (a *App) shutdown(ctx context.Context) {
@@ -551,16 +560,16 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 	// 1. Write updated Caddyfile
 	_ = a.ReloadCaddy()
 
-	// 2. Update system hosts file for all active web domains
+	// 2. Update system hosts file asynchronously in background (prevents ipconfig /flushdns UI freezes)
 	webDomains := make([]string, 0)
 	for _, s := range a.sites {
 		if s.IsWeb && s.Domain != "" {
 			webDomains = append(webDomains, s.Domain)
 		}
 	}
-	if len(webDomains) > 0 {
-		_ = hosts.UpdateSystemHosts(webDomains)
-	}
+	go func(domains []string) {
+		_ = hosts.UpdateSystemHosts(domains)
+	}(webDomains)
 
 	return a.sites
 }
@@ -600,12 +609,11 @@ func (a *App) SyncHosts() (string, error) {
 			webDomains = append(webDomains, s.Domain)
 		}
 	}
-	if len(webDomains) == 0 {
-		return "لا توجد مواقع ويب نشطة تتطلب مزامنة في ملف hosts.", nil
-	}
-
 	if err := hosts.UpdateSystemHosts(webDomains); err != nil {
 		return "", err
+	}
+	if len(webDomains) == 0 {
+		return "تم تنظيف ملف hosts بنجاح (لا توجد مواقع نشطة حالياً).", nil
 	}
 
 	return fmt.Sprintf("تمت مزامنة %d نطاق بنجاح مع ملف hosts المحلي وتحديث كاش DNS.", len(webDomains)), nil

@@ -1,6 +1,7 @@
 package projects
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,9 +50,8 @@ func findFirstExistingDir(baseDir string, subDirs ...string) string {
 	return baseDir
 }
 
-// DetectProject inspects a folder to determine whether it is a web application and its specific stack
-func DetectProject(projectDir string, defaultPHP string, domainSuffix string) DetectedProject {
-	cleanDir := filepath.Clean(projectDir)
+// detectSingleDir checks whether a specific directory contains web artifacts
+func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) DetectedProject {
 	name := filepath.Base(cleanDir)
 
 	result := DetectedProject{
@@ -260,6 +260,84 @@ func DetectProject(projectDir string, defaultPHP string, domainSuffix string) De
 		}
 	}
 
-	// 9. Otherwise: folder is NOT a website (e.g. skills, docs, markdown, CLI tools)
+	// 9. Otherwise: directory does not contain direct web artifacts
 	return result
+}
+
+// DetectProject inspects a folder to determine whether it is a web application or contains a web section
+func DetectProject(projectDir string, defaultPHP string, domainSuffix string) DetectedProject {
+	cleanDir := filepath.Clean(projectDir)
+	name := filepath.Base(cleanDir)
+
+	// 1. Direct root check
+	rootResult := detectSingleDir(cleanDir, defaultPHP, domainSuffix)
+	if rootResult.IsWeb {
+		return rootResult
+	}
+
+	// 2. Subdirectory check for multi-tier projects and monorepos
+	webSubDirs := []string{
+		"backend",
+		"web",
+		"server",
+		"api",
+		"frontend",
+		"client",
+		"ui",
+		"site",
+		"apps",
+		"admin",
+		"app",
+	}
+
+	for _, sub := range webSubDirs {
+		subPath := filepath.Join(cleanDir, sub)
+		if !dirExists(subPath) {
+			continue
+		}
+
+		subResult := detectSingleDir(subPath, defaultPHP, domainSuffix)
+		if subResult.IsWeb {
+			return DetectedProject{
+				Name:        name,
+				Path:        cleanDir,
+				DocRoot:     subResult.DocRoot,
+				Type:        subResult.Type,
+				TypeLabel:   fmt.Sprintf("%s (%s)", subResult.TypeLabel, sub),
+				PHPVersion:  subResult.PHPVersion,
+				PHPPort:     subResult.PHPPort,
+				IsWeb:       true,
+				Domain:      name + domainSuffix,
+			}
+		}
+
+		// Check one level deeper inside container folders like apps/ or services/
+		if sub == "apps" || sub == "services" {
+			subEntries, err := os.ReadDir(subPath)
+			if err == nil {
+				for _, se := range subEntries {
+					if se.IsDir() {
+						nestedPath := filepath.Join(subPath, se.Name())
+						nestedResult := detectSingleDir(nestedPath, defaultPHP, domainSuffix)
+						if nestedResult.IsWeb {
+							return DetectedProject{
+								Name:        name,
+								Path:        cleanDir,
+								DocRoot:     nestedResult.DocRoot,
+								Type:        nestedResult.Type,
+								TypeLabel:   fmt.Sprintf("%s (%s/%s)", nestedResult.TypeLabel, sub, se.Name()),
+								PHPVersion:  nestedResult.PHPVersion,
+								PHPPort:     nestedResult.PHPPort,
+								IsWeb:       true,
+								Domain:      name + domainSuffix,
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 3. Genuine non-web folder
+	return rootResult
 }

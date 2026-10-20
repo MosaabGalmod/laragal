@@ -28,9 +28,17 @@ func SyncHostsContent(content string, domains []string) string {
 			inBlock = false
 			continue
 		}
-		if !inBlock {
-			lines = append(lines, line)
+		if inBlock {
+			continue
 		}
+
+		// Prune obsolete manual .local local dev mappings pointing to 127.0.0.1
+		fields := strings.Fields(trimmed)
+		if len(fields) >= 2 && fields[0] == "127.0.0.1" && strings.HasSuffix(strings.ToLower(fields[1]), ".local") {
+			continue
+		}
+
+		lines = append(lines, line)
 	}
 
 	cleaned := strings.TrimRight(strings.Join(lines, "\n"), "\r\n")

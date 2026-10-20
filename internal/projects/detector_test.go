@@ -9,7 +9,7 @@ import (
 func TestDetectProject(t *testing.T) {
 	tempDir := t.TempDir()
 
-	// 1. Laravel project (artisan)
+	// 1. Laravel project (artisan in root)
 	laravelDir := filepath.Join(tempDir, "my-laravel")
 	_ = os.MkdirAll(filepath.Join(laravelDir, "public"), 0755)
 	_ = os.WriteFile(filepath.Join(laravelDir, "artisan"), []byte("<?php"), 0644)
@@ -75,5 +75,32 @@ func TestDetectProject(t *testing.T) {
 	resNonWeb := DetectProject(nonWebDir, "8.3", ".test")
 	if resNonWeb.Type != TypeNonWeb || resNonWeb.IsWeb || resNonWeb.Domain != "" {
 		t.Fatalf("Expected Non-Web project, got: %+v", resNonWeb)
+	}
+
+	// 7. Multi-tier SaaS project with "backend" folder containing Laravel
+	saasDir := filepath.Join(tempDir, "biometric-attendance-saas")
+	_ = os.MkdirAll(filepath.Join(saasDir, "backend", "public"), 0755)
+	_ = os.WriteFile(filepath.Join(saasDir, "backend", "artisan"), []byte("<?php"), 0644)
+	_ = os.WriteFile(filepath.Join(saasDir, "backend", "public", "index.php"), []byte("<?php"), 0644)
+	_ = os.MkdirAll(filepath.Join(saasDir, "mobile"), 0755)
+
+	resSaas := DetectProject(saasDir, "8.3", ".test")
+	if resSaas.Type != TypeLaravel || !resSaas.IsWeb || resSaas.Domain != "biometric-attendance-saas.test" {
+		t.Fatalf("Expected multi-tier SaaS to be detected as web Laravel, got: %+v", resSaas)
+	}
+	expectedDocRoot := filepath.Join(saasDir, "backend", "public")
+	if resSaas.DocRoot != expectedDocRoot {
+		t.Fatalf("Expected docroot %s, got: %s", expectedDocRoot, resSaas.DocRoot)
+	}
+
+	// 8. Monorepo with "frontend" web app
+	fullstackDir := filepath.Join(tempDir, "my-fullstack")
+	_ = os.MkdirAll(filepath.Join(fullstackDir, "frontend", "dist"), 0755)
+	_ = os.WriteFile(filepath.Join(fullstackDir, "frontend", "package.json"), []byte(`{"dependencies":{"vite":"^5.0"}}`), 0644)
+	_ = os.WriteFile(filepath.Join(fullstackDir, "frontend", "dist", "index.html"), []byte("<h1>App</h1>"), 0644)
+
+	resFullstack := DetectProject(fullstackDir, "8.3", ".test")
+	if !resFullstack.IsWeb || resFullstack.Domain != "my-fullstack.test" || filepath.Base(resFullstack.DocRoot) != "dist" {
+		t.Fatalf("Expected frontend subfolder to be detected as web with dist root, got: %+v", resFullstack)
 	}
 }

@@ -8,13 +8,16 @@ import (
 )
 
 func TestSyncHostsContent(t *testing.T) {
-	initial := "127.0.0.1 localhost\n::1 localhost\n"
+	initial := "127.0.0.1 localhost\n::1 localhost\n127.0.0.1 oldsite.local\n"
 	domains := []string{"mysite.test", "api.test"}
 
 	result := hosts.SyncHostsContent(initial, domains)
 
 	if !strings.Contains(result, "127.0.0.1 localhost") {
 		t.Errorf("original hosts content removed")
+	}
+	if strings.Contains(result, "127.0.0.1 oldsite.local") {
+		t.Errorf("legacy .local domain was not pruned")
 	}
 	if !strings.Contains(result, "127.0.0.1 mysite.test") {
 		t.Errorf("missing mysite.test")
