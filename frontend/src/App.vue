@@ -1,75 +1,6 @@
 <template>
   <div :dir="currentLang === 'ar' ? 'rtl' : 'ltr'" class="h-screen w-screen flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-150 select-none">
-    <!-- ================= 1. FIXED TITLE BAR (Physical LTR for Window Controls) ================= -->
-    <div
-      dir="ltr"
-      @dblclick="toggleMaximize"
-      class="wails-drag h-10 w-full bg-slate-100 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between px-3 text-xs font-medium z-40 flex-shrink-0 select-none cursor-default"
-    >
-      <!-- PHYSICAL LEFT (Child 1) -->
-      <!-- In Arabic (RTL): Window controls are on the physical LEFT -->
-      <div v-if="currentLang === 'ar'" class="flex items-center gap-1.5 wails-no-drag">
-        <button
-          @click.stop="closeWindow"
-          class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-rose-600 hover:text-white transition-colors"
-          :title="t('close_to_background')"
-        >
-          <X class="w-3.5 h-3.5" />
-        </button>
-        <button
-          @click.stop="toggleMaximize"
-          class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-          :title="t('maximize_restore')"
-        >
-          <Square class="w-3 h-3" />
-        </button>
-        <button
-          @click.stop="minimizeWindow"
-          class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-          :title="t('minimize')"
-        >
-          <Minus class="w-3.5 h-3.5" />
-        </button>
-      </div>
-      <!-- In English: Balanced empty spacer on the left -->
-      <div v-else class="w-20"></div>
-
-      <!-- PHYSICAL CENTER (Child 2) -->
-      <div @dblclick="toggleMaximize" class="text-xs text-slate-500 dark:text-slate-400 font-semibold select-none cursor-default py-1 px-4">
-        <span v-if="currentLang === 'ar'" dir="rtl">بيئة التطوير المحلية — LaraGal</span>
-        <span v-else dir="ltr">LaraGal — Local Development Environment</span>
-      </div>
-
-      <!-- PHYSICAL RIGHT (Child 3) -->
-      <!-- In Arabic: Balanced empty spacer on the right so title stays centered -->
-      <div v-if="currentLang === 'ar'" class="w-20"></div>
-      <!-- In English: Window controls on the physical RIGHT -->
-      <div v-else class="flex items-center gap-1.5 wails-no-drag">
-        <button
-          @click.stop="minimizeWindow"
-          class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-          :title="t('minimize')"
-        >
-          <Minus class="w-3.5 h-3.5" />
-        </button>
-        <button
-          @click.stop="toggleMaximize"
-          class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-          :title="t('maximize_restore')"
-        >
-          <Square class="w-3 h-3" />
-        </button>
-        <button
-          @click.stop="closeWindow"
-          class="w-7 h-7 rounded-md flex items-center justify-center text-slate-600 dark:text-slate-400 hover:bg-rose-600 hover:text-white transition-colors"
-          :title="t('close_to_background')"
-        >
-          <X class="w-3.5 h-3.5" />
-        </button>
-      </div>
-    </div>
-
-    <!-- ================= 2. FIXED MAIN HEADER (Direction-Aware: Logo on RIGHT in Arabic, on LEFT in English) ================= -->
+    <!-- ================= FIXED MAIN HEADER ================= -->
     <header class="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur z-30">
       <div class="w-full px-6 lg:px-8 py-3.5 flex items-center justify-between">
         <!-- Brand Anchor: In RTL appears on the RIGHT; in LTR appears on the LEFT -->
@@ -81,7 +12,7 @@
             <div class="flex items-center gap-2">
               <span class="text-xl font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
               <span class="text-[11px] px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
-                v1.0.14
+                v1.0.15
               </span>
             </div>
             <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 text-start">
@@ -660,7 +591,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import {
   Server, Globe, Plus, ShieldCheck, Sun, Moon,
   Lock, ExternalLink, CheckCircle2, Info, Download,
-  Folder, Code, Copy, Check, Minus, Square, X,
+  Folder, Code, Copy, Check,
   AlertCircle, AlertTriangle, FolderOpen, Power, RefreshCw
 } from 'lucide-vue-next'
 
@@ -702,17 +633,6 @@ function toggleTheme() {
   isDark.value = !isDark.value
 }
 
-// Window control functions connected to Wails backend
-function closeWindow() {
-  if ((window as any).go?.main?.App?.CloseWindow) {
-    (window as any).go.main.App.CloseWindow()
-  } else if ((window as any).runtime?.WindowHide) {
-    (window as any).runtime.WindowHide()
-  } else if ((window as any).runtime?.Quit) {
-    (window as any).runtime.Quit()
-  }
-}
-
 function promptQuitApp() {
   showQuitConfirm.value = true
 }
@@ -723,22 +643,6 @@ function executeQuitApp() {
     (window as any).go.main.App.QuitApp()
   } else if ((window as any).runtime?.Quit) {
     (window as any).runtime.Quit()
-  }
-}
-
-function toggleMaximize() {
-  if ((window as any).go?.main?.App?.ToggleMaximizeWindow) {
-    (window as any).go.main.App.ToggleMaximizeWindow()
-  } else if ((window as any).runtime?.WindowToggleMaximise) {
-    (window as any).runtime.WindowToggleMaximise()
-  }
-}
-
-function minimizeWindow() {
-  if ((window as any).go?.main?.App?.MinimizeWindow) {
-    (window as any).go.main.App.MinimizeWindow()
-  } else if ((window as any).runtime?.WindowMinimise) {
-    (window as any).runtime.WindowMinimise()
   }
 }
 

@@ -18,12 +18,12 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:             "LaraGal - Local Development Environment",
+		Title:             "LaraGal — بيئة التطوير المحلية لـ PHP و Laravel",
 		Width:             1280,
 		Height:            820,
 		MinWidth:          960,
 		MinHeight:         640,
-		Frameless:         true,
+		Frameless:         false,
 		HideWindowOnClose: true,
 		StartHidden:       true,
 		SingleInstanceLock: &options.SingleInstanceLock{

@@ -103,4 +103,24 @@ func TestDetectProject(t *testing.T) {
 	if !resFullstack.IsWeb || resFullstack.Domain != "my-fullstack.test" || filepath.Base(resFullstack.DocRoot) != "dist" {
 		t.Fatalf("Expected frontend subfolder to be detected as web with dist root, got: %+v", resFullstack)
 	}
+
+	// 9. Go / Web project like jarasdesk with web/templates and web/static
+	jarasDir := filepath.Join(tempDir, "jarasdesk")
+	_ = os.MkdirAll(filepath.Join(jarasDir, "web", "templates"), 0755)
+	_ = os.MkdirAll(filepath.Join(jarasDir, "web", "static", "css"), 0755)
+	_ = os.WriteFile(filepath.Join(jarasDir, "web", "templates", "dashboard.html"), []byte("<h1>Dashboard</h1>"), 0644)
+	_ = os.WriteFile(filepath.Join(jarasDir, "go.mod"), []byte("module jarasdesk\n\ngo 1.22"), 0644)
+
+	resJaras := DetectProject(jarasDir, "8.3", ".test")
+	if !resJaras.IsWeb || resJaras.Domain != "jarasdesk.test" {
+		t.Fatalf("Expected jarasdesk with web/templates to be detected as web, got: %+v", resJaras)
+	}
+
+	// 10. Actual project on disk test
+	if _, err := os.Stat(`D:\projects\jarasdesk`); err == nil {
+		resActual := DetectProject(`D:\projects\jarasdesk`, "8.3", ".test")
+		if !resActual.IsWeb || resActual.Domain != "jarasdesk.test" {
+			t.Fatalf("Actual D:/projects/jarasdesk not detected as web: %+v", resActual)
+		}
+	}
 }

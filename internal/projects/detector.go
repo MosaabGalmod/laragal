@@ -40,6 +40,19 @@ func dirExists(path string) bool {
 	return err == nil && info.IsDir()
 }
 
+func hasFilesWithExt(dir string, ext string) bool {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return false
+	}
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(strings.ToLower(e.Name()), ext) {
+			return true
+		}
+	}
+	return false
+}
+
 func findFirstExistingDir(baseDir string, subDirs ...string) string {
 	for _, sub := range subDirs {
 		target := filepath.Join(baseDir, sub)
@@ -171,6 +184,45 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 				return result
 			}
 		}
+	}
+
+	// 5b. Check for web template directories with HTML templates (e.g. templates/*.html, views/*.html, pages/*.html)
+	for _, tplSub := range []string{"templates", "views", "pages", "templates/html", "dist", "static"} {
+		tplDir := filepath.Join(cleanDir, tplSub)
+		if hasFilesWithExt(tplDir, ".html") || hasFilesWithExt(tplDir, ".htm") {
+			result.Type = TypeStatic
+			result.TypeLabel = "HTML / ويب"
+			result.IsWeb = true
+			result.Domain = name + domainSuffix
+			result.DocRoot = cleanDir
+			result.PHPPort = 0
+			return result
+		}
+	}
+
+	// 5c. Check if directory contains a static/ or assets/ folder alongside templates/ or locales/ (like Go/Python web structures)
+	if (dirExists(filepath.Join(cleanDir, "static")) || dirExists(filepath.Join(cleanDir, "assets"))) &&
+		(dirExists(filepath.Join(cleanDir, "templates")) || dirExists(filepath.Join(cleanDir, "views")) || dirExists(filepath.Join(cleanDir, "locales"))) {
+		result.Type = TypeStatic
+		result.TypeLabel = "HTML / ويب"
+		result.IsWeb = true
+		result.Domain = name + domainSuffix
+		result.DocRoot = cleanDir
+		result.PHPPort = 0
+		return result
+	}
+
+	// 5d. Check for Python Web applications (Django, Flask, FastAPI)
+	if fileExists(filepath.Join(cleanDir, "manage.py")) ||
+		fileExists(filepath.Join(cleanDir, "wsgi.py")) ||
+		fileExists(filepath.Join(cleanDir, "asgi.py")) {
+		result.Type = TypeStatic
+		result.TypeLabel = "Python / Web"
+		result.IsWeb = true
+		result.Domain = name + domainSuffix
+		result.DocRoot = findFirstExistingDir(cleanDir, "static", "public", "")
+		result.PHPPort = 0
+		return result
 	}
 
 	// 6. Check for Node.js web applications (package.json or frontend config files)
