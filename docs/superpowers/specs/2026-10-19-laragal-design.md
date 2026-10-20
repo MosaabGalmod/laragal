@@ -3,7 +3,8 @@
 - **Project Name:** LaraGal
 - **Target OS:** Windows (Primary), with cross-platform architecture readiness for macOS and Linux
 - **Date:** 2026-10-19
-- **Status:** Proposed / Under Review
+- **Status:** v1.0.0 — Released / Production Ready
+- **Version:** 1.0.0 (First Official Release)
 
 ---
 
@@ -20,10 +21,11 @@ Local PHP/Laravel development environments on Windows face common drawbacks:
 LaraGal is an ultra-fast, lightweight, open-source local development suite built with Go and modern web technologies. It provides:
 1. **Zero-Config Local SSL (`https://*.test`):** Powered by an embedded Caddy server with an automated local Root Certificate Authority (CA) installed directly into the Windows Trust Store and Firefox NSS database.
 2. **True Process Isolation & Multi-PHP:** Spawns isolated FastCGI listeners for PHP 8.1, 8.2, 8.3, and 8.4 simultaneously, allowing different projects to use different PHP versions concurrently.
-3. **Automated Host Resolution:** Instant virtual host binding (`<project>.test -> 127.0.0.1`) via Windows `hosts` synchronization.
-4. **All-in-One Portable Services:** Bundled MySQL/MariaDB, Redis, and Mailpit (local email testing) that run as supervised child processes with zero system pollution.
-5. **1-Click Project Scaffolding:** Instant setup for Laravel and WordPress with automatic `.env` synchronization (database creation, Mailpit configuration, and trusted SSL URL).
-6. **Modern, Bilingual, Responsive GUI:** Built with Vue 3 and Tailwind CSS, featuring full Arabic (RTL) and English (LTR) support, Dark/Light modes, and a seamless System Tray integration.
+3. **Multi-Language & Reverse Proxy Engine:** Smart auto-detection and hosting for Go standalone web applications (with reverse-proxying and `/static/*` routing), Node.js, static HTML sites, and Python web projects alongside PHP/Laravel/WordPress.
+4. **Automated Host Resolution:** Instant virtual host binding (`<project>.test -> 127.0.0.1`) via Windows `hosts` synchronization.
+5. **All-in-One Portable Services:** Bundled MySQL/MariaDB, Redis, and Mailpit (local email testing) that run as supervised child processes with zero system pollution.
+6. **1-Click Project Scaffolding:** Instant setup for Laravel and WordPress with automatic `.env` synchronization (database creation, Mailpit configuration, and trusted SSL URL).
+7. **Modern, Bilingual, Responsive GUI:** Built with Vue 3 and Tailwind CSS, featuring full Arabic (RTL) and English (LTR) support, BiDi-compliant window controls on physical left in Arabic, Dark/Light modes, and a seamless System Tray integration.
 
 ---
 

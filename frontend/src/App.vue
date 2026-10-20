@@ -1,86 +1,235 @@
 <template>
   <div :dir="currentLang === 'ar' ? 'rtl' : 'ltr'" class="h-screen w-screen flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-150 select-none">
-    <!-- ================= FIXED MAIN HEADER ================= -->
-    <header class="flex-shrink-0 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur z-30">
-      <div class="w-full px-6 lg:px-8 py-3.5 flex items-center justify-between">
-        <!-- Brand Anchor: In RTL appears on the RIGHT; in LTR appears on the LEFT -->
-        <div class="flex items-center gap-3.5">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-600 to-indigo-500 flex items-center justify-center text-white font-black text-xl shadow-md ring-2 ring-blue-500/20 flex-shrink-0">
-            LG
-          </div>
-          <div>
-            <div class="flex items-center gap-2">
-              <span class="text-xl font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
-              <span class="text-[11px] px-2 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
-                v1.0.15
-              </span>
-            </div>
-            <p class="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5 text-start">
-              <span v-if="currentLang === 'ar'">بيئة التطوير المحلية لـ <bdi>PHP</bdi> و <bdi>Laravel</bdi></span>
-              <span v-else>Local Development Environment for PHP &amp; Laravel</span>
-            </p>
-          </div>
+    <!-- ================= UNIFIED DESKTOP HEADER (Single Bar - Zero Duplication) ================= -->
+    <header
+      dir="ltr"
+      @dblclick="toggleMaximize"
+      class="wails-drag flex-shrink-0 h-14 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-40 px-4 flex items-center justify-between select-none cursor-default"
+    >
+      <!-- PHYSICAL LEFT (Window Controls + Actions in Arabic; Brand in English) -->
+      <div v-if="currentLang === 'ar'" class="flex items-center gap-2.5 wails-no-drag">
+        <!-- Window Controls: Always on physical LEFT in Arabic -->
+        <div class="flex items-center gap-1">
+          <button
+            @click.stop="closeWindow"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-rose-600 hover:text-white transition-colors"
+            :title="t('close_to_background')"
+          >
+            <X class="w-3.5 h-3.5" />
+          </button>
+          <button
+            @click.stop="toggleMaximize"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            :title="t('maximize_restore')"
+          >
+            <Square class="w-3 h-3" />
+          </button>
+          <button
+            @click.stop="minimizeWindow"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            :title="t('minimize')"
+          >
+            <Minus class="w-3.5 h-3.5" />
+          </button>
         </div>
 
-        <!-- Actions Toolbar: In RTL appears on the LEFT; in LTR appears on the RIGHT -->
-        <div class="flex items-center gap-2.5">
-          <button
-            @click="syncHostsNow"
-            :disabled="isSyncingHosts"
-            class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/80 transition-colors"
-            :title="t('sync_hosts_hint')"
-          >
-            <RefreshCw class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" :class="{ 'animate-spin': isSyncingHosts }" />
-            <span>{{ t('sync_hosts_btn') }}</span>
-          </button>
+        <div class="h-5 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
 
-          <button
-            @click="installSSL"
-            class="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 transition-colors"
-            :title="t('ssl_install_hint')"
-          >
-            <ShieldCheck class="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span>{{ t('install_ssl_btn') }}</span>
-          </button>
+        <!-- Quick Actions Toolbar -->
+        <button
+          @click="openNewModal"
+          class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+        >
+          <Plus class="w-3.5 h-3.5" />
+          <span>{{ t('new_project_btn') }}</span>
+        </button>
 
-          <button
-            @click="toggleLang"
-            class="px-3 py-1.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-          >
-            {{ currentLang === 'ar' ? 'English' : 'العربية' }}
-          </button>
+        <button
+          @click="syncHostsNow"
+          :disabled="isSyncingHosts"
+          class="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/80 transition-colors"
+          :title="t('sync_hosts_hint')"
+        >
+          <RefreshCw class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" :class="{ 'animate-spin': isSyncingHosts }" />
+          <span>{{ t('sync_hosts_btn') }}</span>
+        </button>
 
-          <button
-            @click="toggleTheme"
-            class="p-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-            :title="isDark ? t('light_mode') : t('dark_mode')"
-          >
-            <Sun v-if="isDark" class="w-4 h-4 text-amber-400" />
-            <Moon v-else class="w-4 h-4 text-slate-600" />
-          </button>
+        <button
+          @click="installSSL"
+          class="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 transition-colors"
+          :title="t('ssl_install_hint')"
+        >
+          <ShieldCheck class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+          <span>{{ t('install_ssl_btn') }}</span>
+        </button>
 
+        <button
+          @click="toggleLang"
+          class="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+        >
+          English
+        </button>
+
+        <button
+          @click="toggleTheme"
+          class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+          :title="isDark ? t('light_mode') : t('dark_mode')"
+        >
+          <Sun v-if="isDark" class="w-3.5 h-3.5 text-amber-400" />
+          <Moon v-else class="w-3.5 h-3.5 text-slate-600" />
+        </button>
+      </div>
+
+      <!-- In English: Single Brand on Physical Left -->
+      <div v-else class="flex items-center gap-3 wails-no-drag">
+        <img src="/logo.png" alt="LaraGal" class="w-8 h-8 rounded-lg shadow-xs ring-1 ring-blue-500/20 object-contain flex-shrink-0" />
+        <div class="flex items-center gap-2">
+          <span class="text-lg font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
+            v1.0.0
+          </span>
+        </div>
+        <div class="hidden md:block h-5 w-px bg-slate-200 dark:bg-slate-800"></div>
+        <p class="hidden md:block text-xs text-slate-500 dark:text-slate-400 font-medium">
+          Multi-Runtime Local Web Development &amp; Hosting Suite (PHP, Go, Rust, .NET, Python, Node.js)
+        </p>
+      </div>
+
+      <!-- CENTER: Draggable Window Space -->
+      <div class="flex-1 h-full flex items-center justify-center cursor-default"></div>
+
+      <!-- PHYSICAL RIGHT (Single Brand in Arabic; Actions + Controls in English) -->
+      <div v-if="currentLang === 'ar'" class="flex items-center gap-3 wails-no-drag" dir="rtl">
+        <img src="/logo.png" alt="LaraGal" class="w-8 h-8 rounded-lg shadow-xs ring-1 ring-blue-500/20 object-contain flex-shrink-0" />
+        <div class="flex items-center gap-2">
+          <span class="text-lg font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
+            v1.0.0
+          </span>
+        </div>
+        <div class="hidden md:block h-5 w-px bg-slate-200 dark:bg-slate-800"></div>
+        <p class="hidden md:block text-xs text-slate-500 dark:text-slate-400 font-medium" dir="rtl">
+          منصة الاستضافة والتطوير الشاملة لتطبيقات الويب (<bdi>PHP</bdi>، <bdi>Go</bdi>، <bdi>Rust</bdi>، <bdi>.NET</bdi>، <bdi>Python</bdi>، <bdi>Node.js</bdi>)
+        </p>
+      </div>
+
+      <!-- In English: Actions + Window Controls on Physical Right -->
+      <div v-else class="flex items-center gap-2.5 wails-no-drag">
+        <button
+          @click="openNewModal"
+          class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+        >
+          <Plus class="w-3.5 h-3.5" />
+          <span>{{ t('new_project_btn') }}</span>
+        </button>
+
+        <button
+          @click="syncHostsNow"
+          :disabled="isSyncingHosts"
+          class="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/80 transition-colors"
+          :title="t('sync_hosts_hint')"
+        >
+          <RefreshCw class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" :class="{ 'animate-spin': isSyncingHosts }" />
+          <span>{{ t('sync_hosts_btn') }}</span>
+        </button>
+
+        <button
+          @click="installSSL"
+          class="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 transition-colors"
+          :title="t('ssl_install_hint')"
+        >
+          <ShieldCheck class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+          <span>{{ t('install_ssl_btn') }}</span>
+        </button>
+
+        <button
+          @click="toggleLang"
+          class="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+        >
+          العربية
+        </button>
+
+        <button
+          @click="toggleTheme"
+          class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+          :title="isDark ? t('light_mode') : t('dark_mode')"
+        >
+          <Sun v-if="isDark" class="w-3.5 h-3.5 text-amber-400" />
+          <Moon v-else class="w-3.5 h-3.5 text-slate-600" />
+        </button>
+
+        <div class="h-5 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
+
+        <!-- Window Controls: Far Right in English -->
+        <div class="flex items-center gap-1">
           <button
-            @click="openNewModal"
-            class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-all hover:shadow-blue-500/20"
+            @click.stop="minimizeWindow"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            :title="t('minimize')"
           >
-            <Plus class="w-4 h-4" />
-            <span>{{ t('new_project_btn') }}</span>
+            <Minus class="w-3.5 h-3.5" />
+          </button>
+          <button
+            @click.stop="toggleMaximize"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            :title="t('maximize_restore')"
+          >
+            <Square class="w-3 h-3" />
+          </button>
+          <button
+            @click.stop="closeWindow"
+            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-rose-600 hover:text-white transition-colors"
+            :title="t('close_to_background')"
+          >
+            <X class="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
     </header>
 
-    <!-- ================= 3. SCROLLABLE MAIN CONTENT (Scrollbar strictly on LEFT in RTL) ================= -->
-    <main class="flex-1 overflow-y-auto px-6 lg:px-8 py-6 space-y-7">
-      <!-- Custom Toast Notification Banner -->
-      <div v-if="notification" class="p-3.5 rounded-xl border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950/60 text-blue-800 dark:text-blue-200 flex items-center justify-between text-xs animate-fade-in shadow-xs">
-        <div class="flex items-center gap-2">
-          <Info class="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
-          <span>{{ notification }}</span>
-        </div>
-        <button @click="notification = ''" class="text-blue-500 hover:text-blue-700 font-bold px-1">&times;</button>
+    <!-- ================= FLOATING TOAST NOTIFICATION ================= -->
+    <transition
+      enter-active-class="transition duration-200 ease-out"
+      enter-from-class="opacity-0 -translate-y-2"
+      enter-to-class="opacity-100 translate-y-0"
+      leave-active-class="transition duration-150 ease-in"
+      leave-from-class="opacity-100 translate-y-0"
+      leave-to-class="opacity-0 -translate-y-2"
+    >
+      <div
+        v-if="notification"
+        class="fixed top-16 inset-x-0 mx-auto w-fit max-w-lg z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-slate-900/95 dark:bg-slate-100/95 text-white dark:text-slate-900 shadow-xl border border-slate-700/80 dark:border-slate-300 text-xs font-medium backdrop-blur-md"
+      >
+        <Info class="w-4 h-4 text-blue-400 dark:text-blue-600 flex-shrink-0" />
+        <span class="truncate"><bdi>{{ notification }}</bdi></span>
+        <button @click="notification = ''" class="ms-2 opacity-70 hover:opacity-100 text-sm font-bold leading-none">&times;</button>
       </div>
+    </transition>
 
+    <!-- ================= MAIN SCROLLABLE CONTENT ================= -->
+    <main class="flex-1 overflow-y-auto px-6 lg:px-8 py-5 space-y-6">
+      <!-- Projects Directory Strip -->
+      <div class="flex flex-wrap items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/70 backdrop-blur-xs text-xs">
+        <div class="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+          <Folder class="w-4 h-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+          <span class="font-semibold text-slate-800 dark:text-slate-200">{{ t('root_directory') }}:</span>
+          <bdi dir="ltr" class="font-mono text-[11px] font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 select-all">{{ projectsDirectory }}</bdi>
+          <button
+            @click="changeProjectsDirectory"
+            class="text-[11px] font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400 hover:underline ms-1"
+          >
+            {{ t('change_btn') }}
+          </button>
+        </div>
+        <div class="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 font-mono">
+          <span class="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 font-semibold border border-emerald-200 dark:border-emerald-800">
+            <bdi>{{ webSitesCount }}</bdi> {{ t('web_count') }}
+          </span>
+          <span v-if="nonWebCount > 0" class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 font-semibold border border-slate-200 dark:border-slate-700">
+            <bdi>{{ nonWebCount }}</bdi> {{ t('non_web_count') }}
+          </span>
+        </div>
+      </div>
       <!-- Services Section -->
       <section>
         <div class="flex items-center justify-between mb-3.5">
@@ -114,13 +263,13 @@
                     service.running
                       ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
                       : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700',
-                    'text-[10px] px-2.5 py-0.5 rounded-full border font-semibold flex items-center gap-1'
+                    'text-[10px] px-2 py-0.5 rounded-full border font-semibold flex items-center gap-1'
                   ]"
                 >
                   <span class="w-1.5 h-1.5 rounded-full" :class="service.running ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
                   {{ service.running ? t('status_running') : t('status_stopped') }}
                 </span>
-                <span dir="ltr" class="text-xs font-mono font-bold text-slate-500 dark:text-slate-400">:{{ service.port }}</span>
+                <span dir="ltr" class="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">:{{ service.port }}</span>
               </div>
 
               <h3 class="font-bold text-sm text-slate-900 dark:text-slate-100 leading-snug">{{ t(service.name_key) }}</h3>
@@ -132,8 +281,8 @@
             <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end">
               <button
                 @click="promptToggleService(service)"
-                class="text-xs font-bold px-3 py-1 rounded-md transition-colors"
-                :class="service.running ? 'text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40' : 'text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/40'"
+                class="text-xs font-bold px-3 py-1 rounded-md transition-colors border"
+                :class="service.running ? 'text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-900/60 dark:hover:bg-rose-950/40' : 'text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-900/60 dark:hover:bg-blue-950/40'"
               >
                 {{ service.running ? t('stop_btn') : t('start_btn') }}
               </button>
@@ -152,22 +301,22 @@
             </h2>
             <div class="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 font-mono">
               <span class="px-2 py-0.5 rounded-md bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-bold border border-blue-200 dark:border-blue-900">
-                {{ webSitesCount }} {{ t('web_count') }}
+                <bdi>{{ webSitesCount }}</bdi> {{ t('web_count') }}
               </span>
               <span v-if="nonWebCount > 0" class="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                {{ nonWebCount }} {{ t('non_web_count') }}
+                <bdi>{{ nonWebCount }}</bdi> {{ t('non_web_count') }}
               </span>
             </div>
           </div>
 
           <!-- Filter tabs -->
-          <div class="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs font-semibold self-start md:self-auto">
+          <div class="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs font-semibold self-start md:self-auto overflow-x-auto">
             <button
               @click="activeFilter = 'web'"
               class="px-2.5 py-1 rounded-lg transition-all"
               :class="activeFilter === 'web' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
             >
-              {{ t('filter_web') }} ({{ webSitesCount }})
+              {{ t('filter_web') }} (<bdi>{{ webSitesCount }}</bdi>)
             </button>
             <button
               v-if="laravelSitesCount > 0"
@@ -175,7 +324,7 @@
               class="px-2.5 py-1 rounded-lg transition-all"
               :class="activeFilter === 'laravel' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
             >
-              Laravel ({{ laravelSitesCount }})
+              Laravel (<bdi>{{ laravelSitesCount }}</bdi>)
             </button>
             <button
               v-if="phpSitesCount > 0"
@@ -183,7 +332,55 @@
               class="px-2.5 py-1 rounded-lg transition-all"
               :class="activeFilter === 'php' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
             >
-              PHP ({{ phpSitesCount }})
+              PHP (<bdi>{{ phpSitesCount }}</bdi>)
+            </button>
+            <button
+              v-if="goSitesCount > 0"
+              @click="activeFilter = 'go'"
+              class="px-2.5 py-1 rounded-lg transition-all"
+              :class="activeFilter === 'go' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
+            >
+              Go (<bdi>{{ goSitesCount }}</bdi>)
+            </button>
+            <button
+              v-if="rustSitesCount > 0"
+              @click="activeFilter = 'rust'"
+              class="px-2.5 py-1 rounded-lg transition-all"
+              :class="activeFilter === 'rust' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
+            >
+              Rust (<bdi>{{ rustSitesCount }}</bdi>)
+            </button>
+            <button
+              v-if="dotnetSitesCount > 0"
+              @click="activeFilter = 'dotnet'"
+              class="px-2.5 py-1 rounded-lg transition-all"
+              :class="activeFilter === 'dotnet' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
+            >
+              .NET (<bdi>{{ dotnetSitesCount }}</bdi>)
+            </button>
+            <button
+              v-if="pythonSitesCount > 0"
+              @click="activeFilter = 'python'"
+              class="px-2.5 py-1 rounded-lg transition-all"
+              :class="activeFilter === 'python' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
+            >
+              Python (<bdi>{{ pythonSitesCount }}</bdi>)
+            </button>
+            <button
+              v-if="nodeSitesCount > 0"
+              @click="activeFilter = 'node'"
+              class="px-2.5 py-1 rounded-lg transition-all"
+              :class="activeFilter === 'node' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
+            >
+              Node.js (<bdi>{{ nodeSitesCount }}</bdi>)
+            </button>
+            <button
+              v-if="flutterSitesCount > 0"
+              @click="activeFilter = 'flutter'"
+              class="px-2.5 py-1 rounded-lg transition-all"
+              :class="activeFilter === 'flutter' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
+            >
+              Flutter (<bdi>{{ flutterSitesCount }}</bdi>)
             </button>
             <button
               v-if="nonWebCount > 0"
@@ -191,14 +388,14 @@
               class="px-2.5 py-1 rounded-lg transition-all"
               :class="activeFilter === 'non_web' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
             >
-              {{ t('filter_non_web') }} ({{ nonWebCount }})
+              {{ t('filter_non_web') }} (<bdi>{{ nonWebCount }}</bdi>)
             </button>
             <button
               @click="activeFilter = 'all'"
               class="px-2.5 py-1 rounded-lg transition-all"
               :class="activeFilter === 'all' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
             >
-              {{ t('filter_all') }} ({{ sites.length }})
+              {{ t('filter_all') }} (<bdi>{{ sites.length }}</bdi>)
             </button>
           </div>
         </div>
@@ -218,7 +415,7 @@
               class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
             >
               <Folder class="w-3.5 h-3.5" />
-              <span>{{ t('show_all_folders') }} ({{ sites.length }})</span>
+              <span>{{ t('show_all_folders') }} (<bdi>{{ sites.length }}</bdi>)</span>
             </button>
             <button
               @click="openNewModal"
@@ -251,6 +448,13 @@
                 <span v-if="site.is_web" dir="ltr" class="text-xs font-mono px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
                   <span v-if="site.project_type === 'laravel'">Laravel • {{ site.php_version || 'PHP 8.3' }}</span>
                   <span v-else-if="site.project_type === 'php'">{{ site.php_version || 'PHP 8.3' }}</span>
+                  <span v-else-if="site.project_type === 'go'">Go • Proxy :{{ site.proxy_port || 8080 }}</span>
+                  <span v-else-if="site.project_type === 'rust'">Rust • Proxy :{{ site.proxy_port || 8080 }}</span>
+                  <span v-else-if="site.project_type === 'dotnet'">.NET • Proxy :{{ site.proxy_port || 5000 }}</span>
+                  <span v-else-if="site.project_type === 'python'">Python • Proxy :{{ site.proxy_port || 8000 }}</span>
+                  <span v-else-if="site.project_type === 'ruby'">Ruby • Proxy :{{ site.proxy_port || 3000 }}</span>
+                  <span v-else-if="site.project_type === 'java'">Java • Proxy :{{ site.proxy_port || 8080 }}</span>
+                  <span v-else-if="site.project_type === 'flutter'">Flutter Web</span>
                   <span v-else-if="site.project_type === 'static'">HTML / ثابت</span>
                   <span v-else-if="site.project_type === 'node'">Node.js</span>
                   <span v-else>{{ site.type_label || site.php_version || 'Web' }}</span>
@@ -264,26 +468,39 @@
                 {{ site.is_web ? site.domain : (site.name || site.domain) }}
               </h3>
 
-              <!-- Monospace Path Box with Actions -->
+              <!-- Monospace Main Project Path Box with Actions -->
               <div dir="ltr" class="mt-3 flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-[11px] font-mono text-slate-600 dark:text-slate-300">
-                <span class="truncate flex-1 text-left select-all" :title="site.root_path">{{ site.root_path }}</span>
+                <span class="truncate flex-1 text-left select-all" :title="site.path || site.root_path">{{ site.path || site.root_path }}</span>
                 <div class="flex items-center gap-1 flex-shrink-0 ms-2">
                   <button
-                    @click="copyText(site.root_path)"
+                    @click="copyText(site.path || site.root_path)"
                     :title="t('copy_url')"
                     class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                   >
-                    <Check v-if="copiedItem === site.root_path" class="w-3 h-3 text-emerald-500" />
+                    <Check v-if="copiedItem === (site.path || site.root_path)" class="w-3 h-3 text-emerald-500" />
                     <Copy v-else class="w-3 h-3 text-slate-400" />
                   </button>
                   <button
-                    @click="openExplorer(site.root_path)"
+                    @click="openExplorer(site.path || site.root_path)"
                     :title="t('open_folder')"
                     class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
                   >
                     <Folder class="w-3 h-3 text-slate-400" />
                   </button>
                 </div>
+              </div>
+
+              <!-- DocRoot Subfolder indicator if distinct from main project directory -->
+              <div v-if="getDocRootRelative(site)" class="mt-1.5 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-mono">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-sans font-semibold text-slate-400">{{ t('doc_root') }}:</span>
+                  <span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
+                    <bdi>{{ getDocRootRelative(site) }}</bdi>
+                  </span>
+                </div>
+                <span v-if="site.project_type === 'go'" class="text-amber-600 dark:text-amber-400 font-sans font-semibold">
+                  <bdi>Reverse Proxy &rarr; :{{ site.proxy_port || 8080 }}</bdi>
+                </span>
               </div>
             </div>
 
@@ -299,7 +516,7 @@
                   {{ t('local_folder_badge') }}
                 </span>
                 <button
-                  @click="openVSCode(site.root_path)"
+                  @click="openVSCode(site.path || site.root_path)"
                   class="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors ms-1"
                   :title="t('open_vscode')"
                 >
@@ -308,24 +525,37 @@
                 </button>
               </div>
 
-              <a
-                v-if="site.is_web"
-                :href="'https://' + site.domain"
-                target="_blank"
-                @click.prevent="openBrowser('https://' + site.domain)"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/80 transition-colors"
-              >
-                <span>{{ t('open_browser') }}</span>
-                <ExternalLink class="w-3.5 h-3.5" />
-              </a>
-              <button
-                v-else
-                @click="openExplorer(site.root_path)"
-                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-              >
-                <span>{{ t('open_folder_btn') }}</span>
-                <FolderOpen class="w-3.5 h-3.5" />
-              </button>
+              <div class="flex items-center gap-1.5">
+                <button
+                  v-if="site.is_web && ((site.proxy_port && site.proxy_port > 0) || site.project_type === 'go' || site.project_type === 'rust' || site.project_type === 'dotnet' || site.project_type === 'python' || site.project_type === 'ruby' || site.project_type === 'java' || site.project_type === 'proxy')"
+                  @click="toggleProjectApp(site)"
+                  :title="runningProjects[site.domain] ? t('stop_app_btn') : t('start_app_btn')"
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+                  :class="runningProjects[site.domain] ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'"
+                >
+                  <Power class="w-3.5 h-3.5" :class="runningProjects[site.domain] ? 'text-amber-600' : 'text-emerald-600'" />
+                  <span>{{ runningProjects[site.domain] ? t('stop_btn') : t('start_app_btn') }}</span>
+                </button>
+
+                <a
+                  v-if="site.is_web"
+                  :href="'https://' + site.domain"
+                  target="_blank"
+                  @click.prevent="openBrowser('https://' + site.domain)"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/80 transition-colors"
+                >
+                  <span>{{ t('open_browser') }}</span>
+                  <ExternalLink class="w-3.5 h-3.5" />
+                </a>
+                <button
+                  v-else
+                  @click="openExplorer(site.path || site.root_path)"
+                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+                >
+                  <span>{{ t('open_folder_btn') }}</span>
+                  <FolderOpen class="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -343,8 +573,8 @@
           <span class="text-slate-300 dark:text-slate-700">|</span>
           <div class="flex items-center gap-2 font-mono">
             <span>{{ t('root_directory') }}:</span>
-            <button @click="openExplorer(projectsDirectory)" class="text-blue-600 dark:text-blue-400 font-bold hover:underline truncate max-w-[220px]" :title="projectsDirectory">
-              {{ projectsDirectory }}
+            <button @click="openExplorer(normalizedProjectsDir)" class="text-blue-600 dark:text-blue-400 font-bold hover:underline truncate max-w-[220px]" :title="normalizedProjectsDir">
+              {{ normalizedProjectsDir }}
             </button>
             <button
               @click="changeProjectsDirectory"
@@ -355,14 +585,14 @@
               <span>{{ t('change_btn') }}</span>
             </button>
             <select
-              v-if="recentDirectories.length > 1"
+              v-if="normalizedRecentDirs.length > 1"
               @change="switchRecentDirectory($event)"
-              :value="projectsDirectory"
+              :value="normalizedProjectsDir"
               dir="ltr"
-              class="text-[11px] font-sans font-medium px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 focus:outline-none cursor-pointer max-w-[140px] truncate"
+              class="text-[11px] font-sans font-semibold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 focus:outline-none cursor-pointer max-w-[160px] truncate"
               :title="t('recent_directories')"
             >
-              <option v-for="dir in recentDirectories" :key="dir" :value="dir">{{ dir }}</option>
+              <option v-for="dir in normalizedRecentDirs" :key="dir" :value="dir">{{ dir }}</option>
             </select>
           </div>
         </div>
@@ -378,7 +608,7 @@
             <Power class="w-3 h-3 text-rose-500" />
             <span>{{ t('quit_app_btn') }}</span>
           </button>
-          <span class="text-slate-400 dark:text-slate-500 font-bold">LaraGal v1.0.6</span>
+          <span class="text-slate-400 dark:text-slate-500 font-bold">LaraGal v1.0.0</span>
         </div>
       </div>
     </footer>
@@ -583,6 +813,83 @@
         </div>
       </div>
     </div>
+
+    <!-- ================= 9. DIRECTORY SELECTION MODAL (100% Arabic & Bilingual) ================= -->
+    <div v-if="showDirModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
+      <div class="w-full max-w-lg rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 animate-scale-in">
+        <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+          <h3 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+            <FolderOpen class="w-4 h-4 text-amber-500" />
+            {{ t('modal_dir_title') }}
+          </h3>
+          <button @click="showDirModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold">&times;</button>
+        </div>
+
+        <p class="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+          {{ t('modal_dir_desc') }}
+        </p>
+
+        <form novalidate @submit.prevent="applyCustomDirectory" class="space-y-4">
+          <div>
+            <label for="customDirInput" class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              {{ t('dir_path_label') }}
+            </label>
+            <div class="flex items-center gap-2">
+              <input
+                id="customDirInput"
+                v-model="customDirInput"
+                type="text"
+                dir="ltr"
+                class="flex-1 px-3.5 py-2 rounded-xl text-xs font-mono border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="D:\projects"
+              />
+              <button
+                type="button"
+                @click="triggerWindowsPicker"
+                class="px-3 py-2 rounded-xl text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors flex items-center gap-1.5 flex-shrink-0 cursor-pointer"
+                :title="t('browse_windows_btn')"
+              >
+                <FolderOpen class="w-3.5 h-3.5 text-amber-500" />
+                <span class="hidden sm:inline">{{ t('browse_windows_btn') }}</span>
+              </button>
+            </div>
+          </div>
+
+          <div v-if="suggestedPaths.length > 0">
+            <span class="block text-[11px] font-bold text-slate-400 mb-1.5">{{ t('quick_paths') }}:</span>
+            <div class="flex flex-wrap gap-1.5">
+              <button
+                v-for="p in suggestedPaths"
+                :key="p"
+                type="button"
+                dir="ltr"
+                @click="customDirInput = p"
+                class="px-2.5 py-1 rounded-lg text-[11px] font-mono border transition-all cursor-pointer"
+                :class="customDirInput === p ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-950 dark:border-blue-700 dark:text-blue-300 font-bold' : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-750'"
+              >
+                {{ p }}
+              </button>
+            </div>
+          </div>
+
+          <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end gap-2">
+            <button
+              type="button"
+              @click="showDirModal = false"
+              class="px-4 py-2 text-xs font-semibold rounded-xl text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              {{ t('cancel_btn') }}
+            </button>
+            <button
+              type="submit"
+              class="px-5 py-2 text-xs font-bold rounded-xl bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors cursor-pointer"
+            >
+              {{ t('save_dir_btn') }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -591,7 +898,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import {
   Server, Globe, Plus, ShieldCheck, Sun, Moon,
   Lock, ExternalLink, CheckCircle2, Info, Download,
-  Folder, Code, Copy, Check,
+  Folder, Code, Copy, Check, Minus, Square, X,
   AlertCircle, AlertTriangle, FolderOpen, Power, RefreshCw
 } from 'lucide-vue-next'
 
@@ -611,6 +918,63 @@ const confirmService = ref<ServiceItem | null>(null)
 const showQuitConfirm = ref(false)
 const projectsDirectory = ref('C:/laragal/sites')
 const recentDirectories = ref<string[]>([])
+const runningProjects = ref<Record<string, boolean>>({})
+const showDirModal = ref(false)
+const customDirInput = ref('')
+
+const normalizedProjectsDir = computed(() => {
+  return (projectsDirectory.value || '').replace(/\\/g, '/')
+})
+
+const normalizedRecentDirs = computed(() => {
+  const current = normalizedProjectsDir.value
+  const list = recentDirectories.value.map(d => (d || '').replace(/\\/g, '/')).filter(Boolean)
+  if (current && !list.includes(current)) {
+    list.unshift(current)
+  }
+  return Array.from(new Set(list))
+})
+
+const suggestedPaths = computed(() => {
+  const defaults = ['D:/projects', 'C:/laragal/sites', 'C:/projects']
+  const set = new Set<string>()
+  if (normalizedProjectsDir.value) set.add(normalizedProjectsDir.value)
+  for (const p of normalizedRecentDirs.value) {
+    if (p) set.add(p)
+  }
+  for (const d of defaults) {
+    set.add(d)
+  }
+  return Array.from(set).slice(0, 5)
+})
+
+async function toggleProjectApp(site: SiteItem) {
+  const isRunning = runningProjects.value[site.domain] || false
+  const pName = site.name || site.domain
+  if (isRunning) {
+    if ((window as any).go?.main?.App?.StopProjectApp) {
+      await (window as any).go.main.App.StopProjectApp(pName)
+    }
+    runningProjects.value[site.domain] = false
+    notification.value = `تم إيقاف تطبيق ${pName}.`
+  } else {
+    notification.value = `جاري تشغيل تطبيق ${pName}...`
+    if ((window as any).go?.main?.App?.StartProjectApp) {
+      try {
+        const ok = await (window as any).go.main.App.StartProjectApp(site.path || site.root_path, site.proxy_port || 8080)
+        if (ok) {
+          runningProjects.value[site.domain] = true
+          notification.value = `تم تشغيل خادم تطبيق ${pName} بنجاح على المنفذ :${site.proxy_port || 8080}.`
+          return
+        }
+      } catch (err: any) {
+        notification.value = `تعذر تشغيل تطبيق ${pName}: ${err?.message || err}`
+        return
+      }
+    }
+    runningProjects.value[site.domain] = true
+  }
+}
 
 // Synchronize dark class to html document element
 watch(isDark, (val) => {
@@ -633,6 +997,33 @@ function toggleTheme() {
   isDark.value = !isDark.value
 }
 
+// Window control functions connected to Wails backend
+function closeWindow() {
+  if ((window as any).go?.main?.App?.CloseWindow) {
+    (window as any).go.main.App.CloseWindow()
+  } else if ((window as any).runtime?.WindowHide) {
+    (window as any).runtime.WindowHide()
+  } else if ((window as any).runtime?.Quit) {
+    (window as any).runtime.Quit()
+  }
+}
+
+function toggleMaximize() {
+  if ((window as any).go?.main?.App?.ToggleMaximizeWindow) {
+    (window as any).go.main.App.ToggleMaximizeWindow()
+  } else if ((window as any).runtime?.WindowToggleMaximise) {
+    (window as any).runtime.WindowToggleMaximise()
+  }
+}
+
+function minimizeWindow() {
+  if ((window as any).go?.main?.App?.MinimizeWindow) {
+    (window as any).go.main.App.MinimizeWindow()
+  } else if ((window as any).runtime?.WindowMinimise) {
+    (window as any).runtime.WindowMinimise()
+  }
+}
+
 function promptQuitApp() {
   showQuitConfirm.value = true
 }
@@ -649,9 +1040,11 @@ function executeQuitApp() {
 interface SiteItem {
   name?: string
   domain: string
+  path?: string
   root_path: string
   php_version?: string
   php_port?: number
+  proxy_port?: number
   project_type?: string
   type_label?: string
   is_web?: boolean
@@ -665,19 +1058,29 @@ function mapSiteItem(item: any): SiteItem {
     if (projectType === 'laravel') typeLabel = 'Laravel'
     else if (projectType === 'wordpress') typeLabel = 'WordPress'
     else if (projectType === 'php') typeLabel = 'PHP'
+    else if (projectType === 'go') typeLabel = 'Go'
+    else if (projectType === 'rust') typeLabel = 'Rust'
+    else if (projectType === 'dotnet') typeLabel = '.NET / C#'
+    else if (projectType === 'python') typeLabel = 'Python'
+    else if (projectType === 'ruby') typeLabel = 'Ruby'
+    else if (projectType === 'java') typeLabel = 'Java'
+    else if (projectType === 'flutter') typeLabel = 'Flutter Web'
     else if (projectType === 'static') typeLabel = 'HTML / ثابت'
     else if (projectType === 'node') typeLabel = 'Node.js'
     else typeLabel = 'غير ويب / ملفات'
   }
   const rawPhp = item.php_version || item.PHPVersion || ''
-  const phpVersion = rawPhp ? (rawPhp.startsWith('PHP') ? rawPhp : `PHP ${rawPhp}`) : (isWeb && projectType !== 'static' && projectType !== 'node' ? 'PHP 8.3' : '')
+  const isPhpType = projectType === 'laravel' || projectType === 'wordpress' || projectType === 'php'
+  const phpVersion = rawPhp ? (rawPhp.startsWith('PHP') ? rawPhp : `PHP ${rawPhp}`) : (isWeb && isPhpType ? 'PHP 8.3' : '')
 
   return {
     name: item.name || item.Name || item.domain || item.Domain || '',
     domain: item.domain || item.Domain || '',
+    path: item.path || item.Path || '',
     root_path: item.root_path || item.RootPath || '',
     php_version: phpVersion,
-    php_port: item.php_port !== undefined ? item.php_port : (item.PHPPort !== undefined ? item.PHPPort : (isWeb && projectType !== 'static' && projectType !== 'node' ? 9083 : 0)),
+    php_port: item.php_port !== undefined ? item.php_port : (item.PHPPort !== undefined ? item.PHPPort : (isWeb && isPhpType ? 9083 : 0)),
+    proxy_port: item.proxy_port || item.ProxyPort || (projectType === 'go' ? 8080 : 0),
     project_type: projectType,
     type_label: typeLabel,
     is_web: isWeb,
@@ -685,29 +1088,56 @@ function mapSiteItem(item: any): SiteItem {
 }
 
 const sites = ref<SiteItem[]>([])
-const activeFilter = ref<'web' | 'all' | 'laravel' | 'php' | 'non_web'>('web')
+const activeFilter = ref<'web' | 'all' | 'laravel' | 'php' | 'go' | 'rust' | 'dotnet' | 'python' | 'node' | 'flutter' | 'non_web'>('web')
 const isSyncingHosts = ref(false)
 
 const webSites = computed(() => sites.value.filter(s => s.is_web))
 const webSitesCount = computed(() => webSites.value.length)
 const laravelSitesCount = computed(() => sites.value.filter(s => s.project_type === 'laravel').length)
 const phpSitesCount = computed(() => sites.value.filter(s => s.project_type === 'php').length)
+const goSitesCount = computed(() => sites.value.filter(s => s.project_type === 'go' || s.project_type === 'proxy').length)
+const rustSitesCount = computed(() => sites.value.filter(s => s.project_type === 'rust').length)
+const dotnetSitesCount = computed(() => sites.value.filter(s => s.project_type === 'dotnet').length)
+const pythonSitesCount = computed(() => sites.value.filter(s => s.project_type === 'python').length)
+const nodeSitesCount = computed(() => sites.value.filter(s => s.project_type === 'node').length)
+const flutterSitesCount = computed(() => sites.value.filter(s => s.project_type === 'flutter').length)
 const nonWebCount = computed(() => sites.value.filter(s => !s.is_web).length)
 
 const filteredSites = computed(() => {
-  if (activeFilter.value === 'web') {
-    return sites.value.filter(s => s.is_web)
-  }
-  if (activeFilter.value === 'laravel') {
-    return sites.value.filter(s => s.project_type === 'laravel')
-  }
-  if (activeFilter.value === 'php') {
-    return sites.value.filter(s => s.project_type === 'php')
-  }
-  if (activeFilter.value === 'non_web') {
-    return sites.value.filter(s => !s.is_web)
-  }
+  if (activeFilter.value === 'web') return sites.value.filter(s => s.is_web)
+  if (activeFilter.value === 'laravel') return sites.value.filter(s => s.project_type === 'laravel')
+  if (activeFilter.value === 'php') return sites.value.filter(s => s.project_type === 'php')
+  if (activeFilter.value === 'go') return sites.value.filter(s => s.project_type === 'go' || s.project_type === 'proxy')
+  if (activeFilter.value === 'rust') return sites.value.filter(s => s.project_type === 'rust')
+  if (activeFilter.value === 'dotnet') return sites.value.filter(s => s.project_type === 'dotnet')
+  if (activeFilter.value === 'python') return sites.value.filter(s => s.project_type === 'python')
+  if (activeFilter.value === 'node') return sites.value.filter(s => s.project_type === 'node')
+  if (activeFilter.value === 'flutter') return sites.value.filter(s => s.project_type === 'flutter')
+  if (activeFilter.value === 'non_web') return sites.value.filter(s => !s.is_web)
   return sites.value
+})
+
+function getDocRootRelative(site: SiteItem): string {
+  if (!site.path || !site.root_path || site.path === site.root_path) {
+    return ''
+  }
+  const normPath = site.path.replace(/\\/g, '/').replace(/\/$/, '')
+  const normRoot = site.root_path.replace(/\\/g, '/').replace(/\/$/, '')
+  if (normRoot.startsWith(normPath)) {
+    const sub = normRoot.slice(normPath.length).replace(/^\//, '')
+    return sub ? `/${sub}` : ''
+  }
+  return ''
+}
+
+let toastTimer: any = null
+watch(notification, (val) => {
+  if (toastTimer) clearTimeout(toastTimer)
+  if (val) {
+    toastTimer = setTimeout(() => {
+      notification.value = ''
+    }, 4000)
+  }
 })
 
 async function loadSites() {
@@ -733,7 +1163,7 @@ async function loadRecentDirectories() {
     try {
       const rec = await (window as any).go.main.App.GetRecentDirectories()
       if (Array.isArray(rec)) {
-        recentDirectories.value = rec
+        recentDirectories.value = rec.map((p: string) => (p || '').replace(/\\/g, '/'))
       }
     } catch (e) {
       console.warn("Could not load recent directories:", e)
@@ -743,12 +1173,12 @@ async function loadRecentDirectories() {
 
 async function switchRecentDirectory(event: Event) {
   const target = event.target as HTMLSelectElement
-  const chosen = target.value
-  if (!chosen || chosen === projectsDirectory.value) return
+  const chosen = (target.value || '').replace(/\\/g, '/')
+  if (!chosen || chosen === normalizedProjectsDir.value) return
+  projectsDirectory.value = chosen
   if ((window as any).go?.main?.App?.SetProjectsDirectory) {
     try {
       const s = await (window as any).go.main.App.SetProjectsDirectory(chosen)
-      projectsDirectory.value = chosen
       notification.value = `${t('projects_dir_updated')} ${chosen}`
       if (Array.isArray(s)) {
         sites.value = s.map(mapSiteItem)
@@ -760,23 +1190,58 @@ async function switchRecentDirectory(event: Event) {
       }
       await loadRecentDirectories()
     } catch (e: any) {
-      notification.value = `${t('error_changing_dir')}: ${e}`
+      notification.value = `${t('error_changing_dir')}: ${e?.message || e}`
     }
   }
 }
 
-async function changeProjectsDirectory() {
+function changeProjectsDirectory() {
+  customDirInput.value = normalizedProjectsDir.value
+  showDirModal.value = true
+}
+
+async function applyCustomDirectory() {
+  const p = customDirInput.value.trim()
+  if (!p) return
+  showDirModal.value = false
+  const norm = p.replace(/\\/g, '/')
+  projectsDirectory.value = norm
+  if ((window as any).go?.main?.App?.SetProjectsDirectory) {
+    try {
+      const sitesList = await (window as any).go.main.App.SetProjectsDirectory(norm)
+      notification.value = `${t('projects_dir_updated')} ${norm}`
+      if (Array.isArray(sitesList)) {
+        sites.value = sitesList.map(mapSiteItem)
+        if (webSitesCount.value === 0 && sites.value.length > 0 && activeFilter.value === 'web') {
+          activeFilter.value = 'all'
+        } else if (webSitesCount.value > 0 && activeFilter.value === 'all') {
+          activeFilter.value = 'web'
+        }
+      }
+      await loadRecentDirectories()
+    } catch (e: any) {
+      notification.value = `${t('error_changing_dir')}: ${e?.message || e}`
+    }
+  } else {
+    notification.value = `${t('projects_dir_updated')} ${norm}`
+  }
+}
+
+async function triggerWindowsPicker() {
   if ((window as any).go?.main?.App?.SelectProjectsDirectory) {
     try {
-      const newPath = await (window as any).go.main.App.SelectProjectsDirectory()
+      const newPath = await (window as any).go.main.App.SelectProjectsDirectory(currentLang.value)
       if (newPath) {
-        projectsDirectory.value = newPath
-        notification.value = `${t('projects_dir_updated')} ${newPath}`
+        const norm = newPath.replace(/\\/g, '/')
+        customDirInput.value = norm
+        projectsDirectory.value = norm
+        showDirModal.value = false
+        notification.value = `${t('projects_dir_updated')} ${norm}`
         await loadSites()
         await loadRecentDirectories()
       }
     } catch (e: any) {
-      notification.value = `${t('error_changing_dir')}: ${e}`
+      console.warn("Picker error:", e)
     }
   }
 }
@@ -807,7 +1272,7 @@ onMounted(async () => {
   if ((window as any).go?.main?.App?.GetProjectsDirectory) {
     try {
       const p = await (window as any).go.main.App.GetProjectsDirectory()
-      if (p) projectsDirectory.value = p
+      if (p) projectsDirectory.value = p.replace(/\\/g, '/')
     } catch (e) {
       console.warn("Could not load projects directory:", e)
     }

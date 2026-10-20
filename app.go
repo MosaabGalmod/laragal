@@ -291,6 +291,7 @@ func (a *App) AddSite(domain string, rootPath string, phpVersion string) error {
 	newSite := caddy.SiteDef{
 		Name:        strings.TrimSuffix(domain, a.cfg.DomainSuffix),
 		Domain:      domain,
+		Path:        filepath.Dir(rootPath),
 		RootPath:    rootPath,
 		PHPPort:     phpPort,
 		PHPVersion:  phpVersion,
@@ -427,7 +428,202 @@ func (a *App) OpenFolder(folderPath string) error {
 	return winutil.Command("explorer", cleanPath).Start()
 }
 
+func (a *App) IsPortListening(port int) bool {
+	if port <= 0 {
+		return false
+	}
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 200*time.Millisecond)
+	if err == nil {
+		_ = conn.Close()
+		return true
+	}
+	return false
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func findExecutableCandidate(dir string, name string) string {
+	candidates := []string{
+		filepath.Join(dir, name+".exe"),
+		filepath.Join(dir, "server.exe"),
+		filepath.Join(dir, "main.exe"),
+		filepath.Join(dir, "app.exe"),
+		filepath.Join(dir, "target", "release", name+".exe"),
+		filepath.Join(dir, "target", "debug", name+".exe"),
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return ""
+}
+
+func (a *App) StartProjectApp(projectPath string, port int) (bool, error) {
+	cleanPath := filepath.Clean(filepath.FromSlash(projectPath))
+	projectName := filepath.Base(cleanPath)
+
+	if a.IsPortListening(port) {
+		return true, nil
+	}
+
+	// 1. Look for executable in project directory or build targets
+	if targetExe := findExecutableCandidate(cleanPath, projectName); targetExe != "" {
+		err := a.supervisor.StartServiceInDir(projectName, targetExe, []string{}, cleanPath, port)
+		if err != nil {
+			return false, err
+		}
+		// Wait up to 2 seconds for port to open
+		for i := 0; i < 10; i++ {
+			time.Sleep(200 * time.Millisecond)
+			if a.IsPortListening(port) {
+				return true, nil
+			}
+		}
+		return true, nil
+	}
+
+	// 2. Check if Go source is available to run
+	if _, err := os.Stat(filepath.Join(cleanPath, "go.mod")); err == nil {
+		var runTarget string
+		if _, err := os.Stat(filepath.Join(cleanPath, "cmd", "server")); err == nil {
+			runTarget = "./cmd/server"
+		} else {
+			runTarget = "."
+		}
+		err := a.supervisor.StartServiceInDir(projectName, "go", []string{"run", runTarget}, cleanPath, port)
+		if err != nil {
+			return false, err
+		}
+		for i := 0; i < 15; i++ {
+			time.Sleep(300 * time.Millisecond)
+			if a.IsPortListening(port) {
+				return true, nil
+			}
+		}
+		return true, nil
+	}
+
+	// 3. Check for Rust application (cargo run --release)
+	if _, err := os.Stat(filepath.Join(cleanPath, "Cargo.toml")); err == nil {
+		err := a.supervisor.StartServiceInDir(projectName, "cargo", []string{"run", "--release"}, cleanPath, port)
+		if err != nil {
+			return false, err
+		}
+		for i := 0; i < 15; i++ {
+			time.Sleep(300 * time.Millisecond)
+			if a.IsPortListening(port) {
+				return true, nil
+			}
+		}
+		return true, nil
+	}
+
+	// 4. Check for .NET application (dotnet run)
+	hasDotNet := false
+	if entries, err := os.ReadDir(cleanPath); err == nil {
+		for _, e := range entries {
+			if strings.HasSuffix(strings.ToLower(e.Name()), ".csproj") || strings.HasSuffix(strings.ToLower(e.Name()), ".fsproj") {
+				hasDotNet = true
+				break
+			}
+		}
+	}
+	if hasDotNet || fileExists(filepath.Join(cleanPath, "Program.cs")) {
+		err := a.supervisor.StartServiceInDir(projectName, "dotnet", []string{"run"}, cleanPath, port)
+		if err != nil {
+			return false, err
+		}
+		for i := 0; i < 15; i++ {
+			time.Sleep(300 * time.Millisecond)
+			if a.IsPortListening(port) {
+				return true, nil
+			}
+		}
+		return true, nil
+	}
+
+	// 5. Check for Python application (manage.py, main.py, app.py)
+	if _, err := os.Stat(filepath.Join(cleanPath, "manage.py")); err == nil {
+		portArg := fmt.Sprintf("%d", port)
+		err := a.supervisor.StartServiceInDir(projectName, "python", []string{"manage.py", "runserver", portArg}, cleanPath, port)
+		if err != nil {
+			return false, err
+		}
+		for i := 0; i < 15; i++ {
+			time.Sleep(300 * time.Millisecond)
+			if a.IsPortListening(port) {
+				return true, nil
+			}
+		}
+		return true, nil
+	}
+	if _, err := os.Stat(filepath.Join(cleanPath, "main.py")); err == nil {
+		err := a.supervisor.StartServiceInDir(projectName, "python", []string{"main.py"}, cleanPath, port)
+		if err != nil {
+			return false, err
+		}
+		for i := 0; i < 15; i++ {
+			time.Sleep(300 * time.Millisecond)
+			if a.IsPortListening(port) {
+				return true, nil
+			}
+		}
+		return true, nil
+	}
+	if _, err := os.Stat(filepath.Join(cleanPath, "app.py")); err == nil {
+		err := a.supervisor.StartServiceInDir(projectName, "python", []string{"app.py"}, cleanPath, port)
+		if err != nil {
+			return false, err
+		}
+		for i := 0; i < 15; i++ {
+			time.Sleep(300 * time.Millisecond)
+			if a.IsPortListening(port) {
+				return true, nil
+			}
+		}
+		return true, nil
+	}
+
+	// 6. Check for Ruby application (bundle exec rails s or ruby app.rb)
+	if _, err := os.Stat(filepath.Join(cleanPath, "Gemfile")); err == nil {
+		portArg := fmt.Sprintf("%d", port)
+		err := a.supervisor.StartServiceInDir(projectName, "bundle", []string{"exec", "rails", "s", "-p", portArg}, cleanPath, port)
+		if err != nil {
+			return false, err
+		}
+		for i := 0; i < 15; i++ {
+			time.Sleep(300 * time.Millisecond)
+			if a.IsPortListening(port) {
+				return true, nil
+			}
+		}
+		return true, nil
+	}
+
+	return false, fmt.Errorf("لم يتم العثور على ملف تنفيذي أو أداة تشغيل للمشروع %s", projectName)
+}
+
+func (a *App) StopProjectApp(projectName string) error {
+	return a.supervisor.StopService(projectName)
+}
+
 func (a *App) OpenBrowser(targetURL string) error {
+	cleanURL := strings.ToLower(targetURL)
+	for _, s := range a.sites {
+		if s.Domain != "" && strings.Contains(cleanURL, strings.ToLower(s.Domain)) {
+			if (s.ProjectType == "go" || s.ProjectType == "proxy" || s.ProxyPort > 0) && s.ProxyPort > 0 {
+				if !a.IsPortListening(s.ProxyPort) {
+					_, _ = a.StartProjectApp(s.Path, s.ProxyPort)
+				}
+			}
+			break
+		}
+	}
+
 	return winutil.Command("rundll32", "url.dll,FileProtocolHandler", targetURL).Start()
 }
 
@@ -506,7 +702,7 @@ func (a *App) SetProjectsDirectory(dirPath string) ([]caddy.SiteDef, error) {
 }
 
 // SelectProjectsDirectory displays a directory chooser dialog with guaranteed PowerShell fallback and updates configuration
-func (a *App) SelectProjectsDirectory() (string, error) {
+func (a *App) SelectProjectsDirectory(lang string) (string, error) {
 	defaultDir := a.cfg.ProjectsPath
 	if defaultDir == "" {
 		if home, err := os.UserHomeDir(); err == nil && home != "" {
@@ -525,27 +721,33 @@ func (a *App) SelectProjectsDirectory() (string, error) {
 		wailsDir = ""
 	}
 
+	dialogTitle := "اختر مجلد المشاريع"
+	if strings.ToLower(strings.TrimSpace(lang)) == "en" {
+		dialogTitle = "Select Projects Directory"
+	}
+
 	var selectedDir string
 	var err error
 
 	if a.ctx != nil {
 		selectedDir, err = runtime.OpenDirectoryDialog(a.ctx, runtime.OpenDialogOptions{
 			DefaultDirectory: wailsDir,
-			Title:            "اختر مجلد المشاريع / Select Projects Directory",
+			Title:            dialogTitle,
 		})
 	}
 
-	// Guaranteed Windows fallback if COM dialog fails or returned empty
-	if err != nil || selectedDir == "" {
+	// Only trigger PowerShell fallback if the native COM dialog genuinely failed with an error.
+	// If the user simply cancelled or closed the window (err == nil && selectedDir == ""), do not pop up fallback.
+	if err != nil {
 		safeDir := defaultDir
 		if _, statErr := os.Stat(safeDir); statErr != nil {
 			safeDir = ""
 		}
 		var psScript string
 		if safeDir != "" {
-			psScript = fmt.Sprintf(`Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'اختر مجلد المشاريع لـ LaraGal'; $f.SelectedPath = '%s'; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }`, strings.ReplaceAll(safeDir, `\`, `\\`))
+			psScript = fmt.Sprintf(`Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '%s'; $f.SelectedPath = '%s'; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }`, dialogTitle, strings.ReplaceAll(safeDir, `\`, `\\`))
 		} else {
-			psScript = `Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = 'اختر مجلد المشاريع لـ LaraGal'; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }`
+			psScript = fmt.Sprintf(`Add-Type -AssemblyName System.Windows.Forms; $f = New-Object System.Windows.Forms.FolderBrowserDialog; $f.Description = '%s'; if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }`, dialogTitle)
 		}
 		out, psErr := winutil.Command("powershell", "-NoProfile", "-Command", psScript).Output()
 		if psErr == nil {
@@ -557,7 +759,7 @@ func (a *App) SelectProjectsDirectory() (string, error) {
 	}
 
 	if selectedDir == "" {
-		return a.cfg.ProjectsPath, nil
+		return "", nil
 	}
 
 	cleanDir := filepath.Clean(selectedDir)
@@ -598,9 +800,11 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 		scannedSites = append(scannedSites, caddy.SiteDef{
 			Name:        detected.Name,
 			Domain:      detected.Domain,
+			Path:        filepath.ToSlash(detected.Path),
 			RootPath:    filepath.ToSlash(detected.DocRoot),
 			PHPPort:     detected.PHPPort,
 			PHPVersion:  detected.PHPVersion,
+			ProxyPort:   detected.ProxyPort,
 			ProjectType: string(detected.Type),
 			TypeLabel:   detected.TypeLabel,
 			IsWeb:       detected.IsWeb,

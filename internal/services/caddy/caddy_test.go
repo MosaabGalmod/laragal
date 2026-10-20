@@ -28,6 +28,54 @@ func TestGenerateCaddyfile(t *testing.T) {
 			IsWeb:    true,
 		},
 		{
+			Domain:      "jarasdesk.test",
+			Path:        "D:/projects/jarasdesk",
+			RootPath:    "D:/projects/jarasdesk/web",
+			PHPPort:     0,
+			ProxyPort:   8080,
+			ProjectType: "go",
+			IsWeb:       true,
+		},
+		{
+			Domain:      "rustapp.test",
+			Path:        "D:/projects/rustapp",
+			RootPath:    "D:/projects/rustapp/static",
+			PHPPort:     0,
+			ProxyPort:   8080,
+			ProjectType: "rust",
+			TypeLabel:   "Rust / ويب",
+			IsWeb:       true,
+		},
+		{
+			Domain:      "dotnetapp.test",
+			Path:        "D:/projects/dotnetapp",
+			RootPath:    "D:/projects/dotnetapp/wwwroot",
+			PHPPort:     0,
+			ProxyPort:   5000,
+			ProjectType: "dotnet",
+			TypeLabel:   ".NET / C#",
+			IsWeb:       true,
+		},
+		{
+			Domain:      "fastapi.test",
+			Path:        "D:/projects/fastapi",
+			RootPath:    "D:/projects/fastapi/static",
+			PHPPort:     0,
+			ProxyPort:   8000,
+			ProjectType: "python",
+			TypeLabel:   "Python / Web",
+			IsWeb:       true,
+		},
+		{
+			Domain:      "flutterapp.test",
+			Path:        "D:/projects/flutterapp",
+			RootPath:    "D:/projects/flutterapp/build/web",
+			PHPPort:     0,
+			ProjectType: "flutter",
+			TypeLabel:   "Flutter Web",
+			IsWeb:       true,
+		},
+		{
 			Domain:   "nonweb.test",
 			RootPath: "D:/projects/nonweb",
 			PHPPort:  0,
@@ -45,6 +93,18 @@ func TestGenerateCaddyfile(t *testing.T) {
 	}
 	if !strings.Contains(caddyfile, "static.test {") {
 		t.Errorf("missing static.test block")
+	}
+	if !strings.Contains(caddyfile, "reverse_proxy 127.0.0.1:8080") {
+		t.Errorf("missing Go reverse proxy directive")
+	}
+	if !strings.Contains(caddyfile, "dotnetapp.test {") || !strings.Contains(caddyfile, "reverse_proxy 127.0.0.1:5000") {
+		t.Errorf("missing .NET reverse proxy on 5000")
+	}
+	if !strings.Contains(caddyfile, "fastapi.test {") || !strings.Contains(caddyfile, "reverse_proxy 127.0.0.1:8000") {
+		t.Errorf("missing Python reverse proxy on 8000")
+	}
+	if !strings.Contains(caddyfile, "flutterapp.test {") {
+		t.Errorf("missing flutterapp.test block")
 	}
 	if strings.Contains(caddyfile, "nonweb.test") {
 		t.Errorf("non-web site should not be in Caddyfile")

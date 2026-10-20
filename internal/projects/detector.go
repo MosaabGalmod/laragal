@@ -15,6 +15,14 @@ const (
 	TypePHP       ProjectType = "php"
 	TypeStatic    ProjectType = "static"
 	TypeNode      ProjectType = "node"
+	TypeGo        ProjectType = "go"
+	TypeRust      ProjectType = "rust"
+	TypeDotNet    ProjectType = "dotnet"
+	TypePython    ProjectType = "python"
+	TypeRuby      ProjectType = "ruby"
+	TypeJava      ProjectType = "java"
+	TypeFlutter   ProjectType = "flutter"
+	TypeProxy     ProjectType = "proxy"
 	TypeNonWeb    ProjectType = "non_web"
 )
 
@@ -26,6 +34,7 @@ type DetectedProject struct {
 	TypeLabel   string      `json:"type_label"`
 	PHPVersion  string      `json:"php_version"`
 	PHPPort     int         `json:"php_port"`
+	ProxyPort   int         `json:"proxy_port,omitempty"`
 	IsWeb       bool        `json:"is_web"`
 	Domain      string      `json:"domain"`
 }
@@ -165,6 +174,132 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		}
 	}
 
+	// 4b. Check for Go Web Applications (go.mod with web/, cmd/server, templates/, etc.)
+	if fileExists(filepath.Join(cleanDir, "go.mod")) {
+		hasGoWeb := dirExists(filepath.Join(cleanDir, "web")) ||
+			dirExists(filepath.Join(cleanDir, "cmd", "server")) ||
+			dirExists(filepath.Join(cleanDir, "templates")) ||
+			dirExists(filepath.Join(cleanDir, "web", "templates")) ||
+			dirExists(filepath.Join(cleanDir, "web", "static"))
+		if hasGoWeb {
+			result.Type = TypeGo
+			result.TypeLabel = "Go / ويب"
+			result.IsWeb = true
+			result.Domain = name + domainSuffix
+			result.Path = cleanDir
+			result.DocRoot = findFirstExistingDir(cleanDir, "web", "public", "dist", "static")
+			result.PHPPort = 0
+			result.ProxyPort = 8080
+			return result
+		}
+	}
+
+	// 4c. Check for Rust Web Applications (Cargo.toml)
+	if fileExists(filepath.Join(cleanDir, "Cargo.toml")) {
+		hasRustWeb := dirExists(filepath.Join(cleanDir, "src")) ||
+			fileExists(filepath.Join(cleanDir, "src", "main.rs"))
+		if hasRustWeb {
+			result.Type = TypeRust
+			result.TypeLabel = "Rust / ويب"
+			result.IsWeb = true
+			result.Domain = name + domainSuffix
+			result.Path = cleanDir
+			result.DocRoot = findFirstExistingDir(cleanDir, "static", "public", "dist", "")
+			result.PHPPort = 0
+			result.ProxyPort = 8080
+			return result
+		}
+	}
+
+	// 4d. Check for .NET / C# Web Applications (*.csproj, *.fsproj, Program.cs)
+	if hasFilesWithExt(cleanDir, ".csproj") || hasFilesWithExt(cleanDir, ".fsproj") || fileExists(filepath.Join(cleanDir, "Program.cs")) {
+		result.Type = TypeDotNet
+		result.TypeLabel = ".NET / C#"
+		result.IsWeb = true
+		result.Domain = name + domainSuffix
+		result.Path = cleanDir
+		result.DocRoot = findFirstExistingDir(cleanDir, "wwwroot", "public", "")
+		result.PHPPort = 0
+		result.ProxyPort = 5000
+		return result
+	}
+
+	// 4e. Check for Python Web Applications (manage.py, wsgi.py, asgi.py, requirements.txt, pyproject.toml)
+	isPyWeb := fileExists(filepath.Join(cleanDir, "manage.py")) ||
+		fileExists(filepath.Join(cleanDir, "wsgi.py")) ||
+		fileExists(filepath.Join(cleanDir, "asgi.py"))
+	if !isPyWeb && (fileExists(filepath.Join(cleanDir, "requirements.txt")) || fileExists(filepath.Join(cleanDir, "pyproject.toml"))) {
+		reqContent := ""
+		if data, err := os.ReadFile(filepath.Join(cleanDir, "requirements.txt")); err == nil {
+			reqContent += strings.ToLower(string(data))
+		}
+		if data, err := os.ReadFile(filepath.Join(cleanDir, "pyproject.toml")); err == nil {
+			reqContent += strings.ToLower(string(data))
+		}
+		isPyWeb = strings.Contains(reqContent, "fastapi") ||
+			strings.Contains(reqContent, "django") ||
+			strings.Contains(reqContent, "flask") ||
+			strings.Contains(reqContent, "uvicorn") ||
+			strings.Contains(reqContent, "tornado") ||
+			strings.Contains(reqContent, "sanic")
+	}
+	if isPyWeb {
+		result.Type = TypePython
+		result.TypeLabel = "Python / Web"
+		result.IsWeb = true
+		result.Domain = name + domainSuffix
+		result.Path = cleanDir
+		result.DocRoot = findFirstExistingDir(cleanDir, "static", "public", "")
+		result.PHPPort = 0
+		result.ProxyPort = 8000
+		return result
+	}
+
+	// 4f. Check for Ruby on Rails / Sinatra (Gemfile, config.ru)
+	if fileExists(filepath.Join(cleanDir, "Gemfile")) || fileExists(filepath.Join(cleanDir, "config.ru")) {
+		result.Type = TypeRuby
+		result.TypeLabel = "Ruby on Rails"
+		result.IsWeb = true
+		result.Domain = name + domainSuffix
+		result.Path = cleanDir
+		result.DocRoot = findFirstExistingDir(cleanDir, "public", "")
+		result.PHPPort = 0
+		result.ProxyPort = 3000
+		return result
+	}
+
+	// 4g. Check for Java / Kotlin (pom.xml, build.gradle, build.gradle.kts)
+	if fileExists(filepath.Join(cleanDir, "pom.xml")) || fileExists(filepath.Join(cleanDir, "build.gradle")) || fileExists(filepath.Join(cleanDir, "build.gradle.kts")) {
+		result.Type = TypeJava
+		result.TypeLabel = "Java / Spring"
+		result.IsWeb = true
+		result.Domain = name + domainSuffix
+		result.Path = cleanDir
+		result.DocRoot = findFirstExistingDir(cleanDir, "src/main/resources/static", "src/main/resources/public", "public", "")
+		result.PHPPort = 0
+		result.ProxyPort = 8080
+		return result
+	}
+
+	// 4h. Check for Flutter Web (pubspec.yaml with flutter:)
+	pubspecPath := filepath.Join(cleanDir, "pubspec.yaml")
+	if fileExists(pubspecPath) {
+		data, _ := os.ReadFile(pubspecPath)
+		if strings.Contains(string(data), "flutter:") {
+			hasWebTarget := dirExists(filepath.Join(cleanDir, "build", "web")) || dirExists(filepath.Join(cleanDir, "web"))
+			if hasWebTarget {
+				result.Type = TypeFlutter
+				result.TypeLabel = "Flutter Web"
+				result.IsWeb = true
+				result.Domain = name + domainSuffix
+				result.Path = cleanDir
+				result.DocRoot = findFirstExistingDir(cleanDir, "build/web", "web", "")
+				result.PHPPort = 0
+				return result
+			}
+		}
+	}
+
 	// 5. Check for Static HTML sites (index.html, index.htm, default.html) in dist/, public/, build/, or root
 	htmlDirCandidates := []string{"dist", "public", "build", "out", "web", ""}
 	htmlFileNames := []string{"index.html", "index.htm", "default.html", "default.htm"}
@@ -212,18 +347,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		return result
 	}
 
-	// 5d. Check for Python Web applications (Django, Flask, FastAPI)
-	if fileExists(filepath.Join(cleanDir, "manage.py")) ||
-		fileExists(filepath.Join(cleanDir, "wsgi.py")) ||
-		fileExists(filepath.Join(cleanDir, "asgi.py")) {
-		result.Type = TypeStatic
-		result.TypeLabel = "Python / Web"
-		result.IsWeb = true
-		result.Domain = name + domainSuffix
-		result.DocRoot = findFirstExistingDir(cleanDir, "static", "public", "")
-		result.PHPPort = 0
-		return result
-	}
+
 
 	// 6. Check for Node.js web applications (package.json or frontend config files)
 	frontendConfigFiles := []string{

@@ -32,6 +32,10 @@ func NewSupervisor() *Supervisor {
 }
 
 func (s *Supervisor) StartService(name string, exe string, args []string, port int) error {
+	return s.StartServiceInDir(name, exe, args, "", port)
+}
+
+func (s *Supervisor) StartServiceInDir(name string, exe string, args []string, dir string, port int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -40,6 +44,9 @@ func (s *Supervisor) StartService(name string, exe string, args []string, port i
 	}
 
 	cmd := winutil.Command(exe, args...)
+	if dir != "" {
+		cmd.Dir = dir
+	}
 	if err := cmd.Start(); err != nil {
 		return fmt.Errorf("failed to start service %s: %w", name, err)
 	}

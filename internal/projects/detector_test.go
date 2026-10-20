@@ -112,8 +112,8 @@ func TestDetectProject(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(jarasDir, "go.mod"), []byte("module jarasdesk\n\ngo 1.22"), 0644)
 
 	resJaras := DetectProject(jarasDir, "8.3", ".test")
-	if !resJaras.IsWeb || resJaras.Domain != "jarasdesk.test" {
-		t.Fatalf("Expected jarasdesk with web/templates to be detected as web, got: %+v", resJaras)
+	if !resJaras.IsWeb || resJaras.Domain != "jarasdesk.test" || resJaras.Type != TypeGo {
+		t.Fatalf("Expected jarasdesk with web/templates to be detected as TypeGo, got: %+v", resJaras)
 	}
 
 	// 10. Actual project on disk test
@@ -122,5 +122,71 @@ func TestDetectProject(t *testing.T) {
 		if !resActual.IsWeb || resActual.Domain != "jarasdesk.test" {
 			t.Fatalf("Actual D:/projects/jarasdesk not detected as web: %+v", resActual)
 		}
+	}
+
+	// 11. Rust project (Cargo.toml + src/main.rs)
+	rustDir := filepath.Join(tempDir, "rust-service")
+	_ = os.MkdirAll(filepath.Join(rustDir, "src"), 0755)
+	_ = os.WriteFile(filepath.Join(rustDir, "Cargo.toml"), []byte("[package]\nname = \"rust-service\"\nversion = \"0.1.0\"\n"), 0644)
+	_ = os.WriteFile(filepath.Join(rustDir, "src", "main.rs"), []byte("fn main() {}"), 0644)
+
+	resRust := DetectProject(rustDir, "8.3", ".test")
+	if resRust.Type != TypeRust || !resRust.IsWeb || resRust.ProxyPort != 8080 {
+		t.Fatalf("Expected Rust project with TypeRust and port 8080, got: %+v", resRust)
+	}
+
+	// 12. .NET / C# project (*.csproj + wwwroot)
+	dotnetDir := filepath.Join(tempDir, "dotnet-api")
+	_ = os.MkdirAll(filepath.Join(dotnetDir, "wwwroot"), 0755)
+	_ = os.WriteFile(filepath.Join(dotnetDir, "app.csproj"), []byte("<Project Sdk=\"Microsoft.NET.Sdk.Web\"></Project>"), 0644)
+
+	resDotNet := DetectProject(dotnetDir, "8.3", ".test")
+	if resDotNet.Type != TypeDotNet || !resDotNet.IsWeb || resDotNet.ProxyPort != 5000 {
+		t.Fatalf("Expected .NET project with TypeDotNet and port 5000, got: %+v", resDotNet)
+	}
+	if filepath.Base(resDotNet.DocRoot) != "wwwroot" {
+		t.Fatalf("Expected .NET docroot to be wwwroot, got: %s", resDotNet.DocRoot)
+	}
+
+	// 13. Python Web project (manage.py or pyproject.toml with FastAPI/Django)
+	pyDir := filepath.Join(tempDir, "fastapi-app")
+	_ = os.MkdirAll(filepath.Join(pyDir, "static"), 0755)
+	_ = os.WriteFile(filepath.Join(pyDir, "requirements.txt"), []byte("fastapi\nuvicorn\n"), 0644)
+	_ = os.WriteFile(filepath.Join(pyDir, "main.py"), []byte("from fastapi import FastAPI\napp = FastAPI()"), 0644)
+
+	resPy := DetectProject(pyDir, "8.3", ".test")
+	if resPy.Type != TypePython || !resPy.IsWeb || resPy.ProxyPort != 8000 {
+		t.Fatalf("Expected Python project with TypePython and port 8000, got: %+v", resPy)
+	}
+
+	// 14. Ruby on Rails project (Gemfile + config.ru)
+	rubyDir := filepath.Join(tempDir, "rails-app")
+	_ = os.MkdirAll(filepath.Join(rubyDir, "public"), 0755)
+	_ = os.WriteFile(filepath.Join(rubyDir, "Gemfile"), []byte("source 'https://rubygems.org'\ngem 'rails'"), 0644)
+
+	resRuby := DetectProject(rubyDir, "8.3", ".test")
+	if resRuby.Type != TypeRuby || !resRuby.IsWeb || resRuby.ProxyPort != 3000 {
+		t.Fatalf("Expected Ruby project with TypeRuby and port 3000, got: %+v", resRuby)
+	}
+
+	// 15. Java Spring Boot project (pom.xml)
+	javaDir := filepath.Join(tempDir, "spring-app")
+	_ = os.MkdirAll(filepath.Join(javaDir, "src", "main", "resources", "static"), 0755)
+	_ = os.WriteFile(filepath.Join(javaDir, "pom.xml"), []byte("<project><modelVersion>4.0.0</modelVersion><artifactId>spring-app</artifactId></project>"), 0644)
+
+	resJava := DetectProject(javaDir, "8.3", ".test")
+	if resJava.Type != TypeJava || !resJava.IsWeb || resJava.ProxyPort != 8080 {
+		t.Fatalf("Expected Java project with TypeJava and port 8080, got: %+v", resJava)
+	}
+
+	// 16. Flutter Web project (pubspec.yaml + build/web)
+	flutterDir := filepath.Join(tempDir, "flutter-web-app")
+	_ = os.MkdirAll(filepath.Join(flutterDir, "build", "web"), 0755)
+	_ = os.WriteFile(filepath.Join(flutterDir, "pubspec.yaml"), []byte("name: flutter_app\nflutter:\n  uses-material-design: true\n"), 0644)
+	_ = os.WriteFile(filepath.Join(flutterDir, "build", "web", "index.html"), []byte("<!DOCTYPE html><html><body>Flutter</body></html>"), 0644)
+
+	resFlutter := DetectProject(flutterDir, "8.3", ".test")
+	if resFlutter.Type != TypeFlutter || !resFlutter.IsWeb || filepath.Base(resFlutter.DocRoot) != "web" {
+		t.Fatalf("Expected Flutter project with TypeFlutter and docroot build/web, got: %+v", resFlutter)
 	}
 }

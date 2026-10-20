@@ -18,12 +18,12 @@ func main() {
 	app := NewApp()
 
 	err := wails.Run(&options.App{
-		Title:             "LaraGal — بيئة التطوير المحلية لـ PHP و Laravel",
+		Title:             "LaraGal — بيئة الاستضافة والتطوير المحلية الشاملة لتطبيقات الويب",
 		Width:             1280,
 		Height:            820,
 		MinWidth:          960,
 		MinHeight:         640,
-		Frameless:         false,
+		Frameless:         true,
 		HideWindowOnClose: true,
 		StartHidden:       true,
 		SingleInstanceLock: &options.SingleInstanceLock{
@@ -48,9 +48,10 @@ func main() {
 			app,
 		},
 		Windows: &windows.Options{
-			WebviewIsTransparent: false,
-			WindowIsTranslucent:  false,
-			BackdropType:         windows.Mica,
+			WebviewIsTransparent:             false,
+			WindowIsTranslucent:              false,
+			BackdropType:                     windows.Mica,
+			DisableFramelessWindowDecorations: false,
 		},
 	})
 
