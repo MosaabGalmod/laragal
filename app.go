@@ -20,6 +20,7 @@ import (
 	"github.com/laragal/laragal/internal/process"
 	"github.com/laragal/laragal/internal/projects"
 	"github.com/laragal/laragal/internal/services/caddy"
+	"github.com/laragal/laragal/internal/services/mysql"
 	"github.com/laragal/laragal/internal/services/php"
 	"github.com/laragal/laragal/internal/winutil"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -181,6 +182,50 @@ func (a *App) findPHPExecutableForVersion(version string) string {
 	return a.findPHPExecutable()
 }
 
+func (a *App) findRedisExecutable() string {
+	candidates := []string{
+		filepath.Join("bin", "redis", "redis-server.exe"),
+	}
+
+	if localApp := os.Getenv("LOCALAPPDATA"); localApp != "" {
+		wingetGlob := filepath.Join(localApp, "Microsoft", "WinGet", "Packages")
+		if entries, err := os.ReadDir(wingetGlob); err == nil {
+			for _, e := range entries {
+				if strings.Contains(strings.ToLower(e.Name()), "redis") {
+					packageDir := filepath.Join(wingetGlob, e.Name())
+					subEntries, _ := os.ReadDir(packageDir)
+					for _, se := range subEntries {
+						if se.IsDir() {
+							c := filepath.Join(packageDir, se.Name(), "redis-server.exe")
+							if _, statErr := os.Stat(c); statErr == nil {
+								candidates = append(candidates, c)
+							}
+						}
+					}
+					cDirect := filepath.Join(packageDir, "redis-server.exe")
+					if _, statErr := os.Stat(cDirect); statErr == nil {
+						candidates = append(candidates, cDirect)
+					}
+				}
+			}
+		}
+	}
+
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+
+	if path, err := exec.LookPath("redis-server.exe"); err == nil {
+		return path
+	}
+	if path, err := exec.LookPath("redis-server"); err == nil {
+		return path
+	}
+	return ""
+}
+
 func (a *App) ensurePHPServiceRunning(version string) error {
 	if a.supervisor == nil {
 		return nil
@@ -199,7 +244,11 @@ func (a *App) ensurePHPServiceRunning(version string) error {
 		return fmt.Errorf("محرك PHP %s غير متوفر", normVer)
 	}
 
-	return a.supervisor.StartService(serviceName, phpExe, []string{"-b", fmt.Sprintf("127.0.0.1:%d", port)}, port)
+	phpEnv := []string{
+		"PHP_FCGI_CHILDREN=8",
+		"PHP_FCGI_MAX_REQUESTS=10000",
+	}
+	return a.supervisor.StartServiceWithEnv(serviceName, phpExe, []string{"-b", fmt.Sprintf("127.0.0.1:%d", port)}, phpEnv, port)
 }
 
 func (a *App) findCaddyRootCert() string {
@@ -234,10 +283,17 @@ func (a *App) findCaddyRootCert() string {
 }
 
 func (a *App) StartServices() {
-	// 1. Start PHP FastCGI (port 9083)
-	phpExe := a.findPHPExecutable()
-	if phpExe != "" {
-		_ = a.supervisor.StartService("php-8.3", phpExe, []string{"-b", "127.0.0.1:9083"}, 9083)
+	phpEnv := []string{
+		"PHP_FCGI_CHILDREN=8",
+		"PHP_FCGI_MAX_REQUESTS=10000",
+	}
+
+	// 1. Start PHP FastCGI 8.4 and 8.3
+	if php84 := a.findPHPExecutableForVersion("8.4"); php84 != "" {
+		_ = a.supervisor.StartServiceWithEnv("php-8.4", php84, []string{"-b", "127.0.0.1:9084"}, phpEnv, 9084)
+	}
+	if php83 := a.findPHPExecutableForVersion("8.3"); php83 != "" {
+		_ = a.supervisor.StartServiceWithEnv("php-8.3", php83, []string{"-b", "127.0.0.1:9083"}, phpEnv, 9083)
 	}
 
 	// 2. Start Caddy on 443
@@ -282,7 +338,11 @@ func (a *App) ToggleService(name string) (bool, error) {
 			return false, fmt.Errorf("محرك PHP %s غير متوفر. يرجى تنزيله من قسم الحزم المحمولة.", ver)
 		}
 		port := projects.PHPPortForVersion(ver)
-		err := a.supervisor.StartService(name, phpExe, []string{"-b", fmt.Sprintf("127.0.0.1:%d", port)}, port)
+		phpEnv := []string{
+			"PHP_FCGI_CHILDREN=8",
+			"PHP_FCGI_MAX_REQUESTS=10000",
+		}
+		err := a.supervisor.StartServiceWithEnv(name, phpExe, []string{"-b", fmt.Sprintf("127.0.0.1:%d", port)}, phpEnv, port)
 		return err == nil, err
 
 	case "mailpit":
@@ -292,6 +352,17 @@ func (a *App) ToggleService(name string) (bool, error) {
 		}
 		err := a.supervisor.StartService("mailpit", mailpitExe, []string{"--smtp-bind-addr", "127.0.0.1:1025", "--ui-bind-addr", "127.0.0.1:8025"}, 1025)
 		return err == nil, err
+
+	case "redis":
+		redisExe := a.findRedisExecutable()
+		if redisExe == "" {
+			return false, fmt.Errorf("خادم Redis غير متوفر حالياً على الجهاز.")
+		}
+		err := a.supervisor.StartService("redis", redisExe, []string{}, 6379)
+		return err == nil, err
+
+	case "mysql":
+		return false, fmt.Errorf("خادم MySQL يتم تشغيله تلقائياً أو عبر خدمة Windows المدارة لقواعد البيانات.")
 	}
 
 	return false, fmt.Errorf("الخدمة %s غير معروفة", name)
@@ -312,7 +383,7 @@ func (a *App) CheckPortConflict(port int) string {
 }
 
 func (a *App) GetServices() []process.ServiceStatus {
-	serviceNames := []string{"caddy", "php-8.3", "mysql", "redis", "mailpit"}
+	serviceNames := []string{"caddy", "php-8.4", "php-8.3", "mysql", "redis", "mailpit"}
 	result := make([]process.ServiceStatus, 0, len(serviceNames))
 	for _, name := range serviceNames {
 		status, _ := a.supervisor.GetServiceStatus(name)
@@ -890,6 +961,20 @@ type ProjectDiagnostics struct {
 	Suggestions    []string `json:"suggestions"`
 }
 
+// ScanProjectDatabases searches for preexisting schemas (.sql) and local MySQL databases for the given project
+func (a *App) ScanProjectDatabases(projectPath string) ([]mysql.DiscoveredDatabase, error) {
+	return mysql.ScanAllDatabases(projectPath)
+}
+
+// ImportProjectDatabase imports a discovered schema or legacy database and syncs the project's .env
+func (a *App) ImportProjectDatabase(projectPath string, candidate mysql.DiscoveredDatabase) (bool, error) {
+	err := mysql.ImportDiscoveredDatabase(projectPath, candidate)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // DiagnoseProject analyzes a project configuration, checks disk files, ports, and env
 func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 	cleanPath := filepath.Clean(projectPath)
@@ -1182,8 +1267,13 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 	a.sites = scannedSites
 
 	// Ensure needed PHP FastCGI instances are running for all PHP sites
-	for _, s := range a.sites {
+	for i := range a.sites {
+		s := &a.sites[i]
 		if s.IsWeb && s.PHPPort > 0 && s.PHPVersion != "" {
+			if a.findPHPExecutableForVersion(s.PHPVersion) == "" {
+				s.PHPVersion = projects.NormalizePHPVersion(a.cfg.DefaultPHP)
+				s.PHPPort = projects.PHPPortForVersion(s.PHPVersion)
+			}
 			_ = a.ensurePHPServiceRunning(s.PHPVersion)
 		}
 	}

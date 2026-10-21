@@ -154,3 +154,36 @@ func TestRecentDirectories(t *testing.T) {
 		t.Errorf("expected 0 sites in empty dir, got %d", len(sites))
 	}
 }
+
+
+func TestScanProjectDatabasesIntegration(t *testing.T) {
+	tempProject := t.TempDir()
+	sqlDir := filepath.Join(tempProject, "database")
+	_ = os.MkdirAll(sqlDir, 0755)
+
+	sqlFile := filepath.Join(sqlDir, "schema.sql")
+	_ = os.WriteFile(sqlFile, []byte("CREATE TABLE users (id INT PRIMARY KEY);"), 0644)
+
+	app := &App{}
+	results, err := app.ScanProjectDatabases(tempProject)
+	if err != nil {
+		t.Fatalf("unexpected error from ScanProjectDatabases: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Fatalf("expected at least 1 discovered database, got 0")
+	}
+
+	ok, err := app.ImportProjectDatabase(tempProject, results[0])
+	if err != nil {
+		t.Fatalf("unexpected error from ImportProjectDatabase: %v", err)
+	}
+	if !ok {
+		t.Errorf("expected import to return true, got false")
+	}
+
+	// Verify .env was generated
+	if _, err := os.Stat(filepath.Join(tempProject, ".env")); err != nil {
+		t.Errorf("expected .env to be created, but error: %v", err)
+	}
+}
