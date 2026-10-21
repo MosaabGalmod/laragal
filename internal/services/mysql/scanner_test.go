@@ -137,3 +137,40 @@ func TestScanHostForLegacyDatabasesInPaths(t *testing.T) {
 		t.Errorf("expected Type 'legacy_server_dir', got %q", results[0].Type)
 	}
 }
+
+
+func TestScanRealAuditPlatform(t *testing.T) {
+	auditPath := `D:\projects\audit-platform`
+	if _, err := os.Stat(auditPath); os.IsNotExist(err) {
+		t.Skip("D:\\projects\\audit-platform does not exist on this machine")
+	}
+
+	results, err := ScanAllDatabases(auditPath)
+	if err != nil {
+		t.Fatalf("unexpected error scanning audit-platform: %v", err)
+	}
+
+	if len(results) == 0 {
+		t.Fatalf("expected at least 1 discovered database for audit-platform, got 0")
+	}
+
+	t.Logf("Discovered %d candidates for audit-platform:", len(results))
+	for _, r := range results {
+		t.Logf("- Type: %s | File: %s | TargetDB: %s | Tables: %v", r.Type, r.FileName, r.TargetDB, r.FoundTables)
+	}
+
+	// Verify schema.sql was found
+	foundSchema := false
+	for _, r := range results {
+		if r.FileName == "schema.sql" {
+			foundSchema = true
+			if len(r.FoundTables) == 0 {
+				t.Errorf("expected extracted tables from schema.sql, got 0")
+			}
+		}
+	}
+
+	if !foundSchema {
+		t.Errorf("expected to find schema.sql in audit-platform")
+	}
+}
