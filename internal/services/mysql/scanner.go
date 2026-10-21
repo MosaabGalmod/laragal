@@ -163,3 +163,95 @@ func readSampleTables(sqlPath string) []string {
 
 	return ExtractTableNamesFromSQL(string(buf[:n]))
 }
+
+
+var systemDatabases = map[string]bool{
+	"mysql":              true,
+	"information_schema": true,
+	"performance_schema": true,
+	"sys":                true,
+	"#innodb_redo":       true,
+	"#innodb_temp":       true,
+}
+
+var defaultHostDataDirs = []string{
+	`C:\laragon\data\mysql`,
+	`D:\laragon\data\mysql`,
+	`C:\xampp\mysql\data`,
+	`D:\xampp\mysql\data`,
+	`C:\ProgramData\MySQL\MySQL Server 8.0\Data`,
+	`C:\ProgramData\MySQL\MySQL Server 8.4\Data`,
+	`C:\laragal\data\mysql`,
+	`data\mysql`,
+}
+
+// scanHostDirsForDatabases searches given directories for candidate MySQL databases
+func scanHostDirsForDatabases(dirs []string, targetDBHint string) []DiscoveredDatabase {
+	var results []DiscoveredDatabase
+	seen := make(map[string]bool)
+
+	for _, hostDir := range dirs {
+		entries, err := os.ReadDir(hostDir)
+		if err != nil {
+			continue
+		}
+
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+
+			dbName := entry.Name()
+			lowerName := strings.ToLower(dbName)
+
+			if systemDatabases[lowerName] {
+				continue
+			}
+
+			// If targetDBHint is provided, prioritize matching or related names
+			if targetDBHint != "" {
+				hint := strings.ToLower(targetDBHint)
+				if !strings.Contains(lowerName, hint) && !strings.Contains(hint, lowerName) {
+					continue
+				}
+			}
+
+			fullPath := filepath.Join(hostDir, dbName)
+			if seen[fullPath] {
+				continue
+			}
+			seen[fullPath] = true
+
+			desc := fmt.Sprintf("قاعدة بيانات سابقة مكتشفة على الجهاز المحلي (%s)", dbName)
+
+			results = append(results, DiscoveredDatabase{
+				Type:        "legacy_server_dir",
+				SourcePath:  filepath.ToSlash(fullPath),
+				TargetDB:    NormalizeTargetDB(dbName),
+				FileName:    dbName,
+				Description: desc,
+			})
+		}
+	}
+
+	return results
+}
+
+// ScanHostForLegacyDatabases scans standard host directories for databases matching or related to targetDBHint
+func ScanHostForLegacyDatabases(targetDBHint string) []DiscoveredDatabase {
+	return scanHostDirsForDatabases(defaultHostDataDirs, targetDBHint)
+}
+
+// ScanAllDatabases discovers both project-embedded schemas and matching host legacy databases
+func ScanAllDatabases(projectPath string) ([]DiscoveredDatabase, error) {
+	schemas, err := ScanProjectForSchemas(projectPath)
+	if err != nil {
+		return nil, err
+	}
+
+	cleanRoot := filepath.Clean(projectPath)
+	hint := NormalizeTargetDB(filepath.Base(cleanRoot))
+
+	hostDbs := ScanHostForLegacyDatabases(hint)
+	return append(schemas, hostDbs...), nil
+}

@@ -103,3 +103,37 @@ func TestScanProjectForSchemas(t *testing.T) {
 		t.Errorf("did not find schema.sql in results: %v", results)
 	}
 }
+
+func TestScanHostForLegacyDatabasesInPaths(t *testing.T) {
+	tempHostDir, err := os.MkdirTemp("", "laragal-host-db-test-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tempHostDir)
+
+	mysqlDataDir := filepath.Join(tempHostDir, "data", "mysql")
+	// Create user db and system dbs
+	userDbDir := filepath.Join(mysqlDataDir, "audit_platform")
+	sysDbDir := filepath.Join(mysqlDataDir, "mysql")
+	perfDbDir := filepath.Join(mysqlDataDir, "performance_schema")
+
+	for _, d := range []string{userDbDir, sysDbDir, perfDbDir} {
+		if err := os.MkdirAll(d, 0755); err != nil {
+			t.Fatal(err)
+		}
+		// Write a dummy table file
+		_ = os.WriteFile(filepath.Join(d, "users.ibd"), []byte("dummy"), 0644)
+	}
+
+	results := scanHostDirsForDatabases([]string{mysqlDataDir}, "audit_platform")
+	if len(results) != 1 {
+		t.Fatalf("expected 1 user database detected, got %d: %v", len(results), results)
+	}
+
+	if results[0].TargetDB != "audit_platform" {
+		t.Errorf("expected TargetDB 'audit_platform', got %q", results[0].TargetDB)
+	}
+	if results[0].Type != "legacy_server_dir" {
+		t.Errorf("expected Type 'legacy_server_dir', got %q", results[0].Type)
+	}
+}
