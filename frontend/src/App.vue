@@ -276,9 +276,100 @@
               <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-1" :title="t(service.desc_key)">
                 {{ t(service.desc_key) }}
               </p>
+
+              <!-- Credentials & Connection Settings Box -->
+              <div v-if="service.credentials" class="mt-2.5 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800/80 text-[11px] space-y-1 select-text">
+                <!-- MySQL Credentials -->
+                <template v-if="service.id === 'mysql'">
+                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                    <span class="text-slate-400 dark:text-slate-500">{{ t('user_label') }}:</span>
+                    <div class="flex items-center gap-1 font-mono font-semibold">
+                      <span>root</span>
+                      <button @click.stop="copyText('root')" class="p-0.5 hover:text-blue-600 transition-colors" :title="t('copy_url')">
+                        <Check v-if="copiedItem === 'root'" class="w-3 h-3 text-emerald-500" />
+                        <Copy v-else class="w-3 h-3 text-slate-400 hover:text-slate-600" />
+                      </button>
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                    <span class="text-slate-400 dark:text-slate-500">{{ t('password_label') }}:</span>
+                    <span class="text-slate-400 italic font-mono text-[10px]">{{ t('empty_password') }}</span>
+                  </div>
+                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                    <span class="text-slate-400 dark:text-slate-500">{{ t('host_label') }}:</span>
+                    <span dir="ltr" class="font-mono font-semibold text-[10px]">127.0.0.1:3306</span>
+                  </div>
+                </template>
+
+                <!-- Mailpit Settings -->
+                <template v-else-if="service.id === 'mailpit'">
+                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                    <span class="text-slate-400 dark:text-slate-500">{{ t('smtp_label') }}:</span>
+                    <div class="flex items-center gap-1 font-mono font-semibold">
+                      <span dir="ltr">127.0.0.1:1025</span>
+                      <button @click.stop="copyText('127.0.0.1:1025')" class="p-0.5 hover:text-blue-600 transition-colors" :title="t('copy_url')">
+                        <Check v-if="copiedItem === '127.0.0.1:1025'" class="w-3 h-3 text-emerald-500" />
+                        <Copy v-else class="w-3 h-3 text-slate-400 hover:text-slate-600" />
+                      </button>
+                    </div>
+                  </div>
+                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                    <span class="text-slate-400 dark:text-slate-500">{{ t('web_ui_label') }}:</span>
+                    <span dir="ltr" class="font-mono font-semibold text-[10px]">127.0.0.1:8025</span>
+                  </div>
+                </template>
+
+                <!-- Redis Settings -->
+                <template v-else-if="service.id === 'redis'">
+                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                    <span class="text-slate-400 dark:text-slate-500">{{ t('host_label') }}:</span>
+                    <span dir="ltr" class="font-mono font-semibold text-[10px]">127.0.0.1:6379</span>
+                  </div>
+                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                    <span class="text-slate-400 dark:text-slate-500">{{ t('password_label') }}:</span>
+                    <span class="text-slate-400 italic text-[10px]">{{ t('no_auth') }}</span>
+                  </div>
+                </template>
+
+                <!-- PHP FastCGI Settings -->
+                <template v-else-if="service.id.startsWith('php-')">
+                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                    <span class="text-slate-400 dark:text-slate-500">{{ t('workers_label') }}:</span>
+                    <span class="font-mono font-semibold text-emerald-600 dark:text-emerald-400 text-[10px]">8 Workers</span>
+                  </div>
+                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                    <span class="text-slate-400 dark:text-slate-500">{{ t('opcache_enabled') }}:</span>
+                    <span class="text-emerald-600 dark:text-emerald-400 font-semibold text-[10px]">✓</span>
+                  </div>
+                </template>
+
+                <!-- Caddy Settings -->
+                <template v-else-if="service.id === 'caddy'">
+                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                    <span class="text-slate-400 dark:text-slate-500">API:</span>
+                    <span dir="ltr" class="font-mono font-semibold text-[10px]">localhost:2019</span>
+                  </div>
+                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
+                    <span class="text-slate-400 dark:text-slate-500">SSL:</span>
+                    <span class="font-semibold text-emerald-600 dark:text-emerald-400 text-[10px]">Auto *.test</span>
+                  </div>
+                </template>
+              </div>
             </div>
 
-            <div class="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end">
+            <div class="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+              <div>
+                <button
+                  v-if="service.running && service.url"
+                  @click="openBrowser(service.url)"
+                  class="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900/60 transition-colors"
+                  :title="service.url"
+                >
+                  <span>{{ t('open_dashboard') }}</span>
+                  <ExternalLink class="w-3 h-3" />
+                </button>
+              </div>
+
               <button
                 @click="promptToggleService(service)"
                 class="text-xs font-bold px-3 py-1 rounded-md transition-colors border"
@@ -1212,6 +1303,69 @@
             </div>
           </div>
 
+          <!-- Discovered Databases & Schemas -->
+          <div v-if="discoveredDatabases && discoveredDatabases.length > 0" class="p-3.5 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800/60 space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <Database class="w-4 h-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
+                <span class="text-xs font-bold text-indigo-900 dark:text-indigo-200">{{ t('db_discovery_title') }}</span>
+              </div>
+              <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
+                {{ discoveredDatabases.length }} مُكتشف
+              </span>
+            </div>
+
+            <p class="text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed">
+              {{ t('db_discovery_prompt') }}
+            </p>
+
+            <div v-if="dbImportSuccess" class="p-2.5 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-xs text-emerald-800 dark:text-emerald-200 flex items-center gap-2 font-medium">
+              <CheckCircle2 class="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+              <span>{{ t('db_import_success') }}</span>
+            </div>
+
+            <div v-for="(dbItem, idx) in discoveredDatabases" :key="idx" class="p-3 rounded-xl bg-white dark:bg-slate-900 border border-indigo-100 dark:border-indigo-900/50 shadow-xs space-y-2">
+              <div class="flex items-start justify-between gap-2">
+                <div>
+                  <div class="flex items-center gap-1.5">
+                    <span class="font-mono text-xs font-bold text-slate-800 dark:text-slate-100">{{ dbItem.file_name || dbItem.target_db }}</span>
+                    <span class="text-[10px] px-1.5 py-0.5 rounded font-mono uppercase" :class="dbItem.type === 'schema_file' ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300' : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'">
+                      {{ dbItem.type === 'schema_file' ? 'مخطط SQL' : 'مجلد بيانات سابق' }}
+                    </span>
+                  </div>
+                  <span class="text-[11px] text-slate-500 block mt-0.5">{{ dbItem.description }}</span>
+                </div>
+                <button
+                  type="button"
+                  @click="importDiscoveredDatabase(dbItem)"
+                  :disabled="isImportingDB"
+                  class="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs transition-colors shadow-xs flex items-center gap-1.5 flex-shrink-0 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw v-if="isImportingDB" class="w-3.5 h-3.5 animate-spin" />
+                  <Database v-else class="w-3.5 h-3.5" />
+                  <span>{{ isImportingDB ? 'جاري الاستيراد...' : t('db_import_btn') }}</span>
+                </button>
+              </div>
+
+              <!-- Detected tables chips -->
+              <div v-if="dbItem.found_tables && dbItem.found_tables.length > 0" class="pt-1.5 border-t border-slate-100 dark:border-slate-800/80">
+                <span class="text-[10px] text-slate-400 font-semibold block mb-1">{{ t('db_found_tables') }} ({{ dbItem.found_tables.length }}):</span>
+                <div class="flex flex-wrap gap-1">
+                  <span
+                    v-for="tbl in dbItem.found_tables.slice(0, 6)"
+                    :key="tbl"
+                    class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300"
+                  >
+                    {{ tbl }}
+                  </span>
+                  <span v-if="dbItem.found_tables.length > 6" class="text-[10px] text-slate-400 self-center">
+                    +{{ dbItem.found_tables.length - 6 }} أخرى
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- Issues & Suggestions -->
           <div v-if="diagResult.issues && diagResult.issues.length > 0" class="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 space-y-1.5">
             <span class="text-xs font-bold text-rose-700 dark:text-rose-300 block">{{ t('issues_found_title') }}</span>
@@ -1257,7 +1411,7 @@ import {
   Lock, ExternalLink, CheckCircle2, Info, Download,
   Folder, Code, Copy, Check, Minus, Square, X,
   AlertCircle, AlertTriangle, FolderOpen, Power, RefreshCw,
-  Settings, Wrench
+  Settings, Wrench, Database
 } from 'lucide-vue-next'
 
 import arLocale from './locales/ar.json'
@@ -1295,6 +1449,9 @@ const selectedSiteForDiag = ref<SiteItem | null>(null)
 const diagResult = ref<any | null>(null)
 const isDiagnosing = ref(false)
 const isFixingEnv = ref(false)
+const discoveredDatabases = ref<any[]>([])
+const isImportingDB = ref(false)
+const dbImportSuccess = ref(false)
 
 const normalizedProjectsDir = computed(() => {
   return (projectsDirectory.value || '').replace(/\\/g, '/')
@@ -1588,10 +1745,17 @@ async function applyProjectSettings() {
 async function runDiagnostics(site: SiteItem) {
   const targetPath = site.path || site.root_path || site.domain
   isDiagnosing.value = true
+  discoveredDatabases.value = []
+  dbImportSuccess.value = false
   if ((window as any).go?.main?.App?.DiagnoseProject) {
     try {
       const res = await (window as any).go.main.App.DiagnoseProject(targetPath)
       diagResult.value = res
+      // Scan for legacy schemas / databases
+      if ((window as any).go?.main?.App?.ScanProjectDatabases) {
+        const dbs = await (window as any).go.main.App.ScanProjectDatabases(targetPath)
+        discoveredDatabases.value = dbs || []
+      }
     } catch (e: any) {
       console.warn("Diagnostics error:", e)
     }
@@ -1642,6 +1806,27 @@ async function triggerFixEnv() {
     }
   }
   isFixingEnv.value = false
+}
+
+async function importDiscoveredDatabase(candidate: any) {
+  if (!selectedSiteForDiag.value) return
+  const targetPath = selectedSiteForDiag.value.path || selectedSiteForDiag.value.root_path || selectedSiteForDiag.value.domain
+  isImportingDB.value = true
+  try {
+    if ((window as any).go?.main?.App?.ImportProjectDatabase) {
+      const ok = await (window as any).go.main.App.ImportProjectDatabase(targetPath, candidate)
+      if (ok) {
+        dbImportSuccess.value = true
+        notification.value = t('db_import_success')
+        await runDiagnostics(selectedSiteForDiag.value)
+      }
+    }
+  } catch (err: any) {
+    console.error("Import database error:", err)
+    notification.value = `تعذر استيراد قاعدة البيانات: ${err?.message || err}`
+  } finally {
+    isImportingDB.value = false
+  }
 }
 
 let toastTimer: any = null
@@ -1825,15 +2010,91 @@ interface ServiceItem {
   desc_key: string
   port: number
   running: boolean
+  url?: string
+  credentials?: {
+    host?: string
+    user?: string
+    password?: string
+    database?: string
+    smtp_host?: string
+    smtp_port?: number
+    web_port?: number
+    info?: string
+  }
 }
 
 const services = ref<ServiceItem[]>([
-  { id: 'caddy', name_key: 'service_caddy', desc_key: 'service_caddy_desc', port: 443, running: true },
-  { id: 'php-8.4', name_key: 'service_php84', desc_key: 'service_php84_desc', port: 9084, running: true },
-  { id: 'php-8.3', name_key: 'service_php83', desc_key: 'service_php83_desc', port: 9083, running: true },
-  { id: 'mysql', name_key: 'service_mysql', desc_key: 'service_mysql_desc', port: 3306, running: true },
-  { id: 'redis', name_key: 'service_redis', desc_key: 'service_redis_desc', port: 6379, running: false },
-  { id: 'mailpit', name_key: 'service_mailpit', desc_key: 'service_mailpit_desc', port: 1025, running: true },
+  {
+    id: 'caddy',
+    name_key: 'service_caddy',
+    desc_key: 'service_caddy_desc',
+    port: 443,
+    running: true,
+    url: 'http://localhost:2019',
+    credentials: {
+      host: 'localhost',
+      info: 'Admin: :2019 / SSL Root'
+    }
+  },
+  {
+    id: 'php-8.4',
+    name_key: 'service_php84',
+    desc_key: 'service_php84_desc',
+    port: 9084,
+    running: true,
+    credentials: {
+      host: '127.0.0.1',
+      info: 'FastCGI / 8 Workers'
+    }
+  },
+  {
+    id: 'php-8.3',
+    name_key: 'service_php83',
+    desc_key: 'service_php83_desc',
+    port: 9083,
+    running: true,
+    credentials: {
+      host: '127.0.0.1',
+      info: 'FastCGI / 8 Workers'
+    }
+  },
+  {
+    id: 'mysql',
+    name_key: 'service_mysql',
+    desc_key: 'service_mysql_desc',
+    port: 3306,
+    running: true,
+    credentials: {
+      host: '127.0.0.1',
+      user: 'root',
+      password: '',
+      database: 'laravel'
+    }
+  },
+  {
+    id: 'redis',
+    name_key: 'service_redis',
+    desc_key: 'service_redis_desc',
+    port: 6379,
+    running: false,
+    credentials: {
+      host: '127.0.0.1',
+      password: ''
+    }
+  },
+  {
+    id: 'mailpit',
+    name_key: 'service_mailpit',
+    desc_key: 'service_mailpit_desc',
+    port: 1025,
+    running: true,
+    url: 'http://127.0.0.1:8025',
+    credentials: {
+      smtp_host: '127.0.0.1',
+      smtp_port: 1025,
+      web_port: 8025
+    }
+  },
 ])
 
 
