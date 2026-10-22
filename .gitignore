@@ -8,3 +8,4 @@ data/
 bin/
 laragal.json
 dist-installer/
+dist-portable/
