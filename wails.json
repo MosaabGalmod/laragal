@@ -12,7 +12,7 @@
   "info": {
     "companyName": "LaraGal",
     "productName": "LaraGal",
-    "productVersion": "1.0.0",
+    "productVersion": "1.1.0",
     "copyright": "Copyright 2026",
     "comments": "Multi-Runtime Local Web Development & Hosting Suite (PHP, Go, Rust, .NET, Python, Node.js)"
   }

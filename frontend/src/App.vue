@@ -104,7 +104,7 @@
         <div class="flex items-center gap-2">
           <span class="text-lg font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
           <span class="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
-            v1.0.0
+            v1.1.0
           </span>
         </div>
         <div class="hidden md:block h-5 w-px bg-slate-200 dark:bg-slate-800"></div>
@@ -122,7 +122,7 @@
         <div class="flex items-center gap-2">
           <span class="text-lg font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
           <span class="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
-            v1.0.0
+            v1.1.0
           </span>
         </div>
         <div class="hidden md:block h-5 w-px bg-slate-200 dark:bg-slate-800"></div>
@@ -764,7 +764,7 @@
             <Power class="w-3 h-3 text-rose-500" />
             <span>{{ t('quit_app_btn') }}</span>
           </button>
-          <span class="text-slate-400 dark:text-slate-500 font-bold">LaraGal v1.0.0</span>
+          <span class="text-slate-400 dark:text-slate-500 font-bold">LaraGal v1.1.0</span>
         </div>
       </div>
     </footer>

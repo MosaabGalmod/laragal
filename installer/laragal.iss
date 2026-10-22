@@ -2,7 +2,7 @@
 ; https://github.com/MosaabGalmod/laragal
 
 #define MyAppName "LaraGal"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Mosaab Galmod & LaraGal Contributors"
 #define MyAppURL "https://github.com/MosaabGalmod/laragal"
 #define MyAppExeName "laragal.exe"
