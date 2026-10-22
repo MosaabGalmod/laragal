@@ -187,3 +187,11 @@ func TestScanProjectDatabasesIntegration(t *testing.T) {
 		t.Errorf("expected .env to be created, but error: %v", err)
 	}
 }
+
+func TestCheckRuntimeUpdates(t *testing.T) {
+	app := &App{}
+	updates := app.CheckRuntimeUpdates()
+	if len(updates) == 0 {
+		t.Errorf("expected non-empty updates list")
+	}
+}

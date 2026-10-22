@@ -895,32 +895,60 @@
     <div v-if="showDownloadModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs">
       <div class="w-full max-w-md rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-6 space-y-5 animate-scale-in">
         <div class="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-          <h3 class="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+          <div class="flex items-center gap-2">
             <Download class="w-4 h-4 text-blue-600" />
-            {{ t('modal_download_title') }}
-          </h3>
-          <button @click="showDownloadModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold">&times;</button>
+            <h3 class="font-bold text-base text-slate-900 dark:text-white">{{ t('modal_download_title') }}</h3>
+          </div>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              @click="checkUpdatesNow"
+              :disabled="isCheckingUpdates"
+              class="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="فحص التحديثات الرسمية والأمنية"
+            >
+              <RefreshCw class="w-3 h-3 text-blue-500" :class="{ 'animate-spin': isCheckingUpdates }" />
+              <span>{{ isCheckingUpdates ? 'جاري الفحص...' : 'فحص التحديثات' }}</span>
+            </button>
+            <button @click="showDownloadModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold text-lg leading-none cursor-pointer">&times;</button>
+          </div>
         </div>
 
         <div class="space-y-3 max-h-[60vh] overflow-y-auto px-0.5">
           <div
             v-for="rt in availableRuntimes"
             :key="rt.name"
-            class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 space-y-2"
+            class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 space-y-2 transition-all"
+            :class="{ 'border-rose-300 dark:border-rose-900/60 bg-rose-50/20 dark:bg-rose-950/20': runtimeUpdates[rt.name]?.has_update && runtimeUpdates[rt.name]?.is_security_fix }"
           >
-            <div class="flex items-center justify-between">
-              <div>
-                <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">{{ rt.label }}</h4>
+            <div class="flex items-center justify-between gap-2">
+              <div class="space-y-0.5">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">{{ rt.label }}</h4>
+                  <span
+                    v-if="runtimeUpdates[rt.name]?.has_update && runtimeUpdates[rt.name]?.is_security_fix"
+                    class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-900"
+                  >
+                    <ShieldAlert class="w-2.5 h-2.5" /> ترقية أمنية v{{ runtimeUpdates[rt.name].latest_version }}
+                  </span>
+                  <span
+                    v-else-if="runtimeUpdates[rt.name]?.has_update"
+                    class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-900"
+                  >
+                    <ArrowUpCircle class="w-2.5 h-2.5" /> تحديث متاح v{{ runtimeUpdates[rt.name].latest_version }}
+                  </span>
+                </div>
                 <p class="text-[11px] text-slate-400 font-mono">{{ rt.desc }}</p>
               </div>
               <button
                 @click="triggerDownloadRuntime(rt.name)"
                 :disabled="downloadingRuntime === rt.name"
-                class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1.5 cursor-pointer flex-shrink-0"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer flex-shrink-0"
+                :class="runtimeUpdates[rt.name]?.has_update ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs' : 'bg-blue-600 hover:bg-blue-700 text-white'"
               >
                 <Download class="w-3.5 h-3.5" :class="downloadingRuntime === rt.name ? 'animate-bounce' : ''" />
                 <span>
-                  {{ downloadingRuntime === rt.name ? `${downloadProgress[rt.name] || 0}%` : t('download_now') }}
+                  {{ downloadingRuntime === rt.name ? `${downloadProgress[rt.name] || 0}%` : (runtimeUpdates[rt.name]?.has_update ? 'ترقية بنقرة واحدة' : t('download_now')) }}
                 </span>
               </button>
             </div>
@@ -1421,7 +1449,7 @@ import {
   Lock, ExternalLink, CheckCircle2, Info, Download,
   Folder, Code, Copy, Check, Minus, Square, X,
   AlertCircle, AlertTriangle, FolderOpen, Power, RefreshCw,
-  Settings, Wrench, Database
+  Settings, Wrench, Database, ShieldAlert, ArrowUpCircle
 } from 'lucide-vue-next'
 
 import arLocale from './locales/ar.json'
@@ -1981,6 +2009,17 @@ onMounted(async () => {
         downloadProgress.value[data.name] = Number(data.percent) || 0
       }
     })
+    (window as any).runtime.EventsOn('runtime-updates', (list: any) => {
+      if (Array.isArray(list)) {
+        const map: Record<string, RuntimeUpdateInfo> = {}
+        for (const item of list) {
+          if (item && item.name) {
+            map[item.name] = item
+          }
+        }
+        runtimeUpdates.value = map
+      }
+    })
   }
 
   if ((window as any).go?.main?.App?.GetProjectsDirectory) {
@@ -1999,6 +2038,17 @@ onMounted(async () => {
   ])
 })
 
+interface RuntimeUpdateInfo {
+  name: string
+  current_version: string
+  latest_version: string
+  has_update: boolean
+  is_security_fix: boolean
+  download_url: string
+}
+
+const runtimeUpdates = ref<Record<string, RuntimeUpdateInfo>>({})
+const isCheckingUpdates = ref(false)
 const downloadProgress = ref<Record<string, number>>({})
 
 const availableRuntimes = ref([
@@ -2312,10 +2362,57 @@ async function handleCreateProject() {
   projectError.value = ''
 }
 
+async function checkUpdatesNow() {
+  isCheckingUpdates.value = true
+  if ((window as any).go?.main?.App?.CheckRuntimeUpdates) {
+    try {
+      const list = await (window as any).go.main.App.CheckRuntimeUpdates()
+      if (Array.isArray(list)) {
+        const map: Record<string, RuntimeUpdateInfo> = {}
+        let count = 0
+        for (const item of list) {
+          if (item && item.name) {
+            map[item.name] = item
+            if (item.has_update) count++
+          }
+        }
+        runtimeUpdates.value = map
+        if (count > 0) {
+          notification.value = `تم العثور على ${count} تحديث متاح للحزم والمحركات.`
+        } else {
+          notification.value = 'جميع الحزم والمحركات محدثة إلى أحدث إصدار مستقر.'
+        }
+      }
+    } catch (err: any) {
+      console.warn("Check updates error:", err)
+    }
+  }
+  isCheckingUpdates.value = false
+}
+
 async function triggerDownloadRuntime(name: string) {
   downloadingRuntime.value = name
   downloadProgress.value[name] = 0
   notification.value = `جاري بدء تنزيل وتثبيت حزمة ${name}...`
+
+  if ((window as any).go?.main?.App?.UpgradeRuntime) {
+    try {
+      const msg = await (window as any).go.main.App.UpgradeRuntime(name)
+      downloadingRuntime.value = ''
+      downloadProgress.value[name] = 100
+      if (runtimeUpdates.value[name]) {
+        runtimeUpdates.value[name].has_update = false
+        runtimeUpdates.value[name].current_version = runtimeUpdates.value[name].latest_version
+      }
+      notification.value = msg || `تمت ترقية وتثبيت حزمة ${name} بنجاح.`
+      return
+    } catch (err: any) {
+      console.warn("Upgrade err:", err)
+      downloadingRuntime.value = ''
+      notification.value = `خطأ أثناء ترقية حزمة ${name}: ${err?.message || err}`
+      return
+    }
+  }
 
   if ((window as any).go?.main?.App?.DownloadBinary) {
     try {

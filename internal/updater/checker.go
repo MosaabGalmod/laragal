@@ -1,0 +1,271 @@
+package updater
+
+import (
+	"context"
+	"encoding/json"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/laragal/laragal/internal/winutil"
+)
+
+type RuntimeUpdateInfo struct {
+	Name            string `json:"name"`              // "php-8.4", "caddy", etc.
+	CurrentVersion  string `json:"current_version"`   // e.g. "8.4.4"
+	LatestVersion   string `json:"latest_version"`    // e.g. "8.4.5"
+	HasUpdate       bool   `json:"has_update"`
+	IsSecurityFix   bool   `json:"is_security_fix"`
+	DownloadURL     string `json:"download_url"`
+	ReleaseNotesURL string `json:"release_notes_url"`
+}
+
+type CheckOptions struct {
+	PHPReleasesURL    string
+	HTTPTimeout       time.Duration
+	BaseBinDir        string
+	InstalledVersions map[string]string // Optional manual/mocked overrides for testing
+}
+
+type PHPVersionMeta struct {
+	Version    string
+	IsSecurity bool
+	ZipURL     string
+}
+
+func findZipURLRecursive(node interface{}) string {
+	switch val := node.(type) {
+	case map[string]interface{}:
+		for k, v := range val {
+			if k == "url" {
+				if s, ok := v.(string); ok && strings.HasSuffix(strings.ToLower(s), ".zip") {
+					return s
+				}
+			}
+			if found := findZipURLRecursive(v); found != "" {
+				return found
+			}
+		}
+	case []interface{}:
+		for _, item := range val {
+			if found := findZipURLRecursive(item); found != "" {
+				return found
+			}
+		}
+	}
+	return ""
+}
+
+// ParsePHPReleasesJSON parses windows.php.net releases.json feed
+func ParsePHPReleasesJSON(data []byte) (map[string]PHPVersionMeta, error) {
+	var raw map[string]map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]PHPVersionMeta)
+
+	for minor, versions := range raw {
+		var latestSemver string
+		var meta PHPVersionMeta
+
+		for verKey, vData := range versions {
+			vMap, ok := vData.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			verStr := verKey
+			if v, ok := vMap["version"].(string); ok && v != "" {
+				verStr = v
+			}
+
+			if latestSemver == "" || IsVersionNewer(latestSemver, verStr) {
+				latestSemver = verStr
+				isSec := false
+				if secVal, ok := vMap["security"]; ok {
+					switch s := secVal.(type) {
+					case bool:
+						isSec = s
+					case string:
+						isSec = strings.ToLower(s) == "yes" || strings.ToLower(s) == "true"
+					}
+				}
+
+				zipURL := findZipURLRecursive(vMap)
+
+				meta = PHPVersionMeta{
+					Version:    verStr,
+					IsSecurity: isSec,
+					ZipURL:     zipURL,
+				}
+			}
+		}
+
+		if latestSemver != "" {
+			result[minor] = meta
+		}
+	}
+
+	return result, nil
+}
+
+var fallbackStableVersions = map[string]RuntimeUpdateInfo{
+	"caddy": {
+		Name:          "caddy",
+		LatestVersion: "2.8.4",
+		DownloadURL:   "https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_windows_amd64.zip",
+	},
+	"mailpit": {
+		Name:          "mailpit",
+		LatestVersion: "1.21.8",
+		DownloadURL:   "https://github.com/axllent/mailpit/releases/download/v1.21.8/mailpit-windows-amd64.zip",
+	},
+	"php-8.4": {
+		Name:          "php-8.4",
+		LatestVersion: "8.4.4",
+		DownloadURL:   "https://windows.php.net/downloads/releases/php-8.4.4-nts-Win32-vs17-x64.zip",
+	},
+	"php-8.3": {
+		Name:          "php-8.3",
+		LatestVersion: "8.3.17",
+		DownloadURL:   "https://windows.php.net/downloads/releases/php-8.3.17-nts-Win32-vs16-x64.zip",
+	},
+	"php-8.2": {
+		Name:          "php-8.2",
+		LatestVersion: "8.2.27",
+		DownloadURL:   "https://windows.php.net/downloads/releases/php-8.2.27-nts-Win32-vs16-x64.zip",
+	},
+	"php-8.1": {
+		Name:          "php-8.1",
+		LatestVersion: "8.1.31",
+		DownloadURL:   "https://windows.php.net/downloads/releases/archives/php-8.1.31-nts-Win32-vs16-x64.zip",
+	},
+	"mysql": {
+		Name:          "mysql",
+		LatestVersion: "10.11.10",
+		DownloadURL:   "https://archive.mariadb.org/mariadb-10.11.10/winx64-packages/mariadb-10.11.10-winx64.zip",
+	},
+	"redis": {
+		Name:          "redis",
+		LatestVersion: "5.0.14.1",
+		DownloadURL:   "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip",
+	},
+}
+
+// DetectInstalledBinaryVersion reads local executable outputs to extract active version string
+func DetectInstalledBinaryVersion(binDir string, name string) string {
+	switch name {
+	case "caddy":
+		exe := filepath.Join(binDir, "caddy", "caddy.exe")
+		if _, err := os.Stat(exe); err == nil {
+			out, _ := winutil.Command(exe, "version").CombinedOutput()
+			return ExtractVersion(string(out))
+		}
+	case "mailpit":
+		exe := filepath.Join(binDir, "mailpit", "mailpit.exe")
+		if _, err := os.Stat(exe); err == nil {
+			out, _ := winutil.Command(exe, "version").CombinedOutput()
+			return ExtractVersion(string(out))
+		}
+	case "php-8.4", "php-8.3", "php-8.2", "php-8.1":
+		exe := filepath.Join(binDir, name, "php.exe")
+		if _, err := os.Stat(exe); err != nil {
+			exe = filepath.Join(binDir, name, "php-cgi.exe")
+		}
+		if _, err := os.Stat(exe); err == nil {
+			out, _ := winutil.Command(exe, "-v").CombinedOutput()
+			return ExtractVersion(string(out))
+		}
+	case "mysql":
+		exe := filepath.Join(binDir, "mysql", "bin", "mysqld.exe")
+		if _, err := os.Stat(exe); err != nil {
+			exe = filepath.Join(binDir, "mysql", "mysqld.exe")
+		}
+		if _, err := os.Stat(exe); err == nil {
+			out, _ := winutil.Command(exe, "--version").CombinedOutput()
+			return ExtractVersion(string(out))
+		}
+	case "redis":
+		exe := filepath.Join(binDir, "redis", "redis-server.exe")
+		if _, err := os.Stat(exe); err == nil {
+			out, _ := winutil.Command(exe, "--version").CombinedOutput()
+			return ExtractVersion(string(out))
+		}
+	}
+	return ""
+}
+
+// CheckUpdates inspects available releases and compares them with current local installations
+func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
+	phpURL := opts.PHPReleasesURL
+	if phpURL == "" {
+		phpURL = "https://windows.php.net/downloads/releases/releases.json"
+	}
+	timeout := opts.HTTPTimeout
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+
+	// 1. Fetch live PHP releases feed
+	var livePHPReleases map[string]PHPVersionMeta
+	req, err := http.NewRequestWithContext(ctx, "GET", phpURL, nil)
+	if err == nil {
+		req.Header.Set("User-Agent", "LaraGal-Updater/1.0")
+		client := &http.Client{Timeout: timeout}
+		resp, fetchErr := client.Do(req)
+		if fetchErr == nil && resp.StatusCode == http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			livePHPReleases, _ = ParsePHPReleasesJSON(body)
+		}
+	}
+
+	runtimesToCheck := []string{"caddy", "php-8.4", "php-8.3", "php-8.2", "php-8.1", "mysql", "redis", "mailpit"}
+	results := make([]RuntimeUpdateInfo, 0, len(runtimesToCheck))
+
+	for _, name := range runtimesToCheck {
+		info, exists := fallbackStableVersions[name]
+		if !exists {
+			info = RuntimeUpdateInfo{Name: name}
+		}
+
+		// Detect installed version
+		curVer := ""
+		if opts.InstalledVersions != nil {
+			if v, ok := opts.InstalledVersions[name]; ok {
+				curVer = v
+			}
+		}
+		if curVer == "" && opts.BaseBinDir != "" {
+			curVer = DetectInstalledBinaryVersion(opts.BaseBinDir, name)
+		}
+		info.CurrentVersion = curVer
+
+		// If live PHP releases available, enrich PHP runtimes
+		if strings.HasPrefix(name, "php-") && livePHPReleases != nil {
+			minorKey := strings.TrimPrefix(name, "php-")
+			if meta, ok := livePHPReleases[minorKey]; ok && meta.Version != "" {
+				info.LatestVersion = meta.Version
+				info.IsSecurityFix = meta.IsSecurity
+				if meta.ZipURL != "" {
+					info.DownloadURL = meta.ZipURL
+				}
+			}
+		}
+
+		// Check if update is available
+		if curVer != "" && info.LatestVersion != "" {
+			info.HasUpdate = IsVersionNewer(curVer, info.LatestVersion)
+		} else {
+			info.HasUpdate = false
+		}
+
+		results = append(results, info)
+	}
+
+	return results
+}

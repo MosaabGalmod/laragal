@@ -22,6 +22,7 @@ import (
 	"github.com/laragal/laragal/internal/services/caddy"
 	"github.com/laragal/laragal/internal/services/mysql"
 	"github.com/laragal/laragal/internal/services/php"
+	"github.com/laragal/laragal/internal/updater"
 	"github.com/laragal/laragal/internal/winutil"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -92,6 +93,11 @@ func (a *App) startup(ctx context.Context) {
 		if a.ctx != nil {
 			runtime.EventsEmit(a.ctx, "services-updated", a.GetServices())
 			runtime.EventsEmit(a.ctx, "sites-updated", a.sites)
+		}
+		// Check runtime updates in background without blocking UI
+		updates := a.CheckRuntimeUpdates()
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "runtime-updates", updates)
 		}
 	}()
 }
@@ -604,6 +610,39 @@ func (a *App) DownloadBinary(name string) (string, error) {
 
 	return fmt.Sprintf("تم تنزيل وتثبيت %s بنجاح في %s", name, destDir), nil
 }
+
+// CheckRuntimeUpdates inspects available version upgrades and security releases for managed runtimes
+func (a *App) CheckRuntimeUpdates() []updater.RuntimeUpdateInfo {
+	ctx := context.Background()
+	if a.ctx != nil {
+		ctx = a.ctx
+	}
+	opts := updater.CheckOptions{
+		BaseBinDir: "bin",
+	}
+	return updater.CheckUpdates(ctx, opts)
+}
+
+// UpgradeRuntime stops running service if active, downloads latest release, preserves configs, and restarts service
+func (a *App) UpgradeRuntime(name string) (string, error) {
+	wasRunning := false
+	if status, exists := a.supervisor.GetServiceStatus(name); exists && status.Running {
+		wasRunning = true
+		_ = a.supervisor.StopService(name)
+	}
+
+	msg, err := a.DownloadBinary(name)
+	if err != nil {
+		return "", err
+	}
+
+	if wasRunning {
+		_, _ = a.ToggleService(name)
+	}
+
+	return msg, nil
+}
+
 
 func (a *App) CreateProject(name string, projectType string, phpVersion string) error {
 	projectDir := filepath.Join(a.cfg.ProjectsPath, name)
