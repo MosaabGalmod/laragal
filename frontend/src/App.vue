@@ -902,24 +902,34 @@
           <button @click="showDownloadModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold">&times;</button>
         </div>
 
-        <div class="space-y-3">
+        <div class="space-y-3 max-h-[60vh] overflow-y-auto px-0.5">
           <div
             v-for="rt in availableRuntimes"
             :key="rt.name"
-            class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex items-center justify-between bg-slate-50 dark:bg-slate-850"
+            class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 space-y-2"
           >
-            <div>
-              <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">{{ rt.label }}</h4>
-              <p class="text-[11px] text-slate-400 font-mono">{{ rt.desc }}</p>
+            <div class="flex items-center justify-between">
+              <div>
+                <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">{{ rt.label }}</h4>
+                <p class="text-[11px] text-slate-400 font-mono">{{ rt.desc }}</p>
+              </div>
+              <button
+                @click="triggerDownloadRuntime(rt.name)"
+                :disabled="downloadingRuntime === rt.name"
+                class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1.5 cursor-pointer flex-shrink-0"
+              >
+                <Download class="w-3.5 h-3.5" :class="downloadingRuntime === rt.name ? 'animate-bounce' : ''" />
+                <span>
+                  {{ downloadingRuntime === rt.name ? `${downloadProgress[rt.name] || 0}%` : t('download_now') }}
+                </span>
+              </button>
             </div>
-            <button
-              @click="triggerDownloadRuntime(rt.name)"
-              :disabled="downloadingRuntime === rt.name"
-              class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center gap-1.5"
-            >
-              <Download class="w-3.5 h-3.5" :class="downloadingRuntime === rt.name ? 'animate-bounce' : ''" />
-              <span>{{ downloadingRuntime === rt.name ? t('downloading') : t('download_now') }}</span>
-            </button>
+            <div v-if="downloadingRuntime === rt.name" class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+              <div
+                class="bg-blue-600 h-1.5 rounded-full transition-all duration-200"
+                :style="{ width: `${downloadProgress[rt.name] || 0}%` }"
+              ></div>
+            </div>
           </div>
         </div>
 
@@ -1966,6 +1976,11 @@ onMounted(async () => {
         }
       }
     })
+    (window as any).runtime.EventsOn('download-progress', (data: any) => {
+      if (data && data.name) {
+        downloadProgress.value[data.name] = Number(data.percent) || 0
+      }
+    })
   }
 
   if ((window as any).go?.main?.App?.GetProjectsDirectory) {
@@ -1984,10 +1999,16 @@ onMounted(async () => {
   ])
 })
 
+const downloadProgress = ref<Record<string, number>>({})
+
 const availableRuntimes = ref([
   { name: 'caddy', label: 'Caddy Server v2.8', desc: 'خادم الويب الرئيسي وإدارة شهادات SSL التلقائية' },
   { name: 'php-8.4', label: 'PHP 8.4 (NTS x64)', desc: 'أحدث إصدار رسمي لمحرك PHP' },
   { name: 'php-8.3', label: 'PHP 8.3 (NTS x64)', desc: 'إصدار مستقر موصى به لـ Laravel 11/12' },
+  { name: 'php-8.2', label: 'PHP 8.2 (NTS x64)', desc: 'إصدار مستقر متوافق مع المشاريع السابقة' },
+  { name: 'php-8.1', label: 'PHP 8.1 (NTS x64)', desc: 'إصدار متوافق مع مشاريع PHP 8.1 القديمة' },
+  { name: 'mysql', label: 'MariaDB / MySQL Server', desc: 'خادم قواعد البيانات المحمول مع التهيئة التلقائية' },
+  { name: 'redis', label: 'Redis Server (Windows)', desc: 'خادم الكاش وتخزين الجلسات محلياً' },
   { name: 'mailpit', label: 'Mailpit Server v1.21', desc: 'صيد واختبار رسائل البريد الإلكتروني محلياً' },
 ])
 
@@ -2293,20 +2314,33 @@ async function handleCreateProject() {
 
 async function triggerDownloadRuntime(name: string) {
   downloadingRuntime.value = name
+  downloadProgress.value[name] = 0
   notification.value = `جاري بدء تنزيل وتثبيت حزمة ${name}...`
 
   if ((window as any).go?.main?.App?.DownloadBinary) {
     try {
       const msg = await (window as any).go.main.App.DownloadBinary(name)
       downloadingRuntime.value = ''
+      downloadProgress.value[name] = 100
       notification.value = msg || `تم تجهيز وتثبيت حزمة ${name} بنجاح.`
       return
     } catch (err: any) {
       console.warn("Download err:", err)
+      downloadingRuntime.value = ''
+      notification.value = `خطأ أثناء تنزيل حزمة ${name}: ${err?.message || err}`
+      return
     }
   }
 
+  const interval = setInterval(() => {
+    if ((downloadProgress.value[name] || 0) < 95) {
+      downloadProgress.value[name] = (downloadProgress.value[name] || 0) + 15
+    }
+  }, 200)
+
   setTimeout(() => {
+    clearInterval(interval)
+    downloadProgress.value[name] = 100
     downloadingRuntime.value = ''
     notification.value = `تم تجهيز وتثبيت حزمة ${name} بنجاح في مجلد bin/${name}.`
   }, 1500)

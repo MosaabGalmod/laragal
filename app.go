@@ -226,6 +226,30 @@ func (a *App) findRedisExecutable() string {
 	return ""
 }
 
+func (a *App) findMySQLExecutable() string {
+	candidates := []string{
+		filepath.Join("bin", "mysql", "bin", "mysqld.exe"),
+		filepath.Join("bin", "mysql", "mysqld.exe"),
+		filepath.Join("bin", "mariadb", "bin", "mysqld.exe"),
+		filepath.Join("bin", "mariadb", "mysqld.exe"),
+	}
+
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+
+	if path, err := exec.LookPath("mysqld.exe"); err == nil {
+		return path
+	}
+	if path, err := exec.LookPath("mysqld"); err == nil {
+		return path
+	}
+	return ""
+}
+
+
 func (a *App) ensurePHPServiceRunning(version string) error {
 	if a.supervisor == nil {
 		return nil
@@ -310,6 +334,23 @@ func (a *App) StartServices() {
 	if _, err := os.Stat(mailpitExe); err == nil {
 		_ = a.supervisor.StartService("mailpit", mailpitExe, []string{"--smtp-bind-addr", "127.0.0.1:1025", "--ui-bind-addr", "127.0.0.1:8025"}, 1025)
 	}
+
+	// 4. Start MySQL/MariaDB if portable binary exists and port 3306 is not in use
+	if !a.IsPortListening(3306) {
+		if mysqldExe := a.findMySQLExecutable(); mysqldExe != "" {
+			dataDir := filepath.Join("data", "mysql")
+			if err := mysql.EnsureDataDir(mysqldExe, dataDir); err == nil {
+				absDataDir, _ := filepath.Abs(dataDir)
+				args := []string{
+					fmt.Sprintf("--datadir=%s", absDataDir),
+					"--port=3306",
+					"--bind-address=127.0.0.1",
+					"--console",
+				}
+				_ = a.supervisor.StartService("mysql", mysqldExe, args, 3306)
+			}
+		}
+	}
 }
 
 func (a *App) ToggleService(name string) (bool, error) {
@@ -362,7 +403,29 @@ func (a *App) ToggleService(name string) (bool, error) {
 		return err == nil, err
 
 	case "mysql":
-		return false, fmt.Errorf("خادم MySQL يتم تشغيله تلقائياً أو عبر خدمة Windows المدارة لقواعد البيانات.")
+		mysqldExe := a.findMySQLExecutable()
+		if mysqldExe == "" {
+			if a.IsPortListening(3306) {
+				return true, nil
+			}
+			return false, fmt.Errorf("خادم MySQL/MariaDB المحمول غير متوفر. يمكنك تنزيله من قسم الحزم المحمولة.")
+		}
+		dataDir := filepath.Join("data", "mysql")
+		if err := mysql.EnsureDataDir(mysqldExe, dataDir); err != nil {
+			return false, fmt.Errorf("تعذر تهيئة مجلد بيانات MySQL: %w", err)
+		}
+		if a.IsPortListening(3306) {
+			return true, nil
+		}
+		absDataDir, _ := filepath.Abs(dataDir)
+		args := []string{
+			fmt.Sprintf("--datadir=%s", absDataDir),
+			"--port=3306",
+			"--bind-address=127.0.0.1",
+			"--console",
+		}
+		err := a.supervisor.StartService("mysql", mysqldExe, args, 3306)
+		return err == nil, err
 	}
 
 	return false, fmt.Errorf("الخدمة %s غير معروفة", name)
@@ -387,6 +450,14 @@ func (a *App) GetServices() []process.ServiceStatus {
 	result := make([]process.ServiceStatus, 0, len(serviceNames))
 	for _, name := range serviceNames {
 		status, _ := a.supervisor.GetServiceStatus(name)
+		if name == "mysql" && !status.Running && a.IsPortListening(3306) {
+			status.Running = true
+			status.Port = 3306
+		}
+		if name == "redis" && !status.Running && a.IsPortListening(6379) {
+			status.Running = true
+			status.Port = 6379
+		}
 		result = append(result, status)
 	}
 	return result
@@ -490,18 +561,47 @@ func (a *App) DownloadBinary(name string) (string, error) {
 	zipPath := filepath.Join(tempDir, fmt.Sprintf("%s.zip", name))
 	destDir := filepath.Join("bin", name)
 
-	// Download zip
-	resp, err := winutil.Command("powershell", "-NoProfile", "-Command", fmt.Sprintf("Invoke-WebRequest -Uri '%s' -OutFile '%s'", url, zipPath)).CombinedOutput()
-	if err != nil {
-		return string(resp), err
+	onProgress := func(downloaded int64, total int64, percent int) {
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "download-progress", map[string]interface{}{
+				"name":       name,
+				"downloaded": downloaded,
+				"total":      total,
+				"percent":    percent,
+			})
+		}
 	}
 
-	// Extract zip
-	if err := downloader.ExtractZip(zipPath, destDir); err != nil {
+	ctx := context.Background()
+	if a.ctx != nil {
+		ctx = a.ctx
+	}
+
+	if err := downloader.DownloadFile(ctx, url, zipPath, onProgress); err != nil {
+		_ = os.Remove(zipPath)
 		return "", err
 	}
 
+	if err := downloader.ExtractZip(zipPath, destDir); err != nil {
+		_ = os.Remove(zipPath)
+		return "", err
+	}
 	_ = os.Remove(zipPath)
+
+	if strings.HasPrefix(strings.ToLower(name), "php") {
+		_ = php.EnsurePHPIni(destDir)
+	}
+
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "download-progress", map[string]interface{}{
+			"name":       name,
+			"downloaded": 100,
+			"total":      100,
+			"percent":    100,
+			"completed":  true,
+		})
+	}
+
 	return fmt.Sprintf("تم تنزيل وتثبيت %s بنجاح في %s", name, destDir), nil
 }
 
