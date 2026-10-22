@@ -149,5 +149,9 @@
   "db_target_name": "Target Database",
   "env_fix_failed": "Could not generate .env file automatically",
   "suggestions_title": "Actionable Suggestions:",
-  "issues_found_title": "Issues Detected:"
+  "issues_found_title": "Issues Detected:",
+  "open_adminer": "Adminer",
+  "open_adminer_title": "Manage databases with portable Adminer",
+  "open_project_db_hint": "Open this project's database in Adminer",
+  "db_label": "Database"
 }

@@ -55,6 +55,24 @@
         </button>
 
         <button
+          @click="openAdminer()"
+          class="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/80 transition-colors"
+          :title="t('open_adminer_title')"
+        >
+          <Database class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+          <span>{{ t('open_adminer') }}</span>
+        </button>
+
+        <button
+          @click="openAdminer()"
+          class="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/80 transition-colors"
+          :title="t('open_adminer_title')"
+        >
+          <Database class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+          <span>{{ t('open_adminer') }}</span>
+        </button>
+
+        <button
           @click="installSSL"
           class="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 transition-colors"
           :title="t('ssl_install_hint')"
@@ -358,7 +376,16 @@
             </div>
 
             <div class="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
-              <div>
+              <div class="flex items-center gap-1.5">
+                <button
+                  v-if="service.id === 'mysql' && service.running"
+                  @click="openAdminer()"
+                  class="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60 transition-colors"
+                  :title="t('open_adminer_title')"
+                >
+                  <Database class="w-3 h-3" />
+                  <span>{{ t('open_adminer') }}</span>
+                </button>
                 <button
                   v-if="service.running && service.url"
                   @click="openBrowser(service.url)"
@@ -657,6 +684,15 @@
                   <span>{{ runningProjects[site.domain] ? t('stop_btn') : t('start_app_btn') }}</span>
                 </button>
 
+                <button
+                  v-if="site.is_web && (site.project_type === 'laravel' || site.project_type === 'wordpress' || (site.php_port && site.php_port > 0))"
+                  @click="openAdminer(site.name ? site.name.replace(/-/g, '_') : '')"
+                  class="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-amber-700 bg-slate-50 hover:bg-amber-50 dark:bg-slate-800 dark:hover:bg-amber-950/50 dark:text-slate-300 dark:hover:text-amber-300 border border-slate-200 hover:border-amber-200 dark:border-slate-700 dark:hover:border-amber-800 transition-colors"
+                  :title="t('open_project_db_hint')"
+                >
+                  <Database class="w-3.5 h-3.5 text-amber-500" />
+                  <span class="hidden sm:inline">{{ t('db_label') }}</span>
+                </button>
                 <a
                   v-if="site.is_web"
                   :href="'https://' + site.domain"
@@ -2200,6 +2236,15 @@ function copyText(txt: string) {
 function openExplorer(path: string) {
   if ((window as any).go?.main?.App?.OpenFolder) {
     (window as any).go.main.App.OpenFolder(path)
+  }
+}
+
+function openAdminer(dbName?: string) {
+  if ((window as any).go?.main?.App?.OpenAdminer) {
+    (window as any).go.main.App.OpenAdminer(dbName || '')
+  } else {
+    const dbParam = dbName ? `&db=${encodeURIComponent(dbName)}` : ''
+    openBrowser(`http://localhost:3307/?server=127.0.0.1&username=root${dbParam}`)
   }
 }
 

@@ -119,3 +119,34 @@ func TestGenerateCaddyfile(t *testing.T) {
 		t.Errorf("missing Content-Type header in handle_errors")
 	}
 }
+
+func TestGenerateCaddyfileWithAdminer(t *testing.T) {
+	sites := []caddy.SiteDef{
+		{
+			Domain:   "mysite.test",
+			RootPath: "D:/projects/mysite",
+			PHPPort:  9084,
+			IsWeb:    true,
+		},
+	}
+
+	adminerCfg := caddy.AdminerConfig{
+		Enabled:  true,
+		Domain:   "adminer.test",
+		RootPath: "D:/projects/laragal/data/adminer",
+		PHPPort:  9084,
+		Port:     3307,
+	}
+
+	caddyfile := caddy.GenerateCaddyfile(sites, 2019, adminerCfg)
+
+	if !strings.Contains(caddyfile, "adminer.test, http://localhost:3307 {") {
+		t.Errorf("missing adminer block with dual host and port")
+	}
+	if !strings.Contains(caddyfile, `root * "D:/projects/laragal/data/adminer"`) {
+		t.Errorf("missing adminer root path")
+	}
+	if !strings.Contains(caddyfile, "php_fastcgi 127.0.0.1:9084") {
+		t.Errorf("missing php_fastcgi proxy in adminer block")
+	}
+}

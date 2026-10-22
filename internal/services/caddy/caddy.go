@@ -18,7 +18,15 @@ type SiteDef struct {
 	IsWeb       bool   `json:"is_web"`
 }
 
-func GenerateCaddyfile(sites []SiteDef, adminPort int) string {
+type AdminerConfig struct {
+	Enabled  bool   `json:"enabled"`
+	Domain   string `json:"domain"`
+	RootPath string `json:"root_path"`
+	PHPPort  int    `json:"php_port"`
+	Port     int    `json:"port"`
+}
+
+func GenerateCaddyfile(sites []SiteDef, adminPort int, adminerCfg ...AdminerConfig) string {
 	var sb strings.Builder
 
 	// Global configuration block
@@ -95,6 +103,32 @@ func GenerateCaddyfile(sites []SiteDef, adminPort int) string {
 			sb.WriteString("    try_files {path} {path}/ /index.html /index.htm\n")
 			sb.WriteString("    file_server browse\n")
 		}
+		sb.WriteString("    tls internal\n")
+		sb.WriteString("}\n\n")
+	}
+
+	// Render Adminer database manager virtual host if enabled
+	if len(adminerCfg) > 0 && adminerCfg[0].Enabled {
+		cfg := adminerCfg[0]
+		normalizedRoot := strings.ReplaceAll(cfg.RootPath, "\\", "/")
+		adminerDomain := cfg.Domain
+		if adminerDomain == "" {
+			adminerDomain = "adminer.test"
+		}
+		adminerPort := cfg.Port
+		if adminerPort <= 0 {
+			adminerPort = 3307
+		}
+
+		sb.WriteString(fmt.Sprintf("%s, http://localhost:%d {\n", adminerDomain, adminerPort))
+		sb.WriteString(fmt.Sprintf("    root * \"%s\"\n", normalizedRoot))
+		sb.WriteString("    encode gzip zstd\n")
+		if cfg.PHPPort > 0 {
+			sb.WriteString(fmt.Sprintf("    php_fastcgi 127.0.0.1:%d {\n", cfg.PHPPort))
+			sb.WriteString("        capture_stderr\n")
+			sb.WriteString("    }\n")
+		}
+		sb.WriteString("    file_server\n")
 		sb.WriteString("    tls internal\n")
 		sb.WriteString("}\n\n")
 	}

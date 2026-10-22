@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/laragal/laragal/internal/config"
+	"github.com/laragal/laragal/internal/services/adminer"
 )
 
 func TestProjectsDirectoryLogic(t *testing.T) {
@@ -193,5 +194,27 @@ func TestCheckRuntimeUpdates(t *testing.T) {
 	updates := app.CheckRuntimeUpdates()
 	if len(updates) == 0 {
 		t.Errorf("expected non-empty updates list")
+	}
+}
+
+func TestEnsureAdminerInstalled(t *testing.T) {
+	tempDir := t.TempDir()
+	path, err := adminer.EnsureInstalled(tempDir)
+	if err != nil {
+		t.Fatalf("unexpected error ensuring adminer installed: %v", err)
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		t.Errorf("adminer index.php not created: %v", err)
+	}
+}
+
+func TestGetActivePHPPort(t *testing.T) {
+	cfg := config.NewDefaultConfig()
+	cfg.DefaultPHP = "8.3"
+	app := &App{cfg: cfg}
+	port := app.getActivePHPPort()
+	if port != 9083 {
+		t.Errorf("expected port 9083 for default php 8.3, got %d", port)
 	}
 }

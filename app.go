@@ -19,6 +19,7 @@ import (
 	"github.com/laragal/laragal/internal/privilege"
 	"github.com/laragal/laragal/internal/process"
 	"github.com/laragal/laragal/internal/projects"
+	"github.com/laragal/laragal/internal/services/adminer"
 	"github.com/laragal/laragal/internal/services/caddy"
 	"github.com/laragal/laragal/internal/services/mysql"
 	"github.com/laragal/laragal/internal/services/php"
@@ -88,6 +89,7 @@ func (a *App) startup(ctx context.Context) {
 	// so the Wails window and Vue frontend render immediately with zero delay!
 	go func() {
 		a.StartServices()
+		_ = a.EnsureAdminerInstalled()
 		a.ScanProjects()
 		a.saveSitesCache()
 		if a.ctx != nil {
@@ -581,6 +583,25 @@ func (a *App) DownloadBinary(name string) (string, error) {
 	ctx := context.Background()
 	if a.ctx != nil {
 		ctx = a.ctx
+	}
+
+	if strings.ToLower(name) == "adminer" {
+		adminerDir := filepath.Join("data", "adminer")
+		_ = os.MkdirAll(adminerDir, 0755)
+		adminerPath := filepath.Join(adminerDir, "index.php")
+		if err := downloader.DownloadFile(ctx, url, adminerPath, onProgress); err != nil {
+			return "", err
+		}
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "download-progress", map[string]interface{}{
+				"name":       name,
+				"downloaded": 100,
+				"total":      100,
+				"percent":    100,
+				"completed":  true,
+			})
+		}
+		return fmt.Sprintf("تم تنزيل وتحديث أداة Adminer بنجاح في %s", adminerPath), nil
 	}
 
 	if err := downloader.DownloadFile(ctx, url, zipPath, onProgress); err != nil {
@@ -1475,6 +1496,11 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 			webDomains = append(webDomains, s.Domain)
 		}
 	}
+	suffix := ".test"
+	if a.cfg != nil && a.cfg.DomainSuffix != "" {
+		suffix = a.cfg.DomainSuffix
+	}
+	webDomains = append(webDomains, "adminer"+suffix)
 	go func(domains []string) {
 		_ = hosts.UpdateSystemHosts(domains)
 	}(webDomains)
@@ -1487,7 +1513,19 @@ func (a *App) ReloadCaddy() error {
 	caddyDir := filepath.Join("data", "caddy")
 	_ = os.MkdirAll(caddyDir, 0755)
 	caddyfilePath := filepath.Join(caddyDir, "Caddyfile")
-	caddyContent := caddy.GenerateCaddyfile(a.sites, 2019)
+	absAdminerPath, _ := filepath.Abs(filepath.Join("data", "adminer"))
+	adminerDomain := "adminer.test"
+	if a.cfg != nil && a.cfg.DomainSuffix != "" {
+		adminerDomain = "adminer" + a.cfg.DomainSuffix
+	}
+	adminerCfg := caddy.AdminerConfig{
+		Enabled:  true,
+		Domain:   adminerDomain,
+		RootPath: absAdminerPath,
+		PHPPort:  a.getActivePHPPort(),
+		Port:     3307,
+	}
+	caddyContent := caddy.GenerateCaddyfile(a.sites, 2019, adminerCfg)
 	if err := os.WriteFile(caddyfilePath, []byte(caddyContent), 0644); err != nil {
 		return err
 	}
@@ -1519,6 +1557,11 @@ func (a *App) SyncHosts() (string, error) {
 			webDomains = append(webDomains, s.Domain)
 		}
 	}
+	suffix := ".test"
+	if a.cfg != nil && a.cfg.DomainSuffix != "" {
+		suffix = a.cfg.DomainSuffix
+	}
+	webDomains = append(webDomains, "adminer"+suffix)
 	if err := hosts.UpdateSystemHosts(webDomains); err != nil {
 		return "", err
 	}
@@ -1529,3 +1572,63 @@ func (a *App) SyncHosts() (string, error) {
 	return fmt.Sprintf("تمت مزامنة %d نطاق بنجاح مع ملف hosts المحلي وتحديث كاش DNS.", len(webDomains)), nil
 }
 
+// getActivePHPPort returns the port of the currently running PHP FastCGI instance, or default port
+func (a *App) getActivePHPPort() int {
+	if a.supervisor != nil {
+		for _, v := range []string{"8.4", "8.3", "8.2", "8.1"} {
+			svcName := "php-" + v
+			if st, ok := a.supervisor.GetServiceStatus(svcName); ok && st.Running {
+				return projects.PHPPortForVersion(v)
+			}
+		}
+	}
+	defVer := "8.4"
+	if a.cfg != nil && a.cfg.DefaultPHP != "" {
+		defVer = a.cfg.DefaultPHP
+	}
+	return projects.PHPPortForVersion(defVer)
+}
+
+// EnsureAdminerInstalled verifies that data/adminer/index.php is present or writes embedded release
+func (a *App) EnsureAdminerInstalled() error {
+	_, err := adminer.EnsureInstalled(".")
+	return err
+}
+
+// OpenAdminer starts prerequisites (MySQL, PHP, Caddy) and opens Adminer in browser
+func (a *App) OpenAdminer(dbName string) error {
+	_ = a.EnsureAdminerInstalled()
+
+	// 1. Ensure MySQL is running
+	mysqlStatus, _ := a.supervisor.GetServiceStatus("mysql")
+	if !mysqlStatus.Running && !a.IsPortListening(3306) {
+		_, _ = a.ToggleService("mysql")
+	}
+
+	// 2. Ensure at least one PHP FastCGI instance is running
+	phpRunning := false
+	for _, v := range []string{"8.4", "8.3", "8.2", "8.1"} {
+		if st, ok := a.supervisor.GetServiceStatus("php-" + v); ok && st.Running {
+			phpRunning = true
+			break
+		}
+	}
+	if !phpRunning {
+		defVer := a.cfg.DefaultPHP
+		if defVer == "" {
+			defVer = "8.4"
+		}
+		_ = a.ensurePHPServiceRunning(defVer)
+	}
+
+	// 3. Ensure Caddy is running
+	caddyStatus, _ := a.supervisor.GetServiceStatus("caddy")
+	if !caddyStatus.Running {
+		_, _ = a.ToggleService("caddy")
+	}
+
+	_ = a.ReloadCaddy()
+
+	targetURL := adminer.BuildURL("adminer"+a.cfg.DomainSuffix, 3307, dbName)
+	return a.OpenBrowser(targetURL)
+}

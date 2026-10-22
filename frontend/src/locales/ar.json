@@ -149,5 +149,9 @@
   "db_target_name": "اسم القاعدة المستهدفة",
   "env_fix_failed": "تعذر إنشاء ملف .env تلقائياً",
   "suggestions_title": "الحلول والإجراءات المقترحة:",
-  "issues_found_title": "المشاكل المكتشفة:"
+  "issues_found_title": "المشاكل المكتشفة:",
+  "open_adminer": "Adminer",
+  "open_adminer_title": "إدارة قواعد البيانات عبر أداة Adminer المحمولة",
+  "open_project_db_hint": "فتح قاعدة بيانات هذا المشروع في Adminer",
+  "db_label": "قاعدة البيانات"
 }

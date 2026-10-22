@@ -21,6 +21,7 @@ var defaultURLs = map[string]string{
 	"php-8.1": "https://windows.php.net/downloads/releases/archives/php-8.1.31-nts-Win32-vs16-x64.zip",
 	"mysql":   "https://archive.mariadb.org/mariadb-10.11.10/winx64-packages/mariadb-10.11.10-winx64.zip",
 	"redis":   "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip",
+	"adminer": "https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1.php",
 }
 
 func normalizeBinaryName(name string) string {
