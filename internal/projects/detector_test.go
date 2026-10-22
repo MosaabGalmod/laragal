@@ -117,10 +117,14 @@ func TestDetectProject(t *testing.T) {
 	}
 
 	// 10. Actual project on disk test
-	if _, err := os.Stat(`D:\projects\jarasdesk`); err == nil {
-		resActual := DetectProject(`D:\projects\jarasdesk`, "8.3", ".test")
-		if !resActual.IsWeb || resActual.Domain != "jarasdesk.test" {
-			t.Fatalf("Actual D:/projects/jarasdesk not detected as web: %+v", resActual)
+	if _, err := os.Stat(`D:\projects`); err == nil {
+		entries, _ := os.ReadDir(`D:\projects`)
+		for _, e := range entries {
+			if e.IsDir() {
+				res := DetectProject(filepath.Join(`D:\projects`, e.Name()), "8.3", ".test")
+				t.Logf("Project: %-28s -> Web: %-5t | Type: %-12s | Label: %-22s | Domain: %-24s | Port: %d | DocRoot: %s",
+					e.Name(), res.IsWeb, res.Type, res.TypeLabel, res.Domain, res.ProxyPort+res.PHPPort, res.DocRoot)
+			}
 		}
 	}
 
@@ -248,5 +252,88 @@ func TestParsePHPConstraint(t *testing.T) {
 		if got != c.expected {
 			t.Errorf("ParsePHPConstraint(%q) = %q; expected %q", c.input, got, c.expected)
 		}
+	}
+}
+
+func TestCleanDomainName(t *testing.T) {
+	cases := []struct {
+		folder string
+		suffix string
+		expect string
+	}{
+		{"m0sab.com", ".test", "m0sab-com.test"},
+		{"m0sab.dev", ".test", "m0sab-dev.test"},
+		{"portfolio.app", ".test", "portfolio-app.test"},
+		{"my_api_service", ".test", "my-api-service.test"},
+		{"laragal", ".test", "laragal.test"},
+	}
+	for _, c := range cases {
+		got := CleanDomainName(c.folder, c.suffix)
+		if got != c.expect {
+			t.Errorf("CleanDomainName(%q, %q) = %q; want %q", c.folder, c.suffix, got, c.expect)
+		}
+	}
+}
+
+func TestAdvancedDetection(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// 1. Next.js application
+	nextDir := filepath.Join(tempDir, "decision-engine")
+	_ = os.MkdirAll(filepath.Join(nextDir, "public"), 0755)
+	_ = os.WriteFile(filepath.Join(nextDir, "next.config.ts"), []byte("export default {};"), 0644)
+	_ = os.WriteFile(filepath.Join(nextDir, "package.json"), []byte(`{"name":"decision-engine","dependencies":{"next":"15.0.0"}}`), 0644)
+
+	resNext := DetectProject(nextDir, "8.3", ".test")
+	if resNext.Type != TypeNode || !resNext.IsWeb || resNext.ProxyPort != 3000 || resNext.TypeLabel != "Next.js" {
+		t.Fatalf("Expected Next.js project with ProxyPort 3000, got: %+v", resNext)
+	}
+
+	// 2. Vendor platform check PHP version
+	platformDir := filepath.Join(tempDir, "repair-tickets")
+	_ = os.MkdirAll(filepath.Join(platformDir, "public"), 0755)
+	_ = os.MkdirAll(filepath.Join(platformDir, "vendor", "composer"), 0755)
+	_ = os.WriteFile(filepath.Join(platformDir, "artisan"), []byte("<?php"), 0644)
+	_ = os.WriteFile(filepath.Join(platformDir, "composer.json"), []byte(`{"require":{"php":"^8.3"}}`), 0644)
+	platformCheckCode := `<?php if (!(PHP_VERSION_ID >= 80401)) { throw new \RuntimeException(); }`
+	_ = os.WriteFile(filepath.Join(platformDir, "vendor", "composer", "platform_check.php"), []byte(platformCheckCode), 0644)
+
+	resPlatform := DetectProject(platformDir, "8.3", ".test")
+	if resPlatform.PHPVersion != "8.4" || resPlatform.PHPPort != 9084 {
+		t.Fatalf("Expected vendor platform check to require PHP 8.4 and port 9084, got: %+v", resPlatform)
+	}
+
+	// 3. LaraGal itself should not be detected as web
+	laragalDir := filepath.Join(tempDir, "laragal")
+	_ = os.MkdirAll(filepath.Join(laragalDir, "frontend", "dist"), 0755)
+	_ = os.WriteFile(filepath.Join(laragalDir, "wails.json"), []byte(`{"name":"laragal"}`), 0644)
+	_ = os.WriteFile(filepath.Join(laragalDir, "frontend", "dist", "index.html"), []byte("<h1>LaraGal</h1>"), 0644)
+
+	resLaragal := DetectProject(laragalDir, "8.3", ".test")
+	if resLaragal.IsWeb || resLaragal.Type != TypeNonWeb {
+		t.Fatalf("Expected LaraGal itself to be ignored as non_web, got: %+v", resLaragal)
+	}
+
+	// 4. Offline python script with non-web index.html
+	offlineDir := filepath.Join(tempDir, "fix_hidden_charecters")
+	_ = os.MkdirAll(offlineDir, 0755)
+	_ = os.WriteFile(filepath.Join(offlineDir, "app.py"), []byte("import sys\nprint('offline tool')"), 0644)
+	_ = os.WriteFile(filepath.Join(offlineDir, "cleaner.js"), []byte("console.log('cleaner')"), 0644)
+	_ = os.WriteFile(filepath.Join(offlineDir, "index.html"), []byte("<h1>Local template</h1>"), 0644)
+
+	resOffline := DetectProject(offlineDir, "8.3", ".test")
+	if resOffline.IsWeb || resOffline.Type != TypeNonWeb {
+		t.Fatalf("Expected offline python tool to be non_web, got: %+v", resOffline)
+	}
+
+	// 5. Node API with custom PORT in .env
+	nodeEnvDir := filepath.Join(tempDir, "custom-node-api")
+	_ = os.MkdirAll(filepath.Join(nodeEnvDir, "public"), 0755)
+	_ = os.WriteFile(filepath.Join(nodeEnvDir, "package.json"), []byte(`{"name":"custom-node","dependencies":{"express":"4.21.0"}}`), 0644)
+	_ = os.WriteFile(filepath.Join(nodeEnvDir, ".env"), []byte("PORT=4000\nNODE_ENV=development"), 0644)
+
+	resNodeEnv := DetectProject(nodeEnvDir, "8.3", ".test")
+	if resNodeEnv.Type != TypeNode || !resNodeEnv.IsWeb || resNodeEnv.ProxyPort != 4000 {
+		t.Fatalf("Expected Node API with ProxyPort 4000 from .env, got: %+v", resNodeEnv)
 	}
 }

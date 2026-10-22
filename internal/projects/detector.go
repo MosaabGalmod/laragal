@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -71,6 +72,31 @@ func findFirstExistingDir(baseDir string, subDirs ...string) string {
 		}
 	}
 	return baseDir
+}
+
+func parseEnvPort(dir string) int {
+	envFiles := []string{".env", ".env.local", ".env.development"}
+	for _, envFile := range envFiles {
+		content, err := os.ReadFile(filepath.Join(dir, envFile))
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(content), "\n")
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "#") {
+				continue
+			}
+			parts := strings.SplitN(line, "=", 2)
+			if len(parts) == 2 && strings.TrimSpace(parts[0]) == "PORT" {
+				val := strings.Trim(strings.TrimSpace(parts[1]), "\"'")
+				if p, err := strconv.Atoi(val); err == nil && p > 0 && p < 65536 {
+					return p
+				}
+			}
+		}
+	}
+	return 0
 }
 
 // PHPPortForVersion returns the FastCGI port for a given PHP version string
@@ -164,12 +190,62 @@ func ParsePHPConstraint(constraint string) string {
 	return ""
 }
 
+// CleanDomainName generates a clean, RFC-compliant domain name replacing dots and underscores
+func CleanDomainName(folderName string, domainSuffix string) string {
+	clean := strings.TrimSpace(folderName)
+	clean = strings.ToLower(clean)
+	// Replace dots, underscores, and spaces with hyphens to ensure valid single-level DNS labels
+	clean = strings.ReplaceAll(clean, ".", "-")
+	clean = strings.ReplaceAll(clean, "_", "-")
+	clean = strings.ReplaceAll(clean, " ", "-")
+	clean = strings.Trim(clean, "-")
+	if clean == "" {
+		clean = "app"
+	}
+	if !strings.HasPrefix(domainSuffix, ".") {
+		domainSuffix = "." + domainSuffix
+	}
+	return clean + domainSuffix
+}
+
+// DetectPlatformCheckPHPVersion inspects vendor/composer/platform_check.php for installed PHP requirements
+func DetectPlatformCheckPHPVersion(projectDir string) string {
+	candidatePaths := []string{
+		filepath.Join(projectDir, "vendor", "composer", "platform_check.php"),
+		filepath.Join(projectDir, "backend", "vendor", "composer", "platform_check.php"),
+	}
+	for _, p := range candidatePaths {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		content := string(data)
+		switch {
+		case strings.Contains(content, "PHP_VERSION_ID >= 804") || strings.Contains(content, "PHP_VERSION_ID >= 805"):
+			return "8.4"
+		case strings.Contains(content, "PHP_VERSION_ID >= 803"):
+			return "8.3"
+		case strings.Contains(content, "PHP_VERSION_ID >= 802"):
+			return "8.2"
+		case strings.Contains(content, "PHP_VERSION_ID >= 801"):
+			return "8.1"
+		}
+	}
+	return ""
+}
+
 // DetectProjectPHPVersion detects the required PHP version from:
+// 0. vendor/composer/platform_check.php (installed dependencies)
 // 1. .php-version file
 // 2. .laragal file
 // 3. composer.json require.php
 // 4. Fallback to defaultPHP
 func DetectProjectPHPVersion(projectDir string, defaultPHP string) (string, int) {
+	// 0. Check vendor/composer/platform_check.php
+	if platformVer := DetectPlatformCheckPHPVersion(projectDir); platformVer != "" {
+		return platformVer, PHPPortForVersion(platformVer)
+	}
+
 	// 1. Check .php-version file
 	phpVerFile := filepath.Join(projectDir, ".php-version")
 	if fileExists(phpVerFile) {
@@ -218,6 +294,8 @@ func DetectProjectPHPVersion(projectDir string, defaultPHP string) (string, int)
 func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) DetectedProject {
 	name := filepath.Base(cleanDir)
 
+	domain := CleanDomainName(name, domainSuffix)
+
 	result := DetectedProject{
 		Name:       name,
 		Path:       cleanDir,
@@ -230,9 +308,18 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		Domain:     "",
 	}
 
-	// 0. Ignore non-web skills, agent rule repositories, and desktop solutions
-	if fileExists(filepath.Join(cleanDir, "SKILL.md")) && !fileExists(filepath.Join(cleanDir, "artisan")) && !fileExists(filepath.Join(cleanDir, "public", "index.php")) && !fileExists(filepath.Join(cleanDir, "index.php")) && !fileExists(filepath.Join(cleanDir, "index.html")) {
+	// 0a. Ignore LaraGal desktop suite repository itself
+	if strings.EqualFold(name, "laragal") || fileExists(filepath.Join(cleanDir, "wails.json")) {
 		return result
+	}
+
+	// 0b. Ignore non-web skills, agent rule repositories, and documentation suites
+	if fileExists(filepath.Join(cleanDir, "SKILL.md")) ||
+		fileExists(filepath.Join(cleanDir, ".claude-plugin")) ||
+		(dirExists(filepath.Join(cleanDir, ".agents")) && !fileExists(filepath.Join(cleanDir, "artisan")) && !fileExists(filepath.Join(cleanDir, "public", "index.php")) && !fileExists(filepath.Join(cleanDir, "index.php"))) {
+		if !fileExists(filepath.Join(cleanDir, "artisan")) && !fileExists(filepath.Join(cleanDir, "public", "index.php")) && !fileExists(filepath.Join(cleanDir, "index.php")) {
+			return result
+		}
 	}
 
 	// 1. Check for Laravel (artisan or composer.json with laravel/framework)
@@ -243,7 +330,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		result.IsWeb = true
 		result.PHPVersion = phpVer
 		result.PHPPort = phpPort
-		result.Domain = name + domainSuffix
+		result.Domain = domain
 		result.DocRoot = findFirstExistingDir(cleanDir, "public")
 		return result
 	}
@@ -260,7 +347,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		result.IsWeb = true
 		result.PHPVersion = phpVer
 		result.PHPPort = phpPort
-		result.Domain = name + domainSuffix
+		result.Domain = domain
 		return result
 	}
 
@@ -276,7 +363,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 			result.IsWeb = true
 			result.PHPVersion = phpVer
 			result.PHPPort = phpPort
-			result.Domain = name + domainSuffix
+			result.Domain = domain
 			result.DocRoot = findFirstExistingDir(cleanDir, "public")
 			return result
 		}
@@ -286,7 +373,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 			result.IsWeb = true
 			result.PHPVersion = phpVer
 			result.PHPPort = phpPort
-			result.Domain = name + domainSuffix
+			result.Domain = domain
 			result.DocRoot = findFirstExistingDir(cleanDir, "web", "public")
 			return result
 		}
@@ -297,7 +384,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		result.IsWeb = true
 		result.PHPVersion = phpVer
 		result.PHPPort = phpPort
-		result.Domain = name + domainSuffix
+		result.Domain = domain
 		result.DocRoot = findFirstExistingDir(cleanDir, "public", "web", "public_html", "htdocs", "webroot")
 		return result
 	}
@@ -319,7 +406,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 			result.IsWeb = true
 			result.PHPVersion = phpVer
 			result.PHPPort = phpPort
-			result.Domain = name + domainSuffix
+			result.Domain = domain
 			result.DocRoot = filepath.Dir(entryPath)
 			return result
 		}
@@ -362,12 +449,30 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		}
 	}
 
-	// 4d. Check for .NET / C# Web Applications (*.csproj, *.fsproj, Program.cs)
-	if hasFilesWithExt(cleanDir, ".csproj") || hasFilesWithExt(cleanDir, ".fsproj") || fileExists(filepath.Join(cleanDir, "Program.cs")) {
+	// 4d. Check for .NET / C# Web Applications (*.csproj with Web SDK or wwwroot)
+	hasDotNetWeb := false
+	if dirExists(filepath.Join(cleanDir, "wwwroot")) {
+		hasDotNetWeb = true
+	} else if hasFilesWithExt(cleanDir, ".csproj") || hasFilesWithExt(cleanDir, ".fsproj") {
+		if entries, err := os.ReadDir(cleanDir); err == nil {
+			for _, e := range entries {
+				if strings.HasSuffix(strings.ToLower(e.Name()), ".csproj") || strings.HasSuffix(strings.ToLower(e.Name()), ".fsproj") {
+					if data, readErr := os.ReadFile(filepath.Join(cleanDir, e.Name())); readErr == nil {
+						content := strings.ToLower(string(data))
+						if strings.Contains(content, "microsoft.net.sdk.web") || strings.Contains(content, "aspnetcore") {
+							hasDotNetWeb = true
+							break
+						}
+					}
+				}
+			}
+		}
+	}
+	if hasDotNetWeb {
 		result.Type = TypeDotNet
 		result.TypeLabel = ".NET / C#"
 		result.IsWeb = true
-		result.Domain = name + domainSuffix
+		result.Domain = domain
 		result.Path = cleanDir
 		result.DocRoot = findFirstExistingDir(cleanDir, "wwwroot", "public", "")
 		result.PHPPort = 0
@@ -378,7 +483,15 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 	// 4e. Check for Python Web Applications (manage.py, wsgi.py, asgi.py, requirements.txt, pyproject.toml)
 	isPyWeb := fileExists(filepath.Join(cleanDir, "manage.py")) ||
 		fileExists(filepath.Join(cleanDir, "wsgi.py")) ||
-		fileExists(filepath.Join(cleanDir, "asgi.py"))
+		fileExists(filepath.Join(cleanDir, "asgi.py")) ||
+		dirExists(filepath.Join(cleanDir, ".streamlit"))
+	pyPort := 8000
+	pyLabel := "Python / Web"
+	if dirExists(filepath.Join(cleanDir, ".streamlit")) {
+		isPyWeb = true
+		pyPort = 8501
+		pyLabel = "Streamlit"
+	}
 	if !isPyWeb && (fileExists(filepath.Join(cleanDir, "requirements.txt")) || fileExists(filepath.Join(cleanDir, "pyproject.toml"))) {
 		reqContent := ""
 		if data, err := os.ReadFile(filepath.Join(cleanDir, "requirements.txt")); err == nil {
@@ -387,22 +500,33 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		if data, err := os.ReadFile(filepath.Join(cleanDir, "pyproject.toml")); err == nil {
 			reqContent += strings.ToLower(string(data))
 		}
-		isPyWeb = strings.Contains(reqContent, "fastapi") ||
-			strings.Contains(reqContent, "django") ||
-			strings.Contains(reqContent, "flask") ||
-			strings.Contains(reqContent, "uvicorn") ||
-			strings.Contains(reqContent, "tornado") ||
-			strings.Contains(reqContent, "sanic")
+		if strings.Contains(reqContent, "streamlit") {
+			isPyWeb = true
+			pyPort = 8501
+			pyLabel = "Streamlit"
+		} else if strings.Contains(reqContent, "fastapi") {
+			isPyWeb = true
+			pyPort = 8000
+			pyLabel = "FastAPI"
+		} else if strings.Contains(reqContent, "flask") {
+			isPyWeb = true
+			pyPort = 5000
+			pyLabel = "Flask"
+		} else if strings.Contains(reqContent, "django") || strings.Contains(reqContent, "uvicorn") || strings.Contains(reqContent, "tornado") || strings.Contains(reqContent, "sanic") {
+			isPyWeb = true
+			pyPort = 8000
+			pyLabel = "Python / Web"
+		}
 	}
 	if isPyWeb {
 		result.Type = TypePython
-		result.TypeLabel = "Python / Web"
+		result.TypeLabel = pyLabel
 		result.IsWeb = true
-		result.Domain = name + domainSuffix
+		result.Domain = domain
 		result.Path = cleanDir
 		result.DocRoot = findFirstExistingDir(cleanDir, "static", "public", "")
 		result.PHPPort = 0
-		result.ProxyPort = 8000
+		result.ProxyPort = pyPort
 		return result
 	}
 
@@ -411,7 +535,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		result.Type = TypeRuby
 		result.TypeLabel = "Ruby on Rails"
 		result.IsWeb = true
-		result.Domain = name + domainSuffix
+		result.Domain = domain
 		result.Path = cleanDir
 		result.DocRoot = findFirstExistingDir(cleanDir, "public", "")
 		result.PHPPort = 0
@@ -424,7 +548,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		result.Type = TypeJava
 		result.TypeLabel = "Java / Spring"
 		result.IsWeb = true
-		result.Domain = name + domainSuffix
+		result.Domain = domain
 		result.Path = cleanDir
 		result.DocRoot = findFirstExistingDir(cleanDir, "src/main/resources/static", "src/main/resources/public", "public", "")
 		result.PHPPort = 0
@@ -442,7 +566,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 				result.Type = TypeFlutter
 				result.TypeLabel = "Flutter Web"
 				result.IsWeb = true
-				result.Domain = name + domainSuffix
+				result.Domain = domain
 				result.Path = cleanDir
 				result.DocRoot = findFirstExistingDir(cleanDir, "build/web", "web", "")
 				result.PHPPort = 0
@@ -451,56 +575,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		}
 	}
 
-	// 5. Check for Static HTML sites (index.html, index.htm, default.html) in dist/, public/, build/, or root
-	htmlDirCandidates := []string{"dist", "public", "build", "out", "web", ""}
-	htmlFileNames := []string{"index.html", "index.htm", "default.html", "default.htm"}
-	for _, sub := range htmlDirCandidates {
-		targetDir := cleanDir
-		if sub != "" {
-			targetDir = filepath.Join(cleanDir, sub)
-		}
-		for _, fName := range htmlFileNames {
-			if fileExists(filepath.Join(targetDir, fName)) {
-				result.Type = TypeStatic
-				result.TypeLabel = "HTML / ثابت"
-				result.IsWeb = true
-				result.Domain = name + domainSuffix
-				result.DocRoot = targetDir
-				result.PHPPort = 0
-				return result
-			}
-		}
-	}
-
-	// 5b. Check for web template directories with HTML templates (e.g. templates/*.html, views/*.html, pages/*.html)
-	for _, tplSub := range []string{"templates", "views", "pages", "templates/html", "dist", "static"} {
-		tplDir := filepath.Join(cleanDir, tplSub)
-		if hasFilesWithExt(tplDir, ".html") || hasFilesWithExt(tplDir, ".htm") {
-			result.Type = TypeStatic
-			result.TypeLabel = "HTML / ويب"
-			result.IsWeb = true
-			result.Domain = name + domainSuffix
-			result.DocRoot = cleanDir
-			result.PHPPort = 0
-			return result
-		}
-	}
-
-	// 5c. Check if directory contains a static/ or assets/ folder alongside templates/ or locales/ (like Go/Python web structures)
-	if (dirExists(filepath.Join(cleanDir, "static")) || dirExists(filepath.Join(cleanDir, "assets"))) &&
-		(dirExists(filepath.Join(cleanDir, "templates")) || dirExists(filepath.Join(cleanDir, "views")) || dirExists(filepath.Join(cleanDir, "locales"))) {
-		result.Type = TypeStatic
-		result.TypeLabel = "HTML / ويب"
-		result.IsWeb = true
-		result.Domain = name + domainSuffix
-		result.DocRoot = cleanDir
-		result.PHPPort = 0
-		return result
-	}
-
-
-
-	// 6. Check for Node.js web applications (package.json or frontend config files)
+	// 5. Check for Node.js web applications (package.json or frontend config files) - CHECKED BEFORE GENERIC STATIC
 	frontendConfigFiles := []string{
 		"vite.config.js", "vite.config.ts", "vite.config.mjs",
 		"next.config.js", "next.config.ts", "next.config.mjs",
@@ -519,38 +594,140 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 
 	pkgPath := filepath.Join(cleanDir, "package.json")
 	if hasFrontendConfig || fileExists(pkgPath) {
-		isWebNode := hasFrontendConfig
-		if !isWebNode && fileExists(pkgPath) {
-			data, _ := os.ReadFile(pkgPath)
-			content := strings.ToLower(string(data))
-			isWebNode = strings.Contains(content, "\"vite\"") ||
-				strings.Contains(content, "\"next\"") ||
-				strings.Contains(content, "\"nuxt\"") ||
-				strings.Contains(content, "\"react\"") ||
-				strings.Contains(content, "\"vue\"") ||
-				strings.Contains(content, "\"astro\"") ||
-				strings.Contains(content, "\"svelte\"") ||
-				strings.Contains(content, "\"express\"") ||
-				strings.Contains(content, "\"hono\"") ||
-				strings.Contains(content, "\"fastify\"") ||
-				strings.Contains(content, "\"remix\"") ||
-				strings.Contains(content, "\"@angular/core\"") ||
-				strings.Contains(content, "\"gatsby\"") ||
-				(strings.Contains(content, "\"dev\":") && (dirExists(filepath.Join(cleanDir, "src")) || dirExists(filepath.Join(cleanDir, "public"))))
+		pkgContent := ""
+		if data, err := os.ReadFile(pkgPath); err == nil {
+			pkgContent = strings.ToLower(string(data))
 		}
+		isWebNode := hasFrontendConfig ||
+			strings.Contains(pkgContent, "\"vite\"") ||
+			strings.Contains(pkgContent, "\"next\"") ||
+			strings.Contains(pkgContent, "\"nuxt\"") ||
+			strings.Contains(pkgContent, "\"react\"") ||
+			strings.Contains(pkgContent, "\"vue\"") ||
+			strings.Contains(pkgContent, "\"astro\"") ||
+			strings.Contains(pkgContent, "\"svelte\"") ||
+			strings.Contains(pkgContent, "\"express\"") ||
+			strings.Contains(pkgContent, "\"hono\"") ||
+			strings.Contains(pkgContent, "\"fastify\"") ||
+			strings.Contains(pkgContent, "\"remix\"") ||
+			strings.Contains(pkgContent, "\"@angular/core\"") ||
+			strings.Contains(pkgContent, "\"gatsby\"") ||
+			(strings.Contains(pkgContent, "\"dev\":") && (dirExists(filepath.Join(cleanDir, "src")) || dirExists(filepath.Join(cleanDir, "public"))))
 
 		if isWebNode {
 			result.Type = TypeNode
-			result.TypeLabel = "Node.js"
 			result.IsWeb = true
-			result.Domain = name + domainSuffix
-			result.DocRoot = findFirstExistingDir(cleanDir, "dist", "build", "public", "out")
+			result.Domain = domain
+			result.Path = cleanDir
 			result.PHPPort = 0
+
+			// Next.js App
+			if fileExists(filepath.Join(cleanDir, "next.config.js")) ||
+				fileExists(filepath.Join(cleanDir, "next.config.ts")) ||
+				fileExists(filepath.Join(cleanDir, "next.config.mjs")) ||
+				strings.Contains(pkgContent, "\"next\"") {
+				result.TypeLabel = "Next.js"
+				result.ProxyPort = 3000
+				if envPort := parseEnvPort(cleanDir); envPort > 0 {
+					result.ProxyPort = envPort
+				}
+				result.DocRoot = findFirstExistingDir(cleanDir, "public", "")
+				return result
+			}
+
+			// Nuxt App
+			if fileExists(filepath.Join(cleanDir, "nuxt.config.js")) ||
+				fileExists(filepath.Join(cleanDir, "nuxt.config.ts")) ||
+				strings.Contains(pkgContent, "\"nuxt\"") {
+				result.TypeLabel = "Nuxt"
+				result.ProxyPort = 3000
+				if envPort := parseEnvPort(cleanDir); envPort > 0 {
+					result.ProxyPort = envPort
+				}
+				result.DocRoot = findFirstExistingDir(cleanDir, "public", "")
+				return result
+			}
+
+			// Built Static SPA with index.html in dist, out, or build
+			for _, buildSub := range []string{"dist", "out", "build"} {
+				if fileExists(filepath.Join(cleanDir, buildSub, "index.html")) {
+					result.Type = TypeStatic
+					result.TypeLabel = "HTML / ثابت"
+					result.DocRoot = filepath.Join(cleanDir, buildSub)
+					result.ProxyPort = 0
+					return result
+				}
+			}
+
+			// Vite / Frontend Dev Server
+			if fileExists(filepath.Join(cleanDir, "vite.config.js")) ||
+				fileExists(filepath.Join(cleanDir, "vite.config.ts")) ||
+				fileExists(filepath.Join(cleanDir, "vite.config.mjs")) ||
+				strings.Contains(pkgContent, "\"vite\"") {
+				result.TypeLabel = "Vite"
+				result.ProxyPort = 5173
+				if envPort := parseEnvPort(cleanDir); envPort > 0 {
+					result.ProxyPort = envPort
+				}
+				result.DocRoot = findFirstExistingDir(cleanDir, "public", "")
+				return result
+			}
+
+			// Node API / Backend (Express, Fastify, Nest, Hono)
+			result.TypeLabel = "Node.js"
+			result.ProxyPort = 3000
+			if envPort := parseEnvPort(cleanDir); envPort > 0 {
+				result.ProxyPort = envPort
+			}
+			result.DocRoot = findFirstExistingDir(cleanDir, "public", "")
 			return result
 		}
 	}
 
-	// 7. Check if folder contains any .php files anywhere in top-level
+	// 6. Check for offline scripts with lone index.html that are NOT web sites (e.g. fix_hidden_charecters)
+	isOfflineScript := (fileExists(filepath.Join(cleanDir, "app.py")) || fileExists(filepath.Join(cleanDir, "cli.py")) || fileExists(filepath.Join(cleanDir, "cleaner.js"))) &&
+		!fileExists(filepath.Join(cleanDir, "manage.py")) &&
+		!fileExists(filepath.Join(cleanDir, "wsgi.py")) &&
+		!fileExists(filepath.Join(cleanDir, "asgi.py"))
+	if isOfflineScript {
+		pyWeb := false
+		if reqData, err := os.ReadFile(filepath.Join(cleanDir, "requirements.txt")); err == nil {
+			c := strings.ToLower(string(reqData))
+			pyWeb = strings.Contains(c, "fastapi") || strings.Contains(c, "django") || strings.Contains(c, "flask") || strings.Contains(c, "streamlit") || strings.Contains(c, "uvicorn")
+		}
+		if !pyWeb {
+			if pyData, err := os.ReadFile(filepath.Join(cleanDir, "app.py")); err == nil {
+				c := strings.ToLower(string(pyData))
+				pyWeb = strings.Contains(c, "fastapi") || strings.Contains(c, "flask") || strings.Contains(c, "streamlit") || strings.Contains(c, "django")
+			}
+		}
+		if !pyWeb {
+			return result
+		}
+	}
+
+	// 7. Check for Static HTML sites (index.html, index.htm, default.html) in dist/, public/, build/, or root
+	htmlDirCandidates := []string{"dist", "public", "build", "out", "web", ""}
+	htmlFileNames := []string{"index.html", "index.htm", "default.html", "default.htm"}
+	for _, sub := range htmlDirCandidates {
+		targetDir := cleanDir
+		if sub != "" {
+			targetDir = filepath.Join(cleanDir, sub)
+		}
+		for _, fName := range htmlFileNames {
+			if fileExists(filepath.Join(targetDir, fName)) {
+				result.Type = TypeStatic
+				result.TypeLabel = "HTML / ثابت"
+				result.IsWeb = true
+				result.Domain = domain
+				result.DocRoot = targetDir
+				result.PHPPort = 0
+				return result
+			}
+		}
+	}
+
+	// 8. Check if folder contains any .php files anywhere in top-level
 	entries, err := os.ReadDir(cleanDir)
 	if err == nil {
 		for _, e := range entries {
@@ -561,28 +738,9 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 				result.IsWeb = true
 				result.PHPVersion = phpVer
 				result.PHPPort = phpPort
-				result.Domain = name + domainSuffix
+				result.Domain = domain
 				return result
 			}
-		}
-	}
-
-	// 8. Check for standard static HTML entry points
-	staticEntryCandidates := []string{
-		filepath.Join(cleanDir, "index.html"),
-		filepath.Join(cleanDir, "index.htm"),
-		filepath.Join(cleanDir, "dist", "index.html"),
-		filepath.Join(cleanDir, "public", "index.html"),
-	}
-	for _, entry := range staticEntryCandidates {
-		if fileExists(entry) {
-			result.Type = TypeStatic
-			result.TypeLabel = "HTML / ثابت"
-			result.IsWeb = true
-			result.Domain = name + domainSuffix
-			result.DocRoot = filepath.Dir(entry)
-			result.PHPPort = 0
-			return result
 		}
 	}
 
@@ -594,6 +752,22 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 func DetectProject(projectDir string, defaultPHP string, domainSuffix string) DetectedProject {
 	cleanDir := filepath.Clean(projectDir)
 	name := filepath.Base(cleanDir)
+	domain := CleanDomainName(name, domainSuffix)
+
+	// 0. Ignore LaraGal desktop suite repository itself
+	if strings.EqualFold(name, "laragal") || fileExists(filepath.Join(cleanDir, "wails.json")) {
+		return DetectedProject{
+			Name:       name,
+			Path:       cleanDir,
+			DocRoot:    cleanDir,
+			Type:       TypeNonWeb,
+			TypeLabel:  "غير ويب / ملفات",
+			PHPVersion: "",
+			PHPPort:    0,
+			IsWeb:      false,
+			Domain:     "",
+		}
+	}
 
 	// 1. Direct root check
 	rootResult := detectSingleDir(cleanDir, defaultPHP, domainSuffix)
@@ -604,9 +778,10 @@ func DetectProject(projectDir string, defaultPHP string, domainSuffix string) De
 	// 2. Subdirectory check for multi-tier projects and monorepos
 	webSubDirs := []string{
 		"backend",
-		"web",
+		"services",
 		"server",
 		"api",
+		"web",
 		"frontend",
 		"client",
 		"ui",
@@ -632,8 +807,9 @@ func DetectProject(projectDir string, defaultPHP string, domainSuffix string) De
 				TypeLabel:   fmt.Sprintf("%s (%s)", subResult.TypeLabel, sub),
 				PHPVersion:  subResult.PHPVersion,
 				PHPPort:     subResult.PHPPort,
+				ProxyPort:   subResult.ProxyPort,
 				IsWeb:       true,
-				Domain:      name + domainSuffix,
+				Domain:      domain,
 			}
 		}
 
@@ -654,8 +830,9 @@ func DetectProject(projectDir string, defaultPHP string, domainSuffix string) De
 								TypeLabel:   fmt.Sprintf("%s (%s/%s)", nestedResult.TypeLabel, sub, se.Name()),
 								PHPVersion:  nestedResult.PHPVersion,
 								PHPPort:     nestedResult.PHPPort,
+								ProxyPort:   nestedResult.ProxyPort,
 								IsWeb:       true,
-								Domain:      name + domainSuffix,
+								Domain:      domain,
 							}
 						}
 					}

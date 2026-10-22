@@ -731,6 +731,54 @@ func (a *App) StartProjectApp(projectPath string, port int) (bool, error) {
 		return true, nil
 	}
 
+	// 7. Check for Node.js application (package.json in project root or subservices)
+	nodeDirs := []string{cleanPath}
+	if entries, err := os.ReadDir(cleanPath); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				nodeDirs = append(nodeDirs, filepath.Join(cleanPath, e.Name()))
+				if e.Name() == "services" || e.Name() == "apps" {
+					if subEntries, err := os.ReadDir(filepath.Join(cleanPath, e.Name())); err == nil {
+						for _, se := range subEntries {
+							if se.IsDir() {
+								nodeDirs = append(nodeDirs, filepath.Join(cleanPath, e.Name(), se.Name()))
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+	for _, nDir := range nodeDirs {
+		pkgFile := filepath.Join(nDir, "package.json")
+		if _, err := os.Stat(pkgFile); err == nil {
+			var cmdArgs []string
+			if _, err := os.Stat(filepath.Join(nDir, "start-server.bat")); err == nil {
+				cmdArgs = []string{"/c", filepath.Join(nDir, "start-server.bat")}
+			} else {
+				scriptToRun := "dev"
+				if data, err := os.ReadFile(pkgFile); err == nil {
+					content := string(data)
+					if strings.Contains(content, "\"start\"") && !strings.Contains(content, "\"dev\"") {
+						scriptToRun = "start"
+					}
+				}
+				cmdArgs = []string{"/c", "npm", "run", scriptToRun}
+			}
+			err := a.supervisor.StartServiceInDir(projectName, "cmd", cmdArgs, nDir, port)
+			if err != nil {
+				return false, err
+			}
+			for i := 0; i < 20; i++ {
+				time.Sleep(300 * time.Millisecond)
+				if a.IsPortListening(port) {
+					return true, nil
+				}
+			}
+			return true, nil
+		}
+	}
+
 	return false, fmt.Errorf("لم يتم العثور على ملف تنفيذي أو أداة تشغيل للمشروع %s", projectName)
 }
 

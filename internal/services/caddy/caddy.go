@@ -42,12 +42,24 @@ func GenerateCaddyfile(sites []SiteDef, adminPort int) string {
 		sb.WriteString(fmt.Sprintf("    root * \"%s\"\n", normalizedRoot))
 		sb.WriteString("    encode gzip zstd\n")
 		if site.PHPPort > 0 {
-			sb.WriteString(fmt.Sprintf("    php_fastcgi 127.0.0.1:%d\n", site.PHPPort))
+			sb.WriteString(fmt.Sprintf("    php_fastcgi 127.0.0.1:%d {\n", site.PHPPort))
+			sb.WriteString("        capture_stderr\n")
+			sb.WriteString("    }\n")
 			sb.WriteString("    file_server\n")
-		} else if site.ProjectType == "go" || site.ProjectType == "rust" || site.ProjectType == "dotnet" || site.ProjectType == "python" || site.ProjectType == "ruby" || site.ProjectType == "java" || site.ProjectType == "proxy" || site.ProxyPort > 0 {
+		} else if site.ProjectType == "go" || site.ProjectType == "rust" || site.ProjectType == "dotnet" || site.ProjectType == "python" || site.ProjectType == "ruby" || site.ProjectType == "java" || site.ProjectType == "node" || site.ProjectType == "proxy" || site.ProxyPort > 0 {
 			proxyPort := site.ProxyPort
 			if proxyPort <= 0 {
-				proxyPort = 8080
+				if site.ProjectType == "node" {
+					proxyPort = 3000
+				} else if site.ProjectType == "dotnet" {
+					proxyPort = 5000
+				} else if site.ProjectType == "python" {
+					proxyPort = 8000
+				} else if site.ProjectType == "ruby" {
+					proxyPort = 3000
+				} else {
+					proxyPort = 8080
+				}
 			}
 			// Handle static files directly through Caddy
 			sb.WriteString("    handle /static/* {\n")
@@ -55,6 +67,10 @@ func GenerateCaddyfile(sites []SiteDef, adminPort int) string {
 			sb.WriteString("        file_server\n")
 			sb.WriteString("    }\n")
 			sb.WriteString("    handle /wwwroot/* {\n")
+			sb.WriteString(fmt.Sprintf("        root * \"%s\"\n", normalizedRoot))
+			sb.WriteString("        file_server\n")
+			sb.WriteString("    }\n")
+			sb.WriteString("    handle /assets/* {\n")
 			sb.WriteString(fmt.Sprintf("        root * \"%s\"\n", normalizedRoot))
 			sb.WriteString("        file_server\n")
 			sb.WriteString("    }\n")
@@ -72,10 +88,11 @@ func GenerateCaddyfile(sites []SiteDef, adminPort int) string {
 				typeLabel = "الخادم"
 			}
 			sb.WriteString("    handle_errors {\n")
+			sb.WriteString("        header Content-Type \"text/html; charset=utf-8\"\n")
 			sb.WriteString(fmt.Sprintf("        respond \"<div dir='rtl' style='font-family:system-ui,sans-serif;max-width:540px;margin:80px auto;padding:32px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.05);'><h2 style='color:#0f172a;margin-bottom:12px;'>LaraGal — خادم التطبيق غير متصل</h2><p style='color:#475569;line-height:1.6;font-size:14px;'>تطبيق %s غير مشغل حالياً على المنفذ <b>%d</b>.<br>يمكنك تشغيل التطبيق بنقرة واحدة من لوحة تحكم <b>LaraGal</b> أو تشغيل أداة التطوير الخاصة به.</p></div>\" 502\n", typeLabel, proxyPort))
 			sb.WriteString("    }\n")
 		} else {
-			sb.WriteString("    try_files {path} {path}/ /index.html /index.htm /templates/dashboard.html /templates/layout.html /templates/login.html\n")
+			sb.WriteString("    try_files {path} {path}/ /index.html /index.htm\n")
 			sb.WriteString("    file_server browse\n")
 		}
 		sb.WriteString("    tls internal\n")

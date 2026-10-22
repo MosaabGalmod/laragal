@@ -20,10 +20,16 @@ func TestSyncHostsContent(t *testing.T) {
 		t.Errorf("legacy .local domain was not pruned")
 	}
 	if !strings.Contains(result, "127.0.0.1 mysite.test") {
-		t.Errorf("missing mysite.test")
+		t.Errorf("missing IPv4 mysite.test")
+	}
+	if !strings.Contains(result, "::1 mysite.test") {
+		t.Errorf("missing IPv6 mysite.test")
 	}
 	if !strings.Contains(result, "127.0.0.1 api.test") {
-		t.Errorf("missing api.test")
+		t.Errorf("missing IPv4 api.test")
+	}
+	if !strings.Contains(result, "::1 api.test") {
+		t.Errorf("missing IPv6 api.test")
 	}
 	if !strings.Contains(result, hosts.BeginMarker) || !strings.Contains(result, hosts.EndMarker) {
 		t.Errorf("missing boundary markers")

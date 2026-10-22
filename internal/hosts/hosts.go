@@ -32,9 +32,9 @@ func SyncHostsContent(content string, domains []string) string {
 			continue
 		}
 
-		// Prune obsolete manual .local local dev mappings pointing to 127.0.0.1
+		// Prune obsolete manual .local local dev mappings pointing to 127.0.0.1 or ::1
 		fields := strings.Fields(trimmed)
-		if len(fields) >= 2 && fields[0] == "127.0.0.1" && strings.HasSuffix(strings.ToLower(fields[1]), ".local") {
+		if len(fields) >= 2 && (fields[0] == "127.0.0.1" || fields[0] == "::1") && strings.HasSuffix(strings.ToLower(fields[1]), ".local") {
 			continue
 		}
 
@@ -62,6 +62,7 @@ func SyncHostsContent(content string, domains []string) string {
 	block.WriteString("\n" + BeginMarker + "\n")
 	for _, domain := range uniqueDomains {
 		block.WriteString(fmt.Sprintf("127.0.0.1 %s\n", domain))
+		block.WriteString(fmt.Sprintf("::1 %s\n", domain))
 	}
 	block.WriteString(EndMarker + "\n")
 

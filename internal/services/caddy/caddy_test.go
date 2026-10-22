@@ -115,4 +115,7 @@ func TestGenerateCaddyfile(t *testing.T) {
 	if !strings.Contains(caddyfile, "admin localhost:2019") {
 		t.Errorf("missing admin block")
 	}
+	if !strings.Contains(caddyfile, `header Content-Type "text/html; charset=utf-8"`) {
+		t.Errorf("missing Content-Type header in handle_errors")
+	}
 }
