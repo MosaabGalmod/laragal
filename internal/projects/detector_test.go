@@ -1,4 +1,4 @@
-package projects
+﻿package projects
 
 import (
 	"os"
@@ -335,5 +335,133 @@ func TestAdvancedDetection(t *testing.T) {
 	resNodeEnv := DetectProject(nodeEnvDir, "8.3", ".test")
 	if resNodeEnv.Type != TypeNode || !resNodeEnv.IsWeb || resNodeEnv.ProxyPort != 4000 {
 		t.Fatalf("Expected Node API with ProxyPort 4000 from .env, got: %+v", resNodeEnv)
+	}
+}
+
+func TestPHP85AndFutureVersions(t *testing.T) {
+	tests := []struct {
+		version  string
+		wantPort int
+		wantNorm string
+	}{
+		{"8.1", 9081, "8.1"},
+		{"8.2", 9082, "8.2"},
+		{"8.3", 9083, "8.3"},
+		{"8.4", 9084, "8.4"},
+		{"8.5", 9085, "8.5"},
+		{"8.5.0-dev", 9085, "8.5"},
+		{"php-8.5", 9085, "8.5"},
+		{"php85", 9085, "8.5"},
+		{"8.6", 9086, "8.6"},
+		{"8.7", 9087, "8.7"},
+		{"9.0", 9090, "9.0"},
+		{"9.1", 9091, "9.1"},
+	}
+
+	for _, tt := range tests {
+		gotPort := PHPPortForVersion(tt.version)
+		if gotPort != tt.wantPort {
+			t.Errorf("PHPPortForVersion(%q) = %d; want %d", tt.version, gotPort, tt.wantPort)
+		}
+
+		gotNorm := NormalizePHPVersion(tt.version)
+		if gotNorm != tt.wantNorm {
+			t.Errorf("NormalizePHPVersion(%q) = %q; want %q", tt.version, gotNorm, tt.wantNorm)
+		}
+	}
+
+	constraints := []struct {
+		constraint string
+		want       string
+	}{
+		{"^8.5", "8.5"},
+		{">=8.5", "8.5"},
+		{"~8.5.0", "8.5"},
+		{"^8.6", "8.6"},
+		{"^9.0", "9.0"},
+	}
+	for _, c := range constraints {
+		got := ParsePHPConstraint(c.constraint)
+		if got != c.want {
+			t.Errorf("ParsePHPConstraint(%q) = %q; want %q", c.constraint, got, c.want)
+		}
+	}
+
+	tempDir := t.TempDir()
+	p85Dir := filepath.Join(tempDir, "p85-app")
+	_ = os.MkdirAll(filepath.Join(p85Dir, "vendor", "composer"), 0755)
+	p85Check := "<?php if (!(PHP_VERSION_ID >= 80500)) { throw new \\RuntimeException(); }"
+	_ = os.WriteFile(filepath.Join(p85Dir, "vendor", "composer", "platform_check.php"), []byte(p85Check), 0644)
+
+	gotPlatform := DetectPlatformCheckPHPVersion(p85Dir)
+	if gotPlatform != "8.5" {
+		t.Errorf("DetectPlatformCheckPHPVersion for 80500 = %q; want '8.5'", gotPlatform)
+	}
+
+	p86Dir := filepath.Join(tempDir, "p86-app")
+	_ = os.MkdirAll(filepath.Join(p86Dir, "vendor", "composer"), 0755)
+	p86Check := "<?php if (!(PHP_VERSION_ID >= 80600)) { throw new \\RuntimeException(); }"
+	_ = os.WriteFile(filepath.Join(p86Dir, "vendor", "composer", "platform_check.php"), []byte(p86Check), 0644)
+
+	gotPlatform86 := DetectPlatformCheckPHPVersion(p86Dir)
+	if gotPlatform86 != "8.6" {
+		t.Errorf("DetectPlatformCheckPHPVersion for 80600 = %q; want '8.6'", gotPlatform86)
+	}
+}
+
+func TestNormalizeTargetDB(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"m0sab.com", "m0sab_com"},
+		{"repair-tickets", "repair_tickets"},
+		{"my..cool--db", "my_cool_db"},
+		{"  spaces  in  name  ", "spaces_in_name"},
+		{"", "laragal_db"},
+		{"_already_clean_", "already_clean"},
+	}
+	for _, tc := range tests {
+		got := NormalizeTargetDB(tc.input)
+		if got != tc.want {
+			t.Errorf("NormalizeTargetDB(%q) = %q; want %q", tc.input, got, tc.want)
+		}
+	}
+}
+
+func TestDetectProjectDatabase(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// 1. Laravel project with SQLite file that has migrations and tables
+	sqliteProj := filepath.Join(tempDir, "sqlite-proj")
+	_ = os.MkdirAll(filepath.Join(sqliteProj, "database"), 0755)
+	sqlitePath := filepath.Join(sqliteProj, "database", "database.sqlite")
+	// Simulate SQLite header and CREATE TABLE statements
+	mockSQLiteContent := make([]byte, 2048)
+	copy(mockSQLiteContent, []byte("SQLite format 3\x00"))
+	copy(mockSQLiteContent[100:], []byte("CREATE TABLE migrations (id INT); CREATE TABLE users (id INT); CREATE TABLE posts (id INT);"))
+	_ = os.WriteFile(sqlitePath, mockSQLiteContent, 0644)
+
+	dbInfo := DetectProjectDatabase(sqliteProj, "sqlite-proj")
+	if dbInfo.Type != "sqlite" || dbInfo.Status != "ready" || dbInfo.NeedsMigration || dbInfo.TablesCount != 3 {
+		t.Errorf("Expected ready SQLite db with 3 tables, got: %+v", dbInfo)
+	}
+
+	// 2. Laravel project with missing SQLite file
+	missingProj := filepath.Join(tempDir, "missing-sqlite")
+	_ = os.MkdirAll(missingProj, 0755)
+	_ = os.WriteFile(filepath.Join(missingProj, ".env"), []byte("DB_CONNECTION=sqlite\n"), 0644)
+	missingInfo := DetectProjectDatabase(missingProj, "missing-sqlite")
+	if missingInfo.Type != "sqlite" || !missingInfo.NeedsMigration || missingInfo.Status != "missing" {
+		t.Errorf("Expected missing SQLite db needing migration, got: %+v", missingInfo)
+	}
+
+	// 3. MySQL project in .env
+	mysqlProj := filepath.Join(tempDir, "mysql-proj")
+	_ = os.MkdirAll(mysqlProj, 0755)
+	_ = os.WriteFile(filepath.Join(mysqlProj, ".env"), []byte("DB_CONNECTION=mysql\nDB_DATABASE=shop_db\n"), 0644)
+	mysqlInfo := DetectProjectDatabase(mysqlProj, "mysql-proj")
+	if mysqlInfo.Type != "mysql" || mysqlInfo.Name != "shop_db" {
+		t.Errorf("Expected MySQL db named shop_db, got: %+v", mysqlInfo)
 	}
 }

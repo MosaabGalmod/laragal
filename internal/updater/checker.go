@@ -1,4 +1,4 @@
-package updater
+﻿package updater
 
 import (
 	"context"
@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -124,6 +125,11 @@ var fallbackStableVersions = map[string]RuntimeUpdateInfo{
 		LatestVersion: "1.21.8",
 		DownloadURL:   "https://github.com/axllent/mailpit/releases/download/v1.21.8/mailpit-windows-amd64.zip",
 	},
+	"php-8.5": {
+		Name:          "php-8.5",
+		LatestVersion: "8.5.12",
+		DownloadURL:   "https://windows.php.net/downloads/releases/php-8.5.12-1-nts-Win32-vs17-x64.zip",
+	},
 	"php-8.4": {
 		Name:          "php-8.4",
 		LatestVersion: "8.4.4",
@@ -154,43 +160,103 @@ var fallbackStableVersions = map[string]RuntimeUpdateInfo{
 		LatestVersion: "5.0.14.1",
 		DownloadURL:   "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip",
 	},
+	"phpmyadmin": {
+		Name:          "phpmyadmin",
+		LatestVersion: "5.2.2",
+		DownloadURL:   "https://files.phpmyadmin.net/phpMyAdmin/5.2.2/phpMyAdmin-5.2.2-all-languages.zip",
+	},
+	"adminer": {
+		Name:          "adminer",
+		LatestVersion: "4.8.1",
+		DownloadURL:   "https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1.php",
+	},
 }
 
-// DetectInstalledBinaryVersion reads local executable outputs to extract active version string
+// DetectInstalledBinaryVersion reads local executable outputs across bin, data, WinGet and PATH
 func DetectInstalledBinaryVersion(binDir string, name string) string {
-	switch name {
-	case "caddy":
+	switch {
+	case name == "caddy":
 		exe := filepath.Join(binDir, "caddy", "caddy.exe")
+		if _, err := os.Stat(exe); err != nil {
+			if p, err := exec.LookPath("caddy.exe"); err == nil {
+				exe = p
+			}
+		}
 		if _, err := os.Stat(exe); err == nil {
 			out, _ := winutil.Command(exe, "version").CombinedOutput()
 			return ExtractVersion(string(out))
 		}
-	case "mailpit":
+	case name == "mailpit":
 		exe := filepath.Join(binDir, "mailpit", "mailpit.exe")
+		if _, err := os.Stat(exe); err != nil {
+			if p, err := exec.LookPath("mailpit.exe"); err == nil {
+				exe = p
+			}
+		}
 		if _, err := os.Stat(exe); err == nil {
 			out, _ := winutil.Command(exe, "version").CombinedOutput()
 			return ExtractVersion(string(out))
 		}
-	case "php-8.4", "php-8.3", "php-8.2", "php-8.1":
+	case name == "adminer":
+		idx := filepath.Join("data", "adminer", "index.php")
+		if _, err := os.Stat(idx); err == nil {
+			return "4.8.1"
+		}
+	case name == "phpmyadmin":
+		idx := filepath.Join("data", "phpmyadmin", "index.php")
+		if _, err := os.Stat(idx); err == nil {
+			return "5.2.2"
+		}
+	case strings.HasPrefix(name, "php-"):
+		ver := strings.TrimPrefix(name, "php-")
 		exe := filepath.Join(binDir, name, "php.exe")
 		if _, err := os.Stat(exe); err != nil {
 			exe = filepath.Join(binDir, name, "php-cgi.exe")
+		}
+		// If not in binDir, check WinGet packages
+		if _, err := os.Stat(exe); err != nil {
+			localApp := os.Getenv("LOCALAPPDATA")
+			if localApp != "" {
+				wgDir := filepath.Join(localApp, "Microsoft", "WinGet", "Packages")
+				if entries, rErr := os.ReadDir(wgDir); rErr == nil {
+					targetPkg := "PHP.PHP." + ver
+					for _, entry := range entries {
+						if entry.IsDir() && strings.HasPrefix(entry.Name(), targetPkg) {
+							candidate := filepath.Join(wgDir, entry.Name(), "php.exe")
+							if _, cErr := os.Stat(candidate); cErr == nil {
+								exe = candidate
+								break
+							}
+						}
+					}
+				}
+			}
 		}
 		if _, err := os.Stat(exe); err == nil {
 			out, _ := winutil.Command(exe, "-v").CombinedOutput()
 			return ExtractVersion(string(out))
 		}
-	case "mysql":
+	case name == "mysql":
 		exe := filepath.Join(binDir, "mysql", "bin", "mysqld.exe")
 		if _, err := os.Stat(exe); err != nil {
 			exe = filepath.Join(binDir, "mysql", "mysqld.exe")
+		}
+		if _, err := os.Stat(exe); err != nil {
+			if p, err := exec.LookPath("mysqld.exe"); err == nil {
+				exe = p
+			}
 		}
 		if _, err := os.Stat(exe); err == nil {
 			out, _ := winutil.Command(exe, "--version").CombinedOutput()
 			return ExtractVersion(string(out))
 		}
-	case "redis":
+	case name == "redis":
 		exe := filepath.Join(binDir, "redis", "redis-server.exe")
+		if _, err := os.Stat(exe); err != nil {
+			if p, err := exec.LookPath("redis-server.exe"); err == nil {
+				exe = p
+			}
+		}
 		if _, err := os.Stat(exe); err == nil {
 			out, _ := winutil.Command(exe, "--version").CombinedOutput()
 			return ExtractVersion(string(out))
@@ -224,7 +290,25 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 		}
 	}
 
-	runtimesToCheck := []string{"caddy", "php-8.4", "php-8.3", "php-8.2", "php-8.1", "mysql", "redis", "mailpit"}
+	runtimesToCheck := []string{"caddy", "php-8.5", "php-8.4", "php-8.3", "php-8.2", "php-8.1", "mysql", "redis", "mailpit", "phpmyadmin", "adminer"}
+	if opts.BaseBinDir != "" {
+		if entries, err := os.ReadDir(opts.BaseBinDir); err == nil {
+			for _, e := range entries {
+				if e.IsDir() && strings.HasPrefix(e.Name(), "php-") {
+					found := false
+					for _, r := range runtimesToCheck {
+						if r == e.Name() {
+							found = true
+							break
+						}
+					}
+					if !found {
+						runtimesToCheck = append(runtimesToCheck, e.Name())
+					}
+				}
+			}
+		}
+	}
 	results := make([]RuntimeUpdateInfo, 0, len(runtimesToCheck))
 
 	for _, name := range runtimesToCheck {

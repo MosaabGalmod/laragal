@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/laragal/laragal/internal/certs"
@@ -23,6 +24,7 @@ import (
 	"github.com/laragal/laragal/internal/services/caddy"
 	"github.com/laragal/laragal/internal/services/mysql"
 	"github.com/laragal/laragal/internal/services/php"
+	"github.com/laragal/laragal/internal/services/phpmyadmin"
 	"github.com/laragal/laragal/internal/updater"
 	"github.com/laragal/laragal/internal/winutil"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -33,7 +35,10 @@ type App struct {
 	cfg        *config.AppConfig
 	supervisor *process.Supervisor
 	sites      []caddy.SiteDef
-	cfgPath    string
+	sitesMu    sync.RWMutex
+	cfgPath       string
+	userStopped   map[string]bool
+	userStoppedMu sync.RWMutex
 }
 
 func NewApp() *App {
@@ -44,12 +49,21 @@ func NewApp() *App {
 		_ = cfg.Save(cfgPath)
 	}
 
-	return &App{
-		cfg:        cfg,
-		supervisor: process.NewSupervisor(),
-		sites:      make([]caddy.SiteDef, 0),
-		cfgPath:    cfgPath,
+	sup := process.NewSupervisor()
+	app := &App{
+		cfg:         cfg,
+		supervisor:  sup,
+		sites:       make([]caddy.SiteDef, 0),
+		cfgPath:     cfgPath,
+		userStopped: make(map[string]bool),
 	}
+	sup.OnExit = func(name string) {
+		if app.ctx != nil {
+			runtime.EventsEmit(app.ctx, "services-updated", app.GetServices())
+		}
+	}
+	app.loadSitesCache()
+	return app
 }
 
 func (a *App) getCacheFilePath() string {
@@ -63,18 +77,27 @@ func (a *App) loadSitesCache() {
 	}
 	var cached []caddy.SiteDef
 	if err := json.Unmarshal(data, &cached); err == nil && len(cached) > 0 {
+		a.sitesMu.Lock()
 		a.sites = cached
+		a.sitesMu.Unlock()
 	}
 }
 
 func (a *App) saveSitesCache() {
-	if len(a.sites) == 0 {
+	a.sitesMu.RLock()
+	count := len(a.sites)
+	var data []byte
+	var err error
+	if count > 0 {
+		data, err = json.MarshalIndent(a.sites, "", "  ")
+	}
+	a.sitesMu.RUnlock()
+
+	if count == 0 || err != nil {
 		return
 	}
 	_ = os.MkdirAll("data", 0755)
-	if data, err := json.MarshalIndent(a.sites, "", "  "); err == nil {
-		_ = os.WriteFile(a.getCacheFilePath(), data, 0644)
-	}
+	_ = os.WriteFile(a.getCacheFilePath(), data, 0644)
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -82,25 +105,30 @@ func (a *App) startup(ctx context.Context) {
 	_ = os.MkdirAll(a.cfg.ProjectsPath, 0755)
 	a.initTray()
 
-	// Load cached sites immediately so the UI displays existing projects with 0ms delay!
 	a.loadSitesCache()
 
-	// Launch background services, project scanning, and hosts synchronization asynchronously
-	// so the Wails window and Vue frontend render immediately with zero delay!
+	// 1. Scan projects synchronously at the start of background services goroutine so UI has sites in < 20ms and Caddyfile is written
 	go func() {
-		a.StartServices()
-		_ = a.EnsureAdminerInstalled()
-		a.ScanProjects()
+		sites := a.ScanProjects()
 		a.saveSitesCache()
 		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "services-updated", a.GetServices())
-			runtime.EventsEmit(a.ctx, "sites-updated", a.sites)
+			runtime.EventsEmit(a.ctx, "sites-updated", sites)
 		}
-		// Check runtime updates in background without blocking UI
-		updates := a.CheckRuntimeUpdates()
+
+		// 2. Launch background services asynchronously (Caddyfile is already written)
+		a.StartServices()
+		_ = a.EnsureAdminerInstalled()
 		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "runtime-updates", updates)
+			runtime.EventsEmit(a.ctx, "services-updated", a.GetServices())
 		}
+
+		// 3. Check runtime updates in background without blocking UI
+		go func() {
+			updates := a.CheckRuntimeUpdates()
+			if a.ctx != nil {
+				runtime.EventsEmit(a.ctx, "runtime-updates", updates)
+			}
+		}()
 	}()
 }
 
@@ -187,6 +215,12 @@ func (a *App) findPHPExecutableForVersion(version string) string {
 		}
 	}
 
+	if normVer == "8.5" {
+		if fb := a.findPHPExecutableForVersion("8.4"); fb != "" {
+			return fb
+		}
+	}
+
 	return a.findPHPExecutable()
 }
 
@@ -258,6 +292,32 @@ func (a *App) findMySQLExecutable() string {
 }
 
 
+func (a *App) markUserStopped(name string) {
+	a.userStoppedMu.Lock()
+	defer a.userStoppedMu.Unlock()
+	if a.userStopped == nil {
+		a.userStopped = make(map[string]bool)
+	}
+	a.userStopped[name] = true
+}
+
+func (a *App) clearUserStopped(name string) {
+	a.userStoppedMu.Lock()
+	defer a.userStoppedMu.Unlock()
+	if a.userStopped != nil {
+		delete(a.userStopped, name)
+	}
+}
+
+func (a *App) isUserStopped(name string) bool {
+	a.userStoppedMu.RLock()
+	defer a.userStoppedMu.RUnlock()
+	if a.userStopped == nil {
+		return false
+	}
+	return a.userStopped[name]
+}
+
 func (a *App) ensurePHPServiceRunning(version string) error {
 	if a.supervisor == nil {
 		return nil
@@ -265,6 +325,9 @@ func (a *App) ensurePHPServiceRunning(version string) error {
 	normVer := projects.NormalizePHPVersion(version)
 	port := projects.PHPPortForVersion(normVer)
 	serviceName := fmt.Sprintf("php-%s", normVer)
+	if a.isUserStopped(serviceName) {
+		return nil
+	}
 
 	status, exists := a.supervisor.GetServiceStatus(serviceName)
 	if exists && status.Running {
@@ -334,6 +397,9 @@ func (a *App) StartServices() {
 		caddyDir := filepath.Join("data", "caddy")
 		_ = os.MkdirAll(caddyDir, 0755)
 		caddyfilePath := filepath.Join(caddyDir, "Caddyfile")
+		if _, err := os.Stat(caddyfilePath); os.IsNotExist(err) {
+			_ = a.ReloadCaddy()
+		}
 		_ = a.supervisor.StartService("caddy", caddyExe, []string{"run", "--config", caddyfilePath, "--adapter", "caddyfile"}, 443)
 	}
 
@@ -362,10 +428,70 @@ func (a *App) StartServices() {
 }
 
 func (a *App) ToggleService(name string) (bool, error) {
+	var port int
+	isPHP := strings.HasPrefix(name, "php-")
+	if isPHP {
+		ver := strings.TrimPrefix(name, "php-")
+		port = projects.PHPPortForVersion(ver)
+	} else {
+		switch name {
+		case "caddy":
+			port = 443
+		case "mysql":
+			port = 3306
+		case "redis":
+			port = 6379
+		case "mailpit":
+			port = 1025
+		}
+	}
+
 	status, exists := a.supervisor.GetServiceStatus(name)
-	if exists && status.Running {
-		err := a.supervisor.StopService(name)
-		return false, err
+	isRunning := (exists && status.Running)
+	if port > 0 && a.IsPortListening(port) {
+		isRunning = true
+	}
+
+	// 1. If currently running or port listening -> STOP IT
+	if isRunning {
+		a.markUserStopped(name)
+		_ = a.supervisor.StopService(name)
+		if !exists && port > 0 {
+			_ = winutil.KillProcessesOnPort(port)
+		}
+		if port > 0 {
+			if !a.waitForPort(port, false, 5*time.Second) {
+				return true, fmt.Errorf("تعذر إيقاف الخدمة %s: لا يزال المنفذ %d قيد الاستخدام", name, port)
+			}
+		}
+		return false, nil
+	}
+
+	// 2. If stopped -> START IT (clean lingering port first)
+	a.clearUserStopped(name)
+	if port > 0 && a.IsPortListening(port) {
+		_ = winutil.KillProcessesOnPort(port)
+		_ = a.waitForPort(port, false, 5*time.Second)
+	}
+
+	if isPHP {
+		ver := strings.TrimPrefix(name, "php-")
+		phpExe := a.findPHPExecutableForVersion(ver)
+		if phpExe == "" {
+			return false, fmt.Errorf("محرك PHP %s غير متوفر. يرجى تنزيله من قسم الحزم المحمولة.", ver)
+		}
+		phpEnv := []string{
+			"PHP_FCGI_CHILDREN=8",
+			"PHP_FCGI_MAX_REQUESTS=10000",
+		}
+		err := a.supervisor.StartServiceWithEnv(name, phpExe, []string{"-b", fmt.Sprintf("127.0.0.1:%d", port)}, phpEnv, port)
+		if err != nil {
+			return false, err
+		}
+		if !a.waitForPort(port, true, 5*time.Second) {
+			return false, fmt.Errorf("تعذر تشغيل الخدمة %s: لم يستجب المنفذ %d في غضون 5 ثوانٍ", name, port)
+		}
+		return true, nil
 	}
 
 	switch name {
@@ -374,24 +500,11 @@ func (a *App) ToggleService(name string) (bool, error) {
 		if caddyExe == "" {
 			return false, fmt.Errorf("خادم Caddy غير مثبت بعد. يرجى تنزيله من قسم الحزم المحمولة.")
 		}
+		_ = a.ReloadCaddy()
 		caddyDir := filepath.Join("data", "caddy")
 		_ = os.MkdirAll(caddyDir, 0755)
 		caddyfilePath := filepath.Join(caddyDir, "Caddyfile")
 		err := a.supervisor.StartService("caddy", caddyExe, []string{"run", "--config", caddyfilePath, "--adapter", "caddyfile"}, 443)
-		return err == nil, err
-
-	case "php-8.1", "php-8.2", "php-8.3", "php-8.4":
-		ver := strings.TrimPrefix(name, "php-")
-		phpExe := a.findPHPExecutableForVersion(ver)
-		if phpExe == "" {
-			return false, fmt.Errorf("محرك PHP %s غير متوفر. يرجى تنزيله من قسم الحزم المحمولة.", ver)
-		}
-		port := projects.PHPPortForVersion(ver)
-		phpEnv := []string{
-			"PHP_FCGI_CHILDREN=8",
-			"PHP_FCGI_MAX_REQUESTS=10000",
-		}
-		err := a.supervisor.StartServiceWithEnv(name, phpExe, []string{"-b", fmt.Sprintf("127.0.0.1:%d", port)}, phpEnv, port)
 		return err == nil, err
 
 	case "mailpit":
@@ -454,17 +567,29 @@ func (a *App) CheckPortConflict(port int) string {
 }
 
 func (a *App) GetServices() []process.ServiceStatus {
-	serviceNames := []string{"caddy", "php-8.4", "php-8.3", "mysql", "redis", "mailpit"}
+	serviceNames := []string{"caddy", "php-8.5", "php-8.4", "php-8.3", "mysql", "redis", "mailpit"}
 	result := make([]process.ServiceStatus, 0, len(serviceNames))
 	for _, name := range serviceNames {
 		status, _ := a.supervisor.GetServiceStatus(name)
-		if name == "mysql" && !status.Running && a.IsPortListening(3306) {
-			status.Running = true
-			status.Port = 3306
+		var port int
+		if strings.HasPrefix(name, "php-") {
+			ver := strings.TrimPrefix(name, "php-")
+			port = projects.PHPPortForVersion(ver)
+		} else {
+			switch name {
+			case "caddy":
+				port = 443
+			case "mysql":
+				port = 3306
+			case "redis":
+				port = 6379
+			case "mailpit":
+				port = 1025
+			}
 		}
-		if name == "redis" && !status.Running && a.IsPortListening(6379) {
+		if port > 0 && !status.Running && a.IsPortListening(port) {
 			status.Running = true
-			status.Port = 6379
+			status.Port = port
 		}
 		result = append(result, status)
 	}
@@ -472,7 +597,15 @@ func (a *App) GetServices() []process.ServiceStatus {
 }
 
 func (a *App) GetSites() []caddy.SiteDef {
-	return a.sites
+	a.sitesMu.RLock()
+	if len(a.sites) == 0 {
+		a.sitesMu.RUnlock()
+		return a.ScanProjects()
+	}
+	defer a.sitesMu.RUnlock()
+	res := make([]caddy.SiteDef, len(a.sites))
+	copy(res, a.sites)
+	return res
 }
 
 func (a *App) AddSite(domain string, rootPath string, phpVersion string) error {
@@ -708,6 +841,22 @@ func (a *App) OpenFolder(folderPath string) error {
 	cleanPath := filepath.FromSlash(folderPath)
 	_ = os.MkdirAll(cleanPath, 0755)
 	return winutil.Command("explorer", cleanPath).Start()
+}
+
+// waitForPort waits up to timeout (polling every 100ms) for the port to reach wantListening state.
+// It returns the real final state (true if the port matches wantListening, false otherwise).
+func (a *App) waitForPort(port int, wantListening bool, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if a.IsPortListening(port) == wantListening {
+			return true
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return a.IsPortListening(port) == wantListening
 }
 
 func (a *App) IsPortListening(port int) bool {
@@ -1472,26 +1621,30 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 		})
 	}
 
+	a.sitesMu.Lock()
 	a.sites = scannedSites
+	a.sitesMu.Unlock()
 
-	// Ensure needed PHP FastCGI instances are running for all PHP sites
-	for i := range a.sites {
-		s := &a.sites[i]
-		if s.IsWeb && s.PHPPort > 0 && s.PHPVersion != "" {
-			if a.findPHPExecutableForVersion(s.PHPVersion) == "" {
-				s.PHPVersion = projects.NormalizePHPVersion(a.cfg.DefaultPHP)
-				s.PHPPort = projects.PHPPortForVersion(s.PHPVersion)
-			}
-			_ = a.ensurePHPServiceRunning(s.PHPVersion)
-		}
-	}
-
-	// 1. Write updated Caddyfile
+	// Write Caddyfile synchronously so callers (like StartServices) always find a valid Caddyfile
 	_ = a.ReloadCaddy()
+
+	// Ensure needed PHP FastCGI instances asynchronously in background
+	go func(sites []caddy.SiteDef) {
+		for i := range sites {
+			s := &sites[i]
+			if s.IsWeb && s.PHPPort > 0 && s.PHPVersion != "" {
+				if a.findPHPExecutableForVersion(s.PHPVersion) == "" {
+					s.PHPVersion = projects.NormalizePHPVersion(a.cfg.DefaultPHP)
+					s.PHPPort = projects.PHPPortForVersion(s.PHPVersion)
+				}
+				_ = a.ensurePHPServiceRunning(s.PHPVersion)
+			}
+		}
+	}(scannedSites)
 
 	// 2. Update system hosts file asynchronously in background (prevents ipconfig /flushdns UI freezes)
 	webDomains := make([]string, 0)
-	for _, s := range a.sites {
+	for _, s := range scannedSites {
 		if s.IsWeb && s.Domain != "" {
 			webDomains = append(webDomains, s.Domain)
 		}
@@ -1501,11 +1654,28 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 		suffix = a.cfg.DomainSuffix
 	}
 	webDomains = append(webDomains, "adminer"+suffix)
+	webDomains = append(webDomains, "phpmyadmin"+suffix)
 	go func(domains []string) {
 		_ = hosts.UpdateSystemHosts(domains)
 	}(webDomains)
 
-	return a.sites
+	return scannedSites
+}
+
+func (a *App) writeAtomicFile(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, data, perm); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 // ReloadCaddy writes the updated Caddyfile configuration and reloads Caddy if running
@@ -1525,13 +1695,33 @@ func (a *App) ReloadCaddy() error {
 		PHPPort:  a.getActivePHPPort(),
 		Port:     3307,
 	}
-	caddyContent := caddy.GenerateCaddyfile(a.sites, 2019, adminerCfg)
-	if err := os.WriteFile(caddyfilePath, []byte(caddyContent), 0644); err != nil {
+	pmaCfg := caddy.PhpMyAdminConfig{}
+	if phpmyadmin.IsInstalled(".") {
+		_ = phpmyadmin.EnsureConfig(".")
+		absPmaPath, _ := filepath.Abs(filepath.Join("data", "phpmyadmin"))
+		pmaDomain := "phpmyadmin.test"
+		if a.cfg != nil && a.cfg.DomainSuffix != "" {
+			pmaDomain = "phpmyadmin" + a.cfg.DomainSuffix
+		}
+		pmaCfg = caddy.PhpMyAdminConfig{
+			Enabled:  true,
+			Domain:   pmaDomain,
+			RootPath: absPmaPath,
+			Port:     phpmyadmin.DefaultPort,
+			PHPPort:  a.getActivePHPPort(),
+		}
+	}
+	a.sitesMu.RLock()
+	sites := a.sites
+	a.sitesMu.RUnlock()
+	caddyContent := caddy.GenerateCaddyfileWithTools(sites, 2019, adminerCfg, pmaCfg)
+
+	if err := a.writeAtomicFile(caddyfilePath, []byte(caddyContent), 0644); err != nil {
 		return err
 	}
 
 	// Also write to data/Caddyfile for standard root access
-	_ = os.WriteFile(filepath.Join("data", "Caddyfile"), []byte(caddyContent), 0644)
+	_ = a.writeAtomicFile(filepath.Join("data", "Caddyfile"), []byte(caddyContent), 0644)
 
 	// Attempt live reload via Caddy admin API asynchronously so it never delays UI or caller
 	go func(content string) {
@@ -1562,6 +1752,7 @@ func (a *App) SyncHosts() (string, error) {
 		suffix = a.cfg.DomainSuffix
 	}
 	webDomains = append(webDomains, "adminer"+suffix)
+	webDomains = append(webDomains, "phpmyadmin"+suffix)
 	if err := hosts.UpdateSystemHosts(webDomains); err != nil {
 		return "", err
 	}
@@ -1630,5 +1821,53 @@ func (a *App) OpenAdminer(dbName string) error {
 	_ = a.ReloadCaddy()
 
 	targetURL := adminer.BuildURL("adminer"+a.cfg.DomainSuffix, 3307, dbName)
+	return a.OpenBrowser(targetURL)
+}
+
+// OpenPhpMyAdmin starts prerequisites (MySQL, PHP, Caddy) and opens phpMyAdmin in browser
+func (a *App) OpenPhpMyAdmin(dbName string) error {
+	if !phpmyadmin.IsInstalled(".") {
+		return fmt.Errorf("أداة phpMyAdmin غير مثبتة حالياً في data/phpmyadmin")
+	}
+
+	_ = phpmyadmin.EnsureConfig(".")
+
+	if a.supervisor != nil {
+		// 1. Ensure MySQL is running
+		mysqlStatus, _ := a.supervisor.GetServiceStatus("mysql")
+		if !mysqlStatus.Running && !a.IsPortListening(3306) {
+			_, _ = a.ToggleService("mysql")
+		}
+
+		// 2. Ensure at least one PHP FastCGI instance is running
+		phpRunning := false
+		for _, v := range []string{"8.4", "8.3", "8.2", "8.1"} {
+			if st, ok := a.supervisor.GetServiceStatus("php-" + v); ok && st.Running {
+				phpRunning = true
+				break
+			}
+		}
+		if !phpRunning {
+			defVer := "8.4"
+			if a.cfg != nil && a.cfg.DefaultPHP != "" {
+				defVer = a.cfg.DefaultPHP
+			}
+			_ = a.ensurePHPServiceRunning(defVer)
+		}
+
+		// 3. Ensure Caddy is running
+		caddyStatus, _ := a.supervisor.GetServiceStatus("caddy")
+		if !caddyStatus.Running {
+			_, _ = a.ToggleService("caddy")
+		}
+	}
+
+	_ = a.ReloadCaddy()
+
+	suffix := ".test"
+	if a.cfg != nil && a.cfg.DomainSuffix != "" {
+		suffix = a.cfg.DomainSuffix
+	}
+	targetURL := phpmyadmin.BuildURL("phpmyadmin"+suffix, phpmyadmin.DefaultPort, dbName)
 	return a.OpenBrowser(targetURL)
 }

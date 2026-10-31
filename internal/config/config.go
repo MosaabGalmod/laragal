@@ -1,6 +1,7 @@
-package config
+﻿package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -22,6 +23,7 @@ type AppConfig struct {
 	Services         map[string]bool                  `json:"services"`
 	ProjectPHP       map[string]string                `json:"project_php,omitempty"`
 	ProjectOverrides map[string]ProjectCustomSettings `json:"project_overrides,omitempty"`
+	StartOnBoot      bool                             `json:"start_on_boot"`
 }
 
 func NewDefaultConfig() *AppConfig {
@@ -34,6 +36,7 @@ func NewDefaultConfig() *AppConfig {
 		RecentPaths:  []string{defaultPath},
 		DefaultPHP:   "8.3",
 		DomainSuffix: ".test",
+		StartOnBoot:  true,
 		Services: map[string]bool{
 			"caddy":   true,
 			"php":     true,
@@ -51,6 +54,7 @@ func LoadConfig(path string) (*AppConfig, error) {
 	if err != nil {
 		return nil, err
 	}
+	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
 	var cfg AppConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err

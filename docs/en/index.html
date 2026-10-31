@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en" dir="ltr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <script src="../assets/theme.js"></script>
+
+  <title>LaraGal | Local dev environment for Windows on https://*.test</title>
+  <meta name="description" content="LaraGal is a local development environment for Windows: Caddy with automatic HTTPS, PHP 8.1 to 8.5 side by side, MariaDB, Redis, Mailpit and phpMyAdmin, with an Arabic and English UI.">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d1017" media="(prefers-color-scheme: dark)">
+  <link rel="canonical" href="https://mosaabgalmod.github.io/laragal/en/">
+  <link rel="alternate" hreflang="ar" href="https://mosaabgalmod.github.io/laragal/">
+  <link rel="alternate" hreflang="en" href="https://mosaabgalmod.github.io/laragal/en/">
+  <link rel="alternate" hreflang="x-default" href="https://mosaabgalmod.github.io/laragal/en/">
+  <link rel="sitemap" type="application/xml" href="../sitemap.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="../assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="../assets/site.css">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="LaraGal">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="ar_SA">
+  <meta property="og:title" content="LaraGal | Local dev environment for Windows">
+  <meta property="og:description" content="Caddy with automatic HTTPS, PHP 8.1 to 8.5 running together, MariaDB, Redis, Mailpit and phpMyAdmin in one app.">
+  <meta property="og:url" content="https://mosaabgalmod.github.io/laragal/en/">
+  <meta property="og:image" content="https://mosaabgalmod.github.io/laragal/assets/og-en.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="LaraGal dashboard showing local services and the projects list">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="LaraGal | Local dev environment for Windows">
+  <meta name="twitter:description" content="Caddy with automatic HTTPS, PHP 8.1 to 8.5 side by side, MariaDB, Redis, Mailpit and phpMyAdmin.">
+  <meta name="twitter:image" content="https://mosaabgalmod.github.io/laragal/assets/og-en.png">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://mosaabgalmod.github.io/laragal/#app",
+        "name": "LaraGal",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Windows 10, Windows 11 (x64)",
+        "softwareVersion": "1.1.0",
+        "inLanguage": ["ar", "en"],
+        "description": "Local development environment for Windows bundling Caddy, multiple PHP versions, MariaDB, Redis, Mailpit and phpMyAdmin with automatic HTTPS for .test domains.",
+        "url": "https://mosaabgalmod.github.io/laragal/en/",
+        "downloadUrl": "https://github.com/MosaabGalmod/laragal/releases/latest",
+        "installUrl": "https://github.com/MosaabGalmod/laragal/releases/latest",
+        "screenshot": "https://mosaabgalmod.github.io/laragal/assets/og-en.png",
+        "license": "https://github.com/MosaabGalmod/laragal/blob/main/LICENSE",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "codeRepository": "https://github.com/MosaabGalmod/laragal"
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://mosaabgalmod.github.io/laragal/en/#site",
+        "name": "LaraGal",
+        "url": "https://mosaabgalmod.github.io/laragal/en/",
+        "inLanguage": "en"
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Is LaraGal free?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Yes for development, testing, education and non-commercial use under the Business Source License 1.1. Offering it to third parties as a competing product or service needs a commercial license." }
+          },
+          {
+            "@type": "Question",
+            "name": "Why does it ask for administrator rights?",
+            "acceptedAnswer": { "@type": "Answer", "text": "To edit the hosts file so .test domains resolve, and to install the local root certificate into the Windows trusted store." }
+          },
+          {
+            "@type": "Question",
+            "name": "Can I run more than one PHP version at the same time?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Yes. Each version runs on its own FastCGI port and every project picks its version from the projects list." }
+          },
+          {
+            "@type": "Question",
+            "name": "The first request to a Laravel project is very slow. Why?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Usually Windows Defender scans each PHP file the first time it is opened. Excluding the projects folder and the PHP folder from real-time scanning fixes it." }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="./" aria-label="LaraGal home">
+        <img src="../assets/logo-64.png" alt="" width="28" height="28">
+        <span>LaraGal</span>
+        <span class="ver">v1.1.0</span>
+      </a>
+
+      <nav class="nav" aria-label="Page sections">
+        <a href="#services">Services</a>
+        <a href="#projects">Project types</a>
+        <a href="#start">Get started</a>
+        <a href="#security">Security</a>
+        <a href="#faq">FAQ</a>
+      </nav>
+
+      <div class="header-actions">
+        <a class="text-btn hide-sm" href="https://github.com/MosaabGalmod/laragal" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.880-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.680 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.62 1.58.23 2.75.11 3.04.74.8 1.18 1.83 1.18 3.08 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+          <span>Repository</span>
+        </a>
+        <a class="text-btn" href="../" hreflang="ar" lang="ar" dir="rtl">العربية</a>
+        <button type="button" class="icon-btn theme-btn" id="themeToggle" aria-label="Toggle dark and light mode">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.99 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.78 9.79Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        </button>
+        <details class="menu">
+          <summary class="icon-btn" aria-label="Sections menu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </summary>
+          <nav class="menu-panel" aria-label="Page sections">
+            <a href="#services">Services</a>
+            <a href="#projects">Project types</a>
+            <a href="#start">Get started</a>
+            <a href="#security">Security</a>
+            <a href="#faq">FAQ</a>
+            <a href="https://github.com/MosaabGalmod/laragal" rel="noopener noreferrer">Repository on GitHub</a>
+          </nav>
+        </details>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="wrap">
+        <h1>Run your projects on https://*.test on Windows, without manual setup</h1>
+        <p class="lead">LaraGal bundles the Caddy web server with trusted local HTTPS certificates, several PHP versions running together, MariaDB, Redis, Mailpit and phpMyAdmin in one app. Point it at your projects folder and each project gets its own domain.</p>
+
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="https://github.com/MosaabGalmod/laragal/releases/latest" rel="noopener noreferrer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+            Download latest release
+          </a>
+          <a class="btn btn-secondary" href="https://github.com/MosaabGalmod/laragal" rel="noopener noreferrer">View source on GitHub</a>
+        </div>
+
+        <ul class="facts">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Windows 10 and 11, x64</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>A single executable of about 16 MB</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Portable, no registry writes</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Free for development under BSL 1.1</li>
+        </ul>
+
+        <div class="shot">
+          <img class="light-only" src="../assets/app-en-light.webp" width="1360" height="860" fetchpriority="high" alt="LaraGal dashboard: Caddy, PHP 8.5, 8.4 and 8.3, MySQL and Mailpit cards running, with the projects list below">
+          <img class="dark-only" src="../assets/app-en-dark.webp" width="1360" height="860" loading="lazy" alt="LaraGal dashboard in dark mode">
+        </div>
+      </div>
+    </section>
+
+    <section id="services" aria-labelledby="services-title">
+      <div class="wrap">
+        <h2 id="services-title">What runs inside</h2>
+        <p class="section-intro">Each service is a separate process watched by the app, and you start or stop it from its card. Logs are kept per service in <code>data\logs</code>.</p>
+
+        <div class="services">
+          <article class="service">
+            <h3><span>Caddy</span><span class="mono">:443</span></h3>
+            <p>Web server and reverse proxy. Issues a certificate for every .test domain from a local authority and reloads its config when you add a project, without stopping the other sites.</p>
+          </article>
+          <article class="service">
+            <h3><span>PHP 8.1–8.5</span><span class="mono">:9081–9085</span></h3>
+            <p>Each version has its own FastCGI port with OPcache, so one project can run on 8.3 while another runs on 8.5. Switch versions from the project row.</p>
+          </article>
+          <article class="service">
+            <h3><span>MariaDB</span><span class="mono">:3306</span></h3>
+            <p>MySQL-compatible database bound to 127.0.0.1. The app finds .sql files inside a project, imports them, and points the project's .env at the database.</p>
+          </article>
+          <article class="service">
+            <h3><span>phpMyAdmin / Adminer</span><span class="mono">:3308 / :3307</span></h3>
+            <p>Two database tools, opened from the MySQL card or the window header. The database button on a project row opens that project's database in Adminer.</p>
+          </article>
+          <article class="service">
+            <h3><span>Mailpit</span><span class="mono">:1025 / :8025</span></h3>
+            <p>Catches every email your app sends over SMTP and shows it in a local inbox, so test messages never reach real people.</p>
+          </article>
+          <article class="service">
+            <h3><span>Redis</span><span class="mono">:6379</span></h3>
+            <p>For cache, queues and sessions. Stopped by default and started with one click when a project needs it.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="projects" aria-labelledby="projects-title">
+      <div class="wrap">
+        <h2 id="projects-title">Projects it recognizes</h2>
+        <p class="section-intro">The app reads each folder inside your projects folder and decides how to serve it. PHP projects go through FastCGI; the others get a reverse proxy to the app's port, or their static files are served directly.</p>
+
+        <div class="table-scroll" role="region" aria-labelledby="projects-title" tabindex="0">
+          <table>
+            <thead>
+              <tr><th scope="col">Type</th><th scope="col">Detected by</th><th scope="col">Served as</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Laravel</td><td><span class="sig"><code>artisan</code><code>composer.json</code></span></td><td>PHP FastCGI, document root <code>public</code></td></tr>
+              <tr><td>WordPress</td><td><span class="sig"><code>wp-config.php</code><code>wp-load.php</code></span></td><td>PHP FastCGI</td></tr>
+              <tr><td>PHP</td><td><span class="sig"><code>index.php</code></span></td><td>PHP FastCGI</td></tr>
+              <tr><td>Go</td><td><span class="sig"><code>go.mod</code></span></td><td>Reverse proxy to the app port</td></tr>
+              <tr><td>Rust</td><td><span class="sig"><code>Cargo.toml</code></span></td><td>Reverse proxy</td></tr>
+              <tr><td>.NET</td><td><span class="sig"><code>*.csproj</code><code>Program.cs</code></span></td><td>Reverse proxy, static files from <code>wwwroot</code></td></tr>
+              <tr><td>Python</td><td><span class="sig"><code>manage.py</code><code>requirements.txt</code></span></td><td>Reverse proxy</td></tr>
+              <tr><td>Ruby</td><td><span class="sig"><code>Gemfile</code><code>config.ru</code></span></td><td>Reverse proxy</td></tr>
+              <tr><td>Java</td><td><span class="sig"><code>pom.xml</code><code>build.gradle</code></span></td><td>Reverse proxy</td></tr>
+              <tr><td>Node.js</td><td><span class="sig"><code>package.json</code></span></td><td>Static <code>dist</code> or <code>build</code> output, or a proxy to the dev server</td></tr>
+              <tr><td>Flutter Web</td><td><span class="sig"><code>build/web/index.html</code></span></td><td>Static files</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="start" aria-labelledby="start-title">
+      <div class="wrap">
+        <h2 id="start-title">Get started</h2>
+        <p class="section-intro">There is no installer. Unzip it into any folder you can write to.</p>
+        <ol class="steps">
+          <li>
+            <h3>Download the portable build</h3>
+            <p>From the GitHub releases page, then unzip it.</p>
+          </li>
+          <li>
+            <h3>Run laragal.exe</h3>
+            <p>It asks for administrator rights once, to edit the hosts file and install the local certificate.</p>
+          </li>
+          <li>
+            <h3>Pick your projects folder</h3>
+            <p>For example <code>D:\projects</code>. Each project shows up with its domain, type and PHP version.</p>
+          </li>
+          <li>
+            <h3>Open the domain</h3>
+            <p>A project in a folder named <code>shop</code> opens at <code>https://shop.test</code> with a certificate the browser trusts.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="security" aria-labelledby="security-title">
+      <div class="wrap">
+        <h2 id="security-title">What it changes on your machine</h2>
+        <p class="section-intro">A dev environment runs with elevated rights, so here is every change it makes.</p>
+        <dl class="notes">
+          <div>
+            <dt>A local root certificate</dt>
+            <dd>Created by Caddy on your machine and never sent anywhere. It is added to the trusted store when you click "Install SSL Trust". Its private key stays in Caddy's local files.</dd>
+          </div>
+          <div>
+            <dt>The hosts file</dt>
+            <dd>One line per .test domain pointing to 127.0.0.1. Other lines are left untouched.</dd>
+          </div>
+          <div>
+            <dt>Services bound to localhost</dt>
+            <dd>PHP, MariaDB and Mailpit listen on 127.0.0.1 only. Caddy listens on port 443, so block it in the firewall when you are on a public network.</dd>
+          </div>
+          <div>
+            <dt>Network access</dt>
+            <dd>The app goes online only to check for updates from windows.php.net and GitHub, and to download packages when you ask it to.</dd>
+          </div>
+          <div>
+            <dt>Database password</dt>
+            <dd>The root user has no password. That is acceptable because the database refuses connections from other machines. Never use this setup on a production server.</dd>
+          </div>
+          <div>
+            <dt>Your files</dt>
+            <dd>Data and logs live in the data and bin folders next to the app. Deleting the folder removes the app; your databases are in <code>data\mysql</code> if you want to move them.</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <section id="faq" aria-labelledby="faq-title">
+      <div class="wrap">
+        <h2 id="faq-title">FAQ</h2>
+        <p class="section-intro">Didn't find your answer? Open an issue in the repository.</p>
+        <div class="faq">
+          <details>
+            <summary>Is LaraGal free?</summary>
+            <div class="answer"><p>Yes for development, testing, education and non-commercial use under the Business Source License 1.1. Offering it to third parties as a competing product or service needs a commercial license. Four years after each release, that release becomes Apache 2.0.</p></div>
+          </details>
+          <details>
+            <summary>Why does it ask for administrator rights?</summary>
+            <div class="answer"><p>To edit the hosts file so .test domains resolve, and to install the local certificate into the trusted store.</p></div>
+          </details>
+          <details>
+            <summary>Can I run more than one PHP version at the same time?</summary>
+            <div class="answer"><p>Yes. Each version runs on its own port, and you choose a project's version from the dropdown in its row.</p></div>
+          </details>
+          <details>
+            <summary>The first request to a Laravel project takes over 30 seconds. Why?</summary>
+            <div class="answer">
+              <p>Most likely Windows Defender scans each PHP file the first time it is opened, and the first Laravel page opens hundreds of them. On a machine with an NVMe drive, reading 800 files took 14 seconds and dropped below one second after adding an exclusion.</p>
+              <p>Run this in an elevated PowerShell, adjusting the paths to your machine:</p>
+              <pre><code>Add-MpPreference -ExclusionPath 'D:\projects', 'D:\laragal\bin'</code></pre>
+              <p>An exclusion means Defender stops scanning those folders, so limit it to folders whose contents you trust.</p>
+            </div>
+          </details>
+          <details>
+            <summary>Port 443 is taken by another program. What now?</summary>
+            <div class="answer"><p>The app shows a warning at startup when the port is taken. Find the process with <code>netstat -ano | findstr :443</code>, stop IIS or any other web server, then restart Caddy from its card.</p></div>
+          </details>
+          <details>
+            <summary>Does it run on macOS or Linux?</summary>
+            <div class="answer"><p>The current release is Windows only. Parts of the code are written to be portable, but there is no build for other systems yet.</p></div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="dl-title">
+      <div class="wrap download">
+        <div>
+          <h2 id="dl-title">Download version 1.1.0</h2>
+          <p class="meta">A portable ZIP. You can also build from source with <code>wails build</code>.</p>
+        </div>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="https://github.com/MosaabGalmod/laragal/releases/latest" rel="noopener noreferrer">Releases page</a>
+          <a class="btn btn-secondary" href="https://github.com/MosaabGalmod/laragal/blob/main/CONTRIBUTING.md" rel="noopener noreferrer">Contributing guide</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>LaraGal v1.1.0, BSL 1.1 license</span>
+      <nav aria-label="Project links">
+        <a href="https://github.com/MosaabGalmod/laragal" rel="noopener noreferrer">Repository</a>
+        <a href="https://github.com/MosaabGalmod/laragal/issues" rel="noopener noreferrer">Report an issue</a>
+        <a href="https://github.com/MosaabGalmod/laragal/blob/main/LICENSE" rel="noopener noreferrer">License</a>
+        <a href="../" hreflang="ar" lang="ar" dir="rtl">العربية</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

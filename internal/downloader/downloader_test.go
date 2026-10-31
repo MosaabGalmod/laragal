@@ -19,13 +19,17 @@ func TestGetDownloadURL(t *testing.T) {
 	targets := []string{
 		"caddy",
 		"mailpit",
+		"php-8.5",
 		"php-8.4",
 		"php-8.3",
 		"php-8.2",
 		"php-8.1",
 		"mysql",
 		"redis",
-		"php8.4",
+		"php8.5",
+		"php85",
+		"php-8.6",
+		"php-9.0",
 		"mariadb",
 	}
 
@@ -36,6 +40,20 @@ func TestGetDownloadURL(t *testing.T) {
 		}
 		if !strings.HasPrefix(url, "https://") {
 			t.Errorf("url for %s must start with https://, got: %s", target, url)
+		}
+	}
+
+	const expectedPHP85URL = "https://windows.php.net/downloads/releases/php-8.5.12-1-nts-Win32-vs17-x64.zip"
+	for _, target := range []string{"php-8.5", "php85"} {
+		url, err := downloader.GetDownloadURL(target)
+		if err != nil {
+			t.Errorf("GetDownloadURL(%q) unexpected error: %v", target, err)
+		}
+		if url != expectedPHP85URL {
+			t.Errorf("GetDownloadURL(%q) = %q, want %q", target, url, expectedPHP85URL)
+		}
+		if strings.Contains(url, "8.4") {
+			t.Errorf("GetDownloadURL(%q) url %q must not contain '8.4'", target, url)
 		}
 	}
 

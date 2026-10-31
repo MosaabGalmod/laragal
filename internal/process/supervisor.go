@@ -2,7 +2,9 @@ package process
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"sync"
 
 	"github.com/laragal/laragal/internal/winutil"
@@ -23,12 +25,22 @@ type managedProcess struct {
 type Supervisor struct {
 	mu        sync.RWMutex
 	processes map[string]*managedProcess
+	LogsDir   string
+	OnExit    func(name string)
 }
 
 func NewSupervisor() *Supervisor {
 	return &Supervisor{
 		processes: make(map[string]*managedProcess),
+		LogsDir:   filepath.Join("data", "logs"),
 	}
+}
+
+func (s *Supervisor) getLogsDir() string {
+	if s.LogsDir != "" {
+		return s.LogsDir
+	}
+	return filepath.Join("data", "logs")
 }
 
 func (s *Supervisor) StartService(name string, exe string, args []string, port int) error {
@@ -51,7 +63,32 @@ func (s *Supervisor) StartServiceInDirWithEnv(name string, exe string, args []st
 		return fmt.Errorf("service %s is already running", name)
 	}
 
+	if filepath.Base(exe) == exe {
+		if lp, err := exec.LookPath(exe); err == nil {
+			exe = lp
+		}
+	} else if absExe, err := filepath.Abs(exe); err == nil {
+		exe = absExe
+	}
+	if dir != "" {
+		if absDir, err := filepath.Abs(dir); err == nil {
+			dir = absDir
+		}
+	}
+
+	logsDir := s.getLogsDir()
+	if err := os.MkdirAll(logsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create logs directory: %w", err)
+	}
+	logPath := filepath.Join(logsDir, fmt.Sprintf("%s.log", name))
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open log file for %s: %w", name, err)
+	}
+
 	cmd := winutil.Command(exe, args...)
+	cmd.Stdout = logFile
+	cmd.Stderr = logFile
 	if dir != "" {
 		cmd.Dir = dir
 	}
@@ -59,6 +96,7 @@ func (s *Supervisor) StartServiceInDirWithEnv(name string, exe string, args []st
 		cmd.Env = append(cmd.Environ(), env...)
 	}
 	if err := cmd.Start(); err != nil {
+		_ = logFile.Close()
 		return fmt.Errorf("failed to start service %s: %w", name, err)
 	}
 
@@ -76,11 +114,20 @@ func (s *Supervisor) StartServiceInDirWithEnv(name string, exe string, args []st
 	// Monitor termination in background goroutine
 	go func() {
 		_ = cmd.Wait()
+		_ = logFile.Close()
+
 		s.mu.Lock()
-		defer s.mu.Unlock()
+		isCurrent := false
 		if current, ok := s.processes[name]; ok && current == p {
 			current.status.Running = false
 			current.status.PID = 0
+			isCurrent = true
+		}
+		onExit := s.OnExit
+		s.mu.Unlock()
+
+		if isCurrent && onExit != nil {
+			onExit(name)
 		}
 	}()
 
@@ -92,13 +139,18 @@ func (s *Supervisor) StopService(name string) error {
 	defer s.mu.Unlock()
 
 	p, exists := s.processes[name]
-	if !exists || !p.status.Running {
+	if !exists {
 		return nil
 	}
 
-	if err := p.cmd.Process.Kill(); err != nil {
-		return err
+	if p.cmd != nil && p.cmd.Process != nil && p.cmd.Process.Pid > 0 {
+		_ = winutil.KillProcessTree(p.cmd.Process.Pid)
+		_ = p.cmd.Process.Kill()
 	}
+	if p.status.Port > 0 {
+		_ = winutil.KillProcessesOnPort(p.status.Port)
+	}
+
 	p.status.Running = false
 	p.status.PID = 0
 	return nil
@@ -109,11 +161,15 @@ func (s *Supervisor) StopAll() error {
 	defer s.mu.Unlock()
 
 	for _, p := range s.processes {
-		if p.status.Running {
+		if p.cmd != nil && p.cmd.Process != nil && p.cmd.Process.Pid > 0 {
+			_ = winutil.KillProcessTree(p.cmd.Process.Pid)
 			_ = p.cmd.Process.Kill()
-			p.status.Running = false
-			p.status.PID = 0
 		}
+		if p.status.Port > 0 {
+			_ = winutil.KillProcessesOnPort(p.status.Port)
+		}
+		p.status.Running = false
+		p.status.PID = 0
 	}
 	return nil
 }

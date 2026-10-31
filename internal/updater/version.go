@@ -7,6 +7,7 @@ import (
 )
 
 var semverRegex = regexp.MustCompile(`[vV]?(\d+\.\d+(?:\.\d+)*)`)
+var phpVersionRegex = regexp.MustCompile(`(?i)PHP\s+(\d+\.\d+(?:\.\d+)*)`)
 
 // CleanVersionString strips prefixes like 'v' or 'php' and whitespace
 func CleanVersionString(v string) string {
@@ -19,6 +20,9 @@ func CleanVersionString(v string) string {
 // ExtractVersion searches text output for standard semantic version patterns
 func ExtractVersion(output string) string {
 	clean := strings.TrimSpace(output)
+	if m := phpVersionRegex.FindStringSubmatch(clean); len(m) > 1 {
+		return m[1]
+	}
 	matches := semverRegex.FindAllStringSubmatch(clean, -1)
 	if len(matches) == 0 {
 		return ""
