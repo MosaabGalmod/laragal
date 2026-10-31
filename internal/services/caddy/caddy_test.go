@@ -150,3 +150,42 @@ func TestGenerateCaddyfileWithAdminer(t *testing.T) {
 		t.Errorf("missing php_fastcgi proxy in adminer block")
 	}
 }
+func TestGenerateCaddyfileWithPhpMyAdmin(t *testing.T) {
+	sites := []caddy.SiteDef{
+		{
+			Domain:   "mysite.test",
+			RootPath: "D:/projects/mysite",
+			PHPPort:  9084,
+			IsWeb:    true,
+		},
+	}
+
+	adminerCfg := caddy.AdminerConfig{
+		Enabled:  true,
+		Domain:   "adminer.test",
+		RootPath: "D:/projects/laragal/data/adminer",
+		PHPPort:  9084,
+		Port:     3307,
+	}
+
+	pmaCfg := caddy.PhpMyAdminConfig{
+		Enabled:  true,
+		Domain:   "phpmyadmin.test",
+		RootPath: "D:/projects/laragal/data/phpmyadmin",
+		PHPPort:  9084,
+		Port:     3308,
+	}
+
+	caddyfile := caddy.GenerateCaddyfileWithTools(sites, 2019, adminerCfg, pmaCfg)
+
+	if !strings.Contains(caddyfile, "adminer.test, http://localhost:3307 {") {
+		t.Errorf("missing adminer block")
+	}
+	if !strings.Contains(caddyfile, "phpmyadmin.test, http://localhost:3308 {") {
+		t.Errorf("missing phpmyadmin block with dual host and port")
+	}
+	if !strings.Contains(caddyfile, `root * "D:/projects/laragal/data/phpmyadmin"`) {
+		t.Errorf("missing phpmyadmin root path")
+	}
+}
+

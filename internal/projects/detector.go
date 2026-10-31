@@ -1,12 +1,18 @@
-package projects
+﻿package projects
 
 import (
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
+)
+
+var (
+	phpVersionRegex  = regexp.MustCompile(`(\d+)\.(\d+)`)
+	phpPlatformRegex = regexp.MustCompile(`PHP_VERSION_ID\s*>=\s*(\d+)`)
 )
 
 type ProjectType string
@@ -28,17 +34,28 @@ const (
 	TypeNonWeb    ProjectType = "non_web"
 )
 
+type ProjectDatabaseInfo struct {
+	Type           string `json:"type"`            // "sqlite" | "mysql" | "pgsql" | "none"
+	Name           string `json:"name"`            // normalized name or database name
+	Path           string `json:"path,omitempty"`  // absolute or relative path to sqlite file if sqlite
+	Status         string `json:"status"`          // "ready" | "needs_migration" | "missing"
+	TablesCount    int    `json:"tables_count"`    // approximate table count if inspectable
+	NeedsMigration bool   `json:"needs_migration"` // true if database is missing, empty, or unmigrated
+	Description    string `json:"description"`     // localized human-readable status
+}
+
 type DetectedProject struct {
-	Name        string      `json:"name"`
-	Path        string      `json:"path"`
-	DocRoot     string      `json:"doc_root"`
-	Type        ProjectType `json:"type"`
-	TypeLabel   string      `json:"type_label"`
-	PHPVersion  string      `json:"php_version"`
-	PHPPort     int         `json:"php_port"`
-	ProxyPort   int         `json:"proxy_port,omitempty"`
-	IsWeb       bool        `json:"is_web"`
-	Domain      string      `json:"domain"`
+	Name        string              `json:"name"`
+	Path        string              `json:"path"`
+	DocRoot     string              `json:"doc_root"`
+	Type        ProjectType         `json:"type"`
+	TypeLabel   string              `json:"type_label"`
+	PHPVersion  string              `json:"php_version"`
+	PHPPort     int                 `json:"php_port"`
+	ProxyPort   int                 `json:"proxy_port,omitempty"`
+	IsWeb       bool                `json:"is_web"`
+	Domain      string              `json:"domain"`
+	Database    ProjectDatabaseInfo `json:"database"`
 }
 
 func fileExists(path string) bool {
@@ -99,45 +116,45 @@ func parseEnvPort(dir string) int {
 	return 0
 }
 
-// PHPPortForVersion returns the FastCGI port for a given PHP version string
+// PHPPortForVersion returns the FastCGI port for a given PHP version string.
+// Dynamic formula: 9000 + (major * 10) + minor (e.g. 8.1 -> 9081, 8.4 -> 9084, 8.5 -> 9085, 9.0 -> 9090).
 func PHPPortForVersion(version string) int {
-	v := strings.TrimSpace(strings.ToLower(version))
-	v = strings.TrimPrefix(v, "php")
-	v = strings.TrimSpace(v)
-	switch {
-	case strings.HasPrefix(v, "8.4"):
-		return 9084
-	case strings.HasPrefix(v, "8.3"):
-		return 9083
-	case strings.HasPrefix(v, "8.2"):
-		return 9082
-	case strings.HasPrefix(v, "8.1"):
-		return 9081
-	default:
-		return 9083
+	norm := NormalizePHPVersion(version)
+	parts := strings.Split(norm, ".")
+	if len(parts) == 2 {
+		major, err1 := strconv.Atoi(parts[0])
+		minor, err2 := strconv.Atoi(parts[1])
+		if err1 == nil && err2 == nil && major >= 7 && major <= 15 {
+			port := 9000 + (major * 10) + minor
+			if port >= 9000 && port <= 9999 {
+				return port
+			}
+		}
 	}
+	return 9083
 }
 
-// NormalizePHPVersion returns a standard string like "8.3", "8.4", etc.
+// NormalizePHPVersion returns a standard string like "8.3", "8.4", "8.5", "9.0", etc.
 func NormalizePHPVersion(version string) string {
 	v := strings.TrimSpace(strings.ToLower(version))
 	v = strings.TrimPrefix(v, "php")
+	v = strings.TrimPrefix(v, "-")
 	v = strings.TrimSpace(v)
-	switch {
-	case strings.HasPrefix(v, "8.4"):
-		return "8.4"
-	case strings.HasPrefix(v, "8.3"):
-		return "8.3"
-	case strings.HasPrefix(v, "8.2"):
-		return "8.2"
-	case strings.HasPrefix(v, "8.1"):
-		return "8.1"
-	default:
-		if v != "" {
-			return v
-		}
-		return "8.3"
+
+	// Check if it is in the form 85 or 84 -> 8.5, 8.4
+	if len(v) == 2 && v[0] >= "7"[0] && v[0] <= "9"[0] && v[1] >= "0"[0] && v[1] <= "9"[0] {
+		return fmt.Sprintf("%c.%c", v[0], v[1])
 	}
+
+	match := phpVersionRegex.FindStringSubmatch(v)
+	if len(match) == 3 {
+		return match[1] + "." + match[2]
+	}
+
+	if v != "" {
+		return v
+	}
+	return "8.3"
 }
 
 type composerFile struct {
@@ -161,28 +178,38 @@ func DetectComposerPHPVersion(composerPath string) string {
 	return ParsePHPConstraint(phpReq)
 }
 
-// ParsePHPConstraint maps a composer PHP constraint like "^8.4", "~8.2.0", "8.1.*" to a normalized version string
+// ParsePHPConstraint maps a composer PHP constraint like "^8.5", "^8.4", "~8.2.0", "8.1.*" to a normalized version string.
 func ParsePHPConstraint(constraint string) string {
 	c := strings.ToLower(strings.TrimSpace(constraint))
 	if c == "" {
 		return ""
 	}
 
-	// Direct match checks from highest to lowest supported versions
-	if strings.Contains(c, "8.4") {
-		return "8.4"
-	}
-	if strings.Contains(c, "8.3") {
-		return "8.3"
-	}
-	if strings.Contains(c, "8.2") {
-		return "8.2"
-	}
-	if strings.Contains(c, "8.1") {
-		return "8.1"
+	// Find all X.Y version mentions and select the highest version found
+	matches := phpVersionRegex.FindAllStringSubmatch(c, -1)
+	var bestVer string
+	var bestMajor, bestMinor int
+
+	for _, m := range matches {
+		if len(m) == 3 {
+			major, _ := strconv.Atoi(m[1])
+			minor, _ := strconv.Atoi(m[2])
+			if major > bestMajor || (major == bestMajor && minor > bestMinor) {
+				bestMajor = major
+				bestMinor = minor
+				bestVer = fmt.Sprintf("%d.%d", major, minor)
+			}
+		}
 	}
 
-	// Legacy constraints
+	if bestVer != "" {
+		if bestMajor < 8 || (bestMajor == 8 && bestMinor == 0) {
+			return "8.1"
+		}
+		return bestVer
+	}
+
+	// Legacy constraints fallback
 	if strings.Contains(c, "8.0") || strings.Contains(c, "7.4") || strings.Contains(c, "7.3") {
 		return "8.1"
 	}
@@ -208,7 +235,7 @@ func CleanDomainName(folderName string, domainSuffix string) string {
 	return clean + domainSuffix
 }
 
-// DetectPlatformCheckPHPVersion inspects vendor/composer/platform_check.php for installed PHP requirements
+// DetectPlatformCheckPHPVersion inspects vendor/composer/platform_check.php for installed PHP requirements.
 func DetectPlatformCheckPHPVersion(projectDir string) string {
 	candidatePaths := []string{
 		filepath.Join(projectDir, "vendor", "composer", "platform_check.php"),
@@ -220,15 +247,24 @@ func DetectPlatformCheckPHPVersion(projectDir string) string {
 			continue
 		}
 		content := string(data)
-		switch {
-		case strings.Contains(content, "PHP_VERSION_ID >= 804") || strings.Contains(content, "PHP_VERSION_ID >= 805"):
-			return "8.4"
-		case strings.Contains(content, "PHP_VERSION_ID >= 803"):
-			return "8.3"
-		case strings.Contains(content, "PHP_VERSION_ID >= 802"):
-			return "8.2"
-		case strings.Contains(content, "PHP_VERSION_ID >= 801"):
-			return "8.1"
+		matches := phpPlatformRegex.FindAllStringSubmatch(content, -1)
+		for _, m := range matches {
+			if len(m) == 2 {
+				id, err := strconv.Atoi(m[1])
+				if err == nil && id > 0 {
+					var major, minor int
+					if id >= 10000 {
+						major = id / 10000
+						minor = (id % 10000) / 100
+					} else if id >= 100 {
+						major = id / 100
+						minor = id % 100
+					}
+					if major >= 7 {
+						return fmt.Sprintf("%d.%d", major, minor)
+					}
+				}
+			}
 		}
 	}
 	return ""
@@ -301,7 +337,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		Path:       cleanDir,
 		DocRoot:    cleanDir,
 		Type:       TypeNonWeb,
-		TypeLabel:  "غير ويب / ملفات",
+		TypeLabel:  "ط؛ظٹط± ظˆظٹط¨ / ظ…ظ„ظپط§طھ",
 		PHPVersion: "",
 		PHPPort:    0,
 		IsWeb:      false,
@@ -421,7 +457,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 			dirExists(filepath.Join(cleanDir, "web", "static"))
 		if hasGoWeb {
 			result.Type = TypeGo
-			result.TypeLabel = "Go / ويب"
+			result.TypeLabel = "Go / ظˆظٹط¨"
 			result.IsWeb = true
 			result.Domain = name + domainSuffix
 			result.Path = cleanDir
@@ -438,7 +474,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 			fileExists(filepath.Join(cleanDir, "src", "main.rs"))
 		if hasRustWeb {
 			result.Type = TypeRust
-			result.TypeLabel = "Rust / ويب"
+			result.TypeLabel = "Rust / ظˆظٹط¨"
 			result.IsWeb = true
 			result.Domain = name + domainSuffix
 			result.Path = cleanDir
@@ -652,7 +688,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 			for _, buildSub := range []string{"dist", "out", "build"} {
 				if fileExists(filepath.Join(cleanDir, buildSub, "index.html")) {
 					result.Type = TypeStatic
-					result.TypeLabel = "HTML / ثابت"
+					result.TypeLabel = "HTML / ط«ط§ط¨طھ"
 					result.DocRoot = filepath.Join(cleanDir, buildSub)
 					result.ProxyPort = 0
 					return result
@@ -717,7 +753,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		for _, fName := range htmlFileNames {
 			if fileExists(filepath.Join(targetDir, fName)) {
 				result.Type = TypeStatic
-				result.TypeLabel = "HTML / ثابت"
+				result.TypeLabel = "HTML / ط«ط§ط¨طھ"
 				result.IsWeb = true
 				result.Domain = domain
 				result.DocRoot = targetDir
@@ -761,7 +797,7 @@ func DetectProject(projectDir string, defaultPHP string, domainSuffix string) De
 			Path:       cleanDir,
 			DocRoot:    cleanDir,
 			Type:       TypeNonWeb,
-			TypeLabel:  "غير ويب / ملفات",
+			TypeLabel:  "ط؛ظٹط± ظˆظٹط¨ / ظ…ظ„ظپط§طھ",
 			PHPVersion: "",
 			PHPPort:    0,
 			IsWeb:      false,
@@ -772,6 +808,7 @@ func DetectProject(projectDir string, defaultPHP string, domainSuffix string) De
 	// 1. Direct root check
 	rootResult := detectSingleDir(cleanDir, defaultPHP, domainSuffix)
 	if rootResult.IsWeb {
+		rootResult.Database = DetectProjectDatabase(cleanDir, name)
 		return rootResult
 	}
 
@@ -810,6 +847,7 @@ func DetectProject(projectDir string, defaultPHP string, domainSuffix string) De
 				ProxyPort:   subResult.ProxyPort,
 				IsWeb:       true,
 				Domain:      domain,
+				Database:    DetectProjectDatabase(cleanDir, name),
 			}
 		}
 
@@ -843,4 +881,177 @@ func DetectProject(projectDir string, defaultPHP string, domainSuffix string) De
 
 	// 3. Genuine non-web folder
 	return rootResult
+}
+
+var sqliteCreateTableRegex = regexp.MustCompile(`(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[\x60\"\'\[]?([a-zA-Z0-9_]+)`)
+
+// DetectProjectDatabase inspects .env, database/ folder, and sqlite files to determine DB type and health
+func DetectProjectDatabase(projectDir string, projectName string) ProjectDatabaseInfo {
+	cleanDir := filepath.Clean(projectDir)
+
+	// 1. Locate .env or .env.example
+	envPath := filepath.Join(cleanDir, ".env")
+	if !fileExists(envPath) {
+		if fileExists(filepath.Join(cleanDir, "backend", ".env")) {
+			envPath = filepath.Join(cleanDir, "backend", ".env")
+		} else if fileExists(filepath.Join(cleanDir, ".env.example")) {
+			envPath = filepath.Join(cleanDir, ".env.example")
+		}
+	}
+
+	dbConn := ""
+	dbName := ""
+	if fileExists(envPath) {
+		if data, err := os.ReadFile(envPath); err == nil {
+			for _, line := range strings.Split(string(data), "\n") {
+				line = strings.TrimSpace(line)
+				if strings.HasPrefix(line, "DB_CONNECTION=") {
+					dbConn = strings.ToLower(strings.Trim(strings.TrimPrefix(line, "DB_CONNECTION="), `"' `))
+				} else if strings.HasPrefix(line, "DB_DATABASE=") {
+					dbName = strings.Trim(strings.TrimPrefix(line, "DB_DATABASE="), `"' `)
+				}
+			}
+		}
+	}
+
+	isLaravel := fileExists(filepath.Join(cleanDir, "artisan")) || fileExists(filepath.Join(cleanDir, "backend", "artisan"))
+
+	// 2. Identify candidate SQLite database file
+	sqliteCandidate := filepath.Join(cleanDir, "database", "database.sqlite")
+	if !fileExists(sqliteCandidate) && fileExists(filepath.Join(cleanDir, "backend", "database", "database.sqlite")) {
+		sqliteCandidate = filepath.Join(cleanDir, "backend", "database", "database.sqlite")
+	} else if !fileExists(sqliteCandidate) && dbName != "" && (strings.HasSuffix(strings.ToLower(dbName), ".sqlite") || strings.HasSuffix(strings.ToLower(dbName), ".db")) {
+		if filepath.IsAbs(dbName) {
+			sqliteCandidate = dbName
+		} else {
+			sqliteCandidate = filepath.Join(cleanDir, dbName)
+		}
+	}
+
+	// 3. Check SQLite
+	if dbConn == "sqlite" || fileExists(sqliteCandidate) || (isLaravel && dbConn == "") {
+		info, err := os.Stat(sqliteCandidate)
+		if err == nil && !info.IsDir() {
+			sz := info.Size()
+			if sz == 0 {
+				return ProjectDatabaseInfo{
+					Type:           "sqlite",
+					Name:           filepath.Base(sqliteCandidate),
+					Path:           sqliteCandidate,
+					Status:         "needs_migration",
+					TablesCount:    0,
+					NeedsMigration: true,
+					Description:    "قاعدة بيانات SQLite فارغة (اضغط لتفعيل الهجرة وإنشاء الجداول)",
+				}
+			}
+
+			tablesCount := 0
+			hasMigrations := false
+			if data, rErr := os.ReadFile(sqliteCandidate); rErr == nil {
+				matches := sqliteCreateTableRegex.FindAllSubmatch(data, -1)
+				seen := make(map[string]bool)
+				for _, m := range matches {
+					if len(m) > 1 {
+						tName := strings.ToLower(string(m[1]))
+						if !strings.HasPrefix(tName, "sqlite_") && !seen[tName] {
+							seen[tName] = true
+							if tName == "migrations" {
+								hasMigrations = true
+							}
+						}
+					}
+				}
+				tablesCount = len(seen)
+			}
+
+			if tablesCount == 0 || !hasMigrations {
+				return ProjectDatabaseInfo{
+					Type:           "sqlite",
+					Name:           filepath.Base(sqliteCandidate),
+					Path:           sqliteCandidate,
+					Status:         "needs_migration",
+					TablesCount:    tablesCount,
+					NeedsMigration: true,
+					Description:    fmt.Sprintf("قاعدة بيانات SQLite غير مهجرة (%d جدول، يرجى تشغيل migrate)", tablesCount),
+				}
+			}
+
+			return ProjectDatabaseInfo{
+				Type:           "sqlite",
+				Name:           filepath.Base(sqliteCandidate),
+				Path:           sqliteCandidate,
+				Status:         "ready",
+				TablesCount:    tablesCount,
+				NeedsMigration: false,
+				Description:    fmt.Sprintf("قاعدة بيانات SQLite جاهزة (%d جدول)", tablesCount),
+			}
+		}
+
+		if isLaravel || dbConn == "sqlite" {
+			return ProjectDatabaseInfo{
+				Type:           "sqlite",
+				Name:           "database.sqlite",
+				Path:           sqliteCandidate,
+				Status:         "missing",
+				TablesCount:    0,
+				NeedsMigration: true,
+				Description:    "قاعدة بيانات SQLite مفقودة (اضغط لتفعيل الهجرة وإنشاء الجداول)",
+			}
+		}
+	}
+
+	// 4. Check MySQL / MariaDB
+	if dbConn == "mysql" || strings.Contains(dbConn, "mariadb") {
+		targetDB := dbName
+		if targetDB == "" {
+			targetDB = NormalizeTargetDB(projectName)
+		} else {
+			targetDB = NormalizeTargetDB(targetDB)
+		}
+		return ProjectDatabaseInfo{
+			Type:           "mysql",
+			Name:           targetDB,
+			Status:         "ready",
+			TablesCount:    0,
+			NeedsMigration: false,
+			Description:    fmt.Sprintf("قاعدة بيانات MySQL: %s", targetDB),
+		}
+	}
+
+	// 5. Check PostgreSQL
+	if dbConn == "pgsql" || dbConn == "postgres" || strings.Contains(dbConn, "postgres") {
+		return ProjectDatabaseInfo{
+			Type:           "pgsql",
+			Name:           dbName,
+			Status:         "ready",
+			Description:    fmt.Sprintf("قاعدة بيانات PostgreSQL: %s", dbName),
+		}
+	}
+
+	return ProjectDatabaseInfo{
+		Type:        "none",
+		Status:      "none",
+		Description: "",
+	}
+}
+
+// NormalizeTargetDB cleans a project/database name into a valid SQL identifier
+func NormalizeTargetDB(name string) string {
+	clean := strings.TrimSpace(name)
+	var sb strings.Builder
+	for _, r := range clean {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			sb.WriteRune(r)
+		} else {
+			sb.WriteRune('_')
+		}
+	}
+	res := strings.Trim(sb.String(), "_")
+	for strings.Contains(res, "__") {
+		res = strings.ReplaceAll(res, "__", "_")
+	}
+	if res == "" {
+		return "laragal_db"
+	}
+	return res
 }

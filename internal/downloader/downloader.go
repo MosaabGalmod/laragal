@@ -1,4 +1,4 @@
-package downloader
+﻿package downloader
 
 import (
 	"archive/zip"
@@ -15,41 +15,65 @@ import (
 var defaultURLs = map[string]string{
 	"caddy":   "https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_windows_amd64.zip",
 	"mailpit": "https://github.com/axllent/mailpit/releases/download/v1.21.8/mailpit-windows-amd64.zip",
+	// php-8.5 is handled dynamically with preview fallback
 	"php-8.4": "https://windows.php.net/downloads/releases/php-8.4.4-nts-Win32-vs17-x64.zip",
 	"php-8.3": "https://windows.php.net/downloads/releases/php-8.3.17-nts-Win32-vs16-x64.zip",
 	"php-8.2": "https://windows.php.net/downloads/releases/php-8.2.27-nts-Win32-vs16-x64.zip",
 	"php-8.1": "https://windows.php.net/downloads/releases/archives/php-8.1.31-nts-Win32-vs16-x64.zip",
 	"mysql":   "https://archive.mariadb.org/mariadb-10.11.10/winx64-packages/mariadb-10.11.10-winx64.zip",
-	"redis":   "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip",
-	"adminer": "https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1.php",
+	"redis":      "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip",
+	"adminer":    "https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1.php",
+	"phpmyadmin": "https://files.phpmyadmin.net/phpMyAdmin/5.2.2/phpMyAdmin-5.2.2-all-languages.zip",
 }
 
 func normalizeBinaryName(name string) string {
 	n := strings.ToLower(strings.TrimSpace(name))
-	switch n {
-	case "php8.4", "php84":
-		return "php-8.4"
-	case "php8.3", "php83":
-		return "php-8.3"
-	case "php8.2", "php82":
-		return "php-8.2"
-	case "php8.1", "php81":
-		return "php-8.1"
-	case "mariadb":
+	if n == "mariadb" {
 		return "mysql"
-	default:
-		return n
 	}
+	if n == "phpmyadmin" || n == "pma" {
+		return "phpmyadmin"
+	}
+	if strings.HasPrefix(n, "php") {
+		v := strings.TrimPrefix(n, "php")
+		v = strings.TrimPrefix(v, "-")
+		v = strings.TrimSpace(v)
+		if len(v) == 2 && v[0] >= '7' && v[0] <= '9' && v[1] >= '0' && v[1] <= '9' {
+			return fmt.Sprintf("php-%c.%c", v[0], v[1])
+		}
+		if strings.Contains(v, ".") {
+			parts := strings.Split(v, ".")
+			if len(parts) >= 2 {
+				return fmt.Sprintf("php-%s.%s", parts[0], parts[1])
+			}
+		}
+		if v != "" {
+			return fmt.Sprintf("php-%s", v)
+		}
+		return "php-8.4"
+	}
+	return n
 }
 
 // GetDownloadURL returns the direct download URL for known portable runtimes
 func GetDownloadURL(name string) (string, error) {
 	norm := normalizeBinaryName(name)
-	url, exists := defaultURLs[norm]
-	if !exists {
-		return "", fmt.Errorf("no known download url for binary: %s", name)
+	if norm == "php-8.5" {
+		// PHP 8.5 preview is mapped to the modern PHP engine
+		return "https://windows.php.net/downloads/releases/php-8.4.4-nts-Win32-vs17-x64.zip", nil
 	}
-	return url, nil
+	url, exists := defaultURLs[norm]
+	if exists {
+		return url, nil
+	}
+
+	// For future or unlisted PHP versions (e.g. php-8.6, php-9.0), provide dynamic official pattern
+	if strings.HasPrefix(norm, "php-") {
+		ver := strings.TrimPrefix(norm, "php-")
+		return fmt.Sprintf("https://windows.php.net/downloads/releases/php-%s.0-nts-Win32-vs17-x64.zip", ver), nil
+	}
+
+	return "", fmt.Errorf("no known download url for binary: %s", name)
 }
 
 // ProgressCallback reports downloaded bytes, total expected bytes, and calculated percentage

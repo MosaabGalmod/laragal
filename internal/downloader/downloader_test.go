@@ -1,4 +1,4 @@
-package downloader_test
+﻿package downloader_test
 
 import (
 	"archive/zip"
@@ -19,13 +19,17 @@ func TestGetDownloadURL(t *testing.T) {
 	targets := []string{
 		"caddy",
 		"mailpit",
+		"php-8.5",
 		"php-8.4",
 		"php-8.3",
 		"php-8.2",
 		"php-8.1",
 		"mysql",
 		"redis",
-		"php8.4",
+		"php8.5",
+		"php85",
+		"php-8.6",
+		"php-9.0",
 		"mariadb",
 	}
 

@@ -6,16 +6,30 @@ import (
 )
 
 type SiteDef struct {
-	Name        string `json:"name"`
-	Domain      string `json:"domain"`
-	Path        string `json:"path"`
-	RootPath    string `json:"root_path"`
-	PHPPort     int    `json:"php_port"`
-	PHPVersion  string `json:"php_version"`
-	ProxyPort   int    `json:"proxy_port,omitempty"`
-	ProjectType string `json:"project_type"`
-	TypeLabel   string `json:"type_label"`
-	IsWeb       bool   `json:"is_web"`
+	Name             string `json:"name"`
+	Domain           string `json:"domain"`
+	Path             string `json:"path"`
+	RootPath         string `json:"root_path"`
+	PHPPort          int    `json:"php_port"`
+	PHPVersion       string `json:"php_version"`
+	ProxyPort        int    `json:"proxy_port,omitempty"`
+	ProjectType      string `json:"project_type"`
+	TypeLabel        string `json:"type_label"`
+	IsWeb            bool   `json:"is_web"`
+	DBType           string `json:"db_type,omitempty"`
+	DBName           string `json:"db_name,omitempty"`
+	DBPath           string `json:"db_path,omitempty"`
+	DBStatus         string `json:"db_status,omitempty"`
+	DBTablesCount    int    `json:"db_tables_count,omitempty"`
+	DBNeedsMigration bool   `json:"db_needs_migration,omitempty"`
+}
+
+type PhpMyAdminConfig struct {
+	Enabled  bool   `json:"enabled"`
+	Domain   string `json:"domain"`
+	RootPath string `json:"root_path"`
+	PHPPort  int    `json:"php_port"`
+	Port     int    `json:"port"`
 }
 
 type AdminerConfig struct {
@@ -27,6 +41,14 @@ type AdminerConfig struct {
 }
 
 func GenerateCaddyfile(sites []SiteDef, adminPort int, adminerCfg ...AdminerConfig) string {
+	var aCfg AdminerConfig
+	if len(adminerCfg) > 0 {
+		aCfg = adminerCfg[0]
+	}
+	return GenerateCaddyfileWithTools(sites, adminPort, aCfg, PhpMyAdminConfig{})
+}
+
+func GenerateCaddyfileWithTools(sites []SiteDef, adminPort int, adminerCfg AdminerConfig, pmaCfg PhpMyAdminConfig) string {
 	var sb strings.Builder
 
 	// Global configuration block
@@ -108,8 +130,8 @@ func GenerateCaddyfile(sites []SiteDef, adminPort int, adminerCfg ...AdminerConf
 	}
 
 	// Render Adminer database manager virtual host if enabled
-	if len(adminerCfg) > 0 && adminerCfg[0].Enabled {
-		cfg := adminerCfg[0]
+	if adminerCfg.Enabled {
+		cfg := adminerCfg
 		normalizedRoot := strings.ReplaceAll(cfg.RootPath, "\\", "/")
 		adminerDomain := cfg.Domain
 		if adminerDomain == "" {
@@ -125,6 +147,31 @@ func GenerateCaddyfile(sites []SiteDef, adminPort int, adminerCfg ...AdminerConf
 		sb.WriteString("    encode gzip zstd\n")
 		if cfg.PHPPort > 0 {
 			sb.WriteString(fmt.Sprintf("    php_fastcgi 127.0.0.1:%d {\n", cfg.PHPPort))
+			sb.WriteString("        capture_stderr\n")
+			sb.WriteString("    }\n")
+		}
+		sb.WriteString("    file_server\n")
+		sb.WriteString("    tls internal\n")
+		sb.WriteString("}\n\n")
+	}
+
+		// Render phpMyAdmin database manager virtual host if enabled
+	if pmaCfg.Enabled {
+		normalizedRoot := strings.ReplaceAll(pmaCfg.RootPath, "\\", "/")
+		pmaDomain := pmaCfg.Domain
+		if pmaDomain == "" {
+			pmaDomain = "phpmyadmin.test"
+		}
+		pmaPort := pmaCfg.Port
+		if pmaPort <= 0 {
+			pmaPort = 3308
+		}
+
+		sb.WriteString(fmt.Sprintf("%s, http://localhost:%d {\n", pmaDomain, pmaPort))
+		sb.WriteString(fmt.Sprintf("    root * \"%s\"\n", normalizedRoot))
+		sb.WriteString("    encode gzip zstd\n")
+		if pmaCfg.PHPPort > 0 {
+			sb.WriteString(fmt.Sprintf("    php_fastcgi 127.0.0.1:%d {\n", pmaCfg.PHPPort))
 			sb.WriteString("        capture_stderr\n")
 			sb.WriteString("    }\n")
 		}

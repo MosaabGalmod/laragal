@@ -399,8 +399,10 @@
 
               <button
                 @click="promptToggleService(service)"
+                :disabled="togglingServices.has(service.id)"
+                :aria-busy="togglingServices.has(service.id)"
                 class="text-xs font-bold px-3 py-1 rounded-md transition-colors border"
-                :class="service.running ? 'text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-900/60 dark:hover:bg-rose-950/40' : 'text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-900/60 dark:hover:bg-blue-950/40'"
+                :class="[service.running ? 'text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-900/60 dark:hover:bg-rose-950/40' : 'text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-900/60 dark:hover:bg-blue-950/40', togglingServices.has(service.id) ? 'opacity-60 cursor-wait' : '']"
               >
                 {{ service.running ? t('stop_btn') : t('start_btn') }}
               </button>
@@ -1501,6 +1503,7 @@ const notification = ref('')
 const copiedItem = ref('')
 const projectError = ref('')
 const confirmService = ref<ServiceItem | null>(null)
+const togglingServices = ref<Set<string>>(new Set())
 const showQuitConfirm = ref(false)
 const projectsDirectory = ref('C:/laragal/sites')
 const recentDirectories = ref<string[]>([])
@@ -1604,28 +1607,31 @@ function toggleTheme() {
 
 // Window control functions connected to Wails backend
 function closeWindow() {
-  if ((window as any).go?.main?.App?.CloseWindow) {
-    (window as any).go.main.App.CloseWindow()
-  } else if ((window as any).runtime?.WindowHide) {
-    (window as any).runtime.WindowHide()
-  } else if ((window as any).runtime?.Quit) {
-    (window as any).runtime.Quit()
+  const w = window as any
+  if (w.go?.main?.App?.CloseWindow) {
+    w.go.main.App.CloseWindow()
+  } else if (w.runtime?.WindowHide) {
+    w.runtime.WindowHide()
+  } else if (w.runtime?.Quit) {
+    w.runtime.Quit()
   }
 }
 
 function toggleMaximize() {
-  if ((window as any).go?.main?.App?.ToggleMaximizeWindow) {
-    (window as any).go.main.App.ToggleMaximizeWindow()
-  } else if ((window as any).runtime?.WindowToggleMaximise) {
-    (window as any).runtime.WindowToggleMaximise()
+  const w = window as any
+  if (w.go?.main?.App?.ToggleMaximizeWindow) {
+    w.go.main.App.ToggleMaximizeWindow()
+  } else if (w.runtime?.WindowToggleMaximise) {
+    w.runtime.WindowToggleMaximise()
   }
 }
 
 function minimizeWindow() {
-  if ((window as any).go?.main?.App?.MinimizeWindow) {
-    (window as any).go.main.App.MinimizeWindow()
-  } else if ((window as any).runtime?.WindowMinimise) {
-    (window as any).runtime.WindowMinimise()
+  const w = window as any
+  if (w.go?.main?.App?.MinimizeWindow) {
+    w.go.main.App.MinimizeWindow()
+  } else if (w.runtime?.WindowMinimise) {
+    w.runtime.WindowMinimise()
   }
 }
 
@@ -1635,10 +1641,11 @@ function promptQuitApp() {
 
 function executeQuitApp() {
   showQuitConfirm.value = false
-  if ((window as any).go?.main?.App?.QuitApp) {
-    (window as any).go.main.App.QuitApp()
-  } else if ((window as any).runtime?.Quit) {
-    (window as any).runtime.Quit()
+  const w = window as any
+  if (w.go?.main?.App?.QuitApp) {
+    w.go.main.App.QuitApp()
+  } else if (w.runtime?.Quit) {
+    w.runtime.Quit()
   }
 }
 
@@ -1916,7 +1923,10 @@ watch(notification, (val) => {
 async function loadSites() {
   if ((window as any).go?.main?.App?.GetSites) {
     try {
-      const s = await (window as any).go.main.App.GetSites()
+      let s = await (window as any).go.main.App.GetSites()
+      if (Array.isArray(s) && s.length === 0 && (window as any).go?.main?.App?.ScanProjects) {
+        s = await (window as any).go.main.App.ScanProjects()
+      }
       if (Array.isArray(s)) {
         sites.value = s.map(mapSiteItem)
         if (webSitesCount.value === 0 && sites.value.length > 0 && activeFilter.value === 'web') {
@@ -2021,8 +2031,9 @@ async function triggerWindowsPicker() {
 
 onMounted(async () => {
   // Listen for backend asynchronous updates so the UI reflects live status without freezing
-  if ((window as any).runtime?.EventsOn) {
-    (window as any).runtime.EventsOn('sites-updated', (s: any) => {
+  const rt = (window as any).runtime
+  if (rt?.EventsOn) {
+    rt.EventsOn('sites-updated', (s: any) => {
       if (Array.isArray(s)) {
         sites.value = s.map(mapSiteItem)
         if (webSitesCount.value === 0 && sites.value.length > 0 && activeFilter.value === 'web') {
@@ -2032,7 +2043,7 @@ onMounted(async () => {
         }
       }
     })
-    (window as any).runtime.EventsOn('services-updated', (live: any) => {
+    rt.EventsOn('services-updated', (live: any) => {
       if (Array.isArray(live)) {
         for (const ls of live) {
           const match = services.value.find(s => s.id === ls.name)
@@ -2040,12 +2051,12 @@ onMounted(async () => {
         }
       }
     })
-    (window as any).runtime.EventsOn('download-progress', (data: any) => {
+    rt.EventsOn('download-progress', (data: any) => {
       if (data && data.name) {
         downloadProgress.value[data.name] = Number(data.percent) || 0
       }
     })
-    (window as any).runtime.EventsOn('runtime-updates', (list: any) => {
+    rt.EventsOn('runtime-updates', (list: any) => {
       if (Array.isArray(list)) {
         const map: Record<string, RuntimeUpdateInfo> = {}
         for (const item of list) {
@@ -2103,8 +2114,14 @@ const locales: Record<string, Record<string, string>> = {
   en: enLocale
 }
 
-function t(key: string): string {
-  return locales[currentLang.value]?.[key] || key
+function t(key: string, params?: Record<string, string | number>): string {
+  let str = locales[currentLang.value]?.[key] || key
+  if (params) {
+    for (const [k, v] of Object.entries(params)) {
+      str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v))
+    }
+  }
+  return str
 }
 
 function toggleLang() {
@@ -2141,6 +2158,17 @@ const services = ref<ServiceItem[]>([
     credentials: {
       host: 'localhost',
       info: 'Admin: :2019 / SSL Root'
+    }
+  },
+  {
+    id: 'php-8.5',
+    name_key: 'service_php85',
+    desc_key: 'service_php85_desc',
+    port: 9085,
+    running: false,
+    credentials: {
+      host: '127.0.0.1',
+      info: 'FastCGI / 8 Workers'
     }
   },
   {
@@ -2234,14 +2262,16 @@ function copyText(txt: string) {
 }
 
 function openExplorer(path: string) {
-  if ((window as any).go?.main?.App?.OpenFolder) {
-    (window as any).go.main.App.OpenFolder(path)
+  const app = (window as any).go?.main?.App
+  if (app?.OpenFolder) {
+    app.OpenFolder(path)
   }
 }
 
 function openAdminer(dbName?: string) {
-  if ((window as any).go?.main?.App?.OpenAdminer) {
-    (window as any).go.main.App.OpenAdminer(dbName || '')
+  const app = (window as any).go?.main?.App
+  if (app?.OpenAdminer) {
+    app.OpenAdminer(dbName || '')
   } else {
     const dbParam = dbName ? `&db=${encodeURIComponent(dbName)}` : ''
     openBrowser(`http://localhost:3307/?server=127.0.0.1&username=root${dbParam}`)
@@ -2249,16 +2279,18 @@ function openAdminer(dbName?: string) {
 }
 
 function openBrowser(url: string) {
-  if ((window as any).go?.main?.App?.OpenBrowser) {
-    (window as any).go.main.App.OpenBrowser(url)
+  const app = (window as any).go?.main?.App
+  if (app?.OpenBrowser) {
+    app.OpenBrowser(url)
   } else {
     window.open(url, '_blank')
   }
 }
 
 function openVSCode(path: string) {
-  if ((window as any).go?.main?.App?.OpenVSCode) {
-    (window as any).go.main.App.OpenVSCode(path)
+  const app = (window as any).go?.main?.App
+  if (app?.OpenVSCode) {
+    app.OpenVSCode(path)
   }
 }
 
@@ -2319,24 +2351,40 @@ async function checkPortConflicts() {
   }
 }
 
-// Custom service toggle with custom confirmation modal (No native confirm())
+// Custom service toggle: immediate toggle without blocking modal
 async function promptToggleService(service: ServiceItem) {
-  if (service.running) {
-    // Open custom accessible confirmation modal
-    confirmService.value = service
-  } else {
+  if (togglingServices.value.has(service.id)) return
+  togglingServices.value.add(service.id)
+  togglingServices.value = new Set(togglingServices.value)
+
+  try {
     if ((window as any).go?.main?.App?.ToggleService) {
+      const originalState = service.running
       try {
         const running = await (window as any).go.main.App.ToggleService(service.id)
-        service.running = running
-        notification.value = `تم تشغيل ${t(service.name_key)} بنجاح.`
+        service.running = Boolean(running)
+        if (running) {
+          notification.value = t('service_started_msg', { service: t(service.name_key) })
+        } else {
+          notification.value = t('service_stopped_msg', { service: t(service.name_key) })
+        }
+        await loadServices()
       } catch (err: any) {
-        notification.value = `تعذر تشغيل ${t(service.name_key)}: ${err?.message || err}`
+        service.running = originalState
+        notification.value = t('service_toggle_error', { service: t(service.name_key), error: err?.message || err })
+        await loadServices()
       }
     } else {
-      service.running = true
-      notification.value = `تم تشغيل ${t(service.name_key)} بنجاح.`
+      service.running = !service.running
+      if (service.running) {
+        notification.value = t('service_started_msg', { service: t(service.name_key) })
+      } else {
+        notification.value = t('service_stopped_msg', { service: t(service.name_key) })
+      }
     }
+  } finally {
+    togglingServices.value.delete(service.id)
+    togglingServices.value = new Set(togglingServices.value)
   }
 }
 
@@ -2346,10 +2394,16 @@ async function executeStopService() {
   if ((window as any).go?.main?.App?.ToggleService) {
     try {
       const running = await (window as any).go.main.App.ToggleService(s.id)
-      s.running = running
-      notification.value = `تم إيقاف ${t(s.name_key)} بنجاح.`
+      s.running = Boolean(running)
+      if (!running) {
+        notification.value = `تم إيقاف ${t(s.name_key)} بنجاح.`
+      } else {
+        notification.value = `تعذر إيقاف ${t(s.name_key)}.`
+      }
+      await loadServices()
     } catch (err: any) {
       notification.value = `تعذر إيقاف ${t(s.name_key)}: ${err?.message || err}`
+      await loadServices()
     }
   } else {
     s.running = false
