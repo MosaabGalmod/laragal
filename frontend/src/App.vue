@@ -203,6 +203,7 @@
             :t="t"
             @toggle="promptToggleService(service)"
             @open-adminer="openAdminer()"
+            @open-phpmyadmin="openPhpMyAdmin()"
             @open-url="openBrowser"
             @copy="copyText"
           />

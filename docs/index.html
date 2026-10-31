@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="ar" dir="rtl" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'; upgrade-insecure-requests">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
+  <script src="assets/theme.js"></script>
+
+  <title>LaraGal | بيئة تطوير محلية لويندوز بنطاقات https://*.test</title>
+  <meta name="description" content="LaraGal بيئة تطوير محلية لويندوز: Caddy مع شهادات HTTPS تلقائية، وعدة إصدارات PHP من 8.1 إلى 8.5 معًا، وMariaDB وRedis وMailpit وphpMyAdmin، بواجهة عربية وإنجليزية.">
+  <meta name="robots" content="index, follow">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d1017" media="(prefers-color-scheme: dark)">
+  <link rel="canonical" href="https://mosaabgalmod.github.io/laragal/">
+  <link rel="alternate" hreflang="ar" href="https://mosaabgalmod.github.io/laragal/">
+  <link rel="alternate" hreflang="en" href="https://mosaabgalmod.github.io/laragal/en/">
+  <link rel="alternate" hreflang="x-default" href="https://mosaabgalmod.github.io/laragal/en/">
+  <link rel="sitemap" type="application/xml" href="sitemap.xml">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="assets/site.css">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="LaraGal">
+  <meta property="og:locale" content="ar_SA">
+  <meta property="og:locale:alternate" content="en_US">
+  <meta property="og:title" content="LaraGal | بيئة تطوير محلية لويندوز">
+  <meta property="og:description" content="Caddy مع HTTPS تلقائي، وPHP من 8.1 إلى 8.5 في وقت واحد، وMariaDB وRedis وMailpit وphpMyAdmin، في برنامج واحد.">
+  <meta property="og:url" content="https://mosaabgalmod.github.io/laragal/">
+  <meta property="og:image" content="https://mosaabgalmod.github.io/laragal/assets/og-ar.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="واجهة LaraGal العربية تعرض الخدمات المحلية وقائمة المشاريع">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="LaraGal | بيئة تطوير محلية لويندوز">
+  <meta name="twitter:description" content="Caddy مع HTTPS تلقائي، وPHP من 8.1 إلى 8.5 معًا، وMariaDB وRedis وMailpit وphpMyAdmin.">
+  <meta name="twitter:image" content="https://mosaabgalmod.github.io/laragal/assets/og-ar.png">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://mosaabgalmod.github.io/laragal/#app",
+        "name": "LaraGal",
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "Windows 10, Windows 11 (x64)",
+        "softwareVersion": "1.1.0",
+        "inLanguage": ["ar", "en"],
+        "description": "بيئة تطوير محلية لويندوز تجمع Caddy وعدة إصدارات PHP وMariaDB وRedis وMailpit وphpMyAdmin مع شهادات HTTPS تلقائية لنطاقات .test.",
+        "url": "https://mosaabgalmod.github.io/laragal/",
+        "downloadUrl": "https://github.com/MosaabGalmod/laragal/releases/latest",
+        "installUrl": "https://github.com/MosaabGalmod/laragal/releases/latest",
+        "screenshot": "https://mosaabgalmod.github.io/laragal/assets/og-ar.png",
+        "license": "https://github.com/MosaabGalmod/laragal/blob/main/LICENSE",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "codeRepository": "https://github.com/MosaabGalmod/laragal"
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://mosaabgalmod.github.io/laragal/#site",
+        "name": "LaraGal",
+        "url": "https://mosaabgalmod.github.io/laragal/",
+        "inLanguage": "ar"
+      },
+      {
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "هل LaraGal مجاني؟",
+            "acceptedAnswer": { "@type": "Answer", "text": "نعم للتطوير والاختبار والتعليم والاستخدام غير التجاري، وفق رخصة Business Source License 1.1. تقديمه منتجًا أو خدمة منافسة لطرف ثالث يحتاج رخصة تجارية." }
+          },
+          {
+            "@type": "Question",
+            "name": "لماذا يطلب صلاحيات المدير؟",
+            "acceptedAnswer": { "@type": "Answer", "text": "يحتاجها لتعديل ملف hosts حتى تعمل نطاقات .test، ولتثبيت شهادة الجذر المحلية في مخزن الشهادات الموثوقة في ويندوز." }
+          },
+          {
+            "@type": "Question",
+            "name": "هل يمكن تشغيل أكثر من إصدار PHP في وقت واحد؟",
+            "acceptedAnswer": { "@type": "Answer", "text": "نعم. كل إصدار يعمل على منفذ FastCGI خاص به، ويختار كل مشروع إصداره من قائمة المشاريع." }
+          },
+          {
+            "@type": "Question",
+            "name": "أول طلب لمشروع Laravel بطيء جدًا، ما السبب؟",
+            "acceptedAnswer": { "@type": "Answer", "text": "غالبًا يفحص Windows Defender كل ملف PHP عند فتحه أول مرة. استثناء مجلد المشاريع ومجلد PHP من الفحص اللحظي يحل ذلك." }
+          }
+        ]
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <a class="skip-link" href="#main">تخطَّ إلى المحتوى</a>
+
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="./" aria-label="LaraGal، الصفحة الرئيسية">
+        <img src="assets/logo-64.png" alt="" width="28" height="28">
+        <span>LaraGal</span>
+        <span class="ver"><span dir="ltr">v1.1.0</span></span>
+      </a>
+
+      <nav class="nav" aria-label="أقسام الصفحة">
+        <a href="#services">الخدمات</a>
+        <a href="#projects">أنواع المشاريع</a>
+        <a href="#start">البدء</a>
+        <a href="#security">الأمان</a>
+        <a href="#faq">الأسئلة الشائعة</a>
+      </nav>
+
+      <div class="header-actions">
+        <a class="text-btn hide-sm" href="https://github.com/MosaabGalmod/laragal" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.25.45-2.28 1.18-3.08-.12-.29-.51-1.46.11-3.04 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.78 0c2.2-1.49 3.17-1.18 3.17-1.18.62 1.58.23 2.75.11 3.04.74.8 1.18 1.83 1.18 3.08 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+          <span>المستودع</span>
+        </a>
+        <a class="text-btn" href="en/" hreflang="en" lang="en">English</a>
+        <button type="button" class="icon-btn theme-btn" id="themeToggle" aria-label="تبديل الوضع الداكن والفاتح">
+          <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.99 12.79A9 9 0 1 1 11.21 3a7 7 0 0 0 9.78 9.79Z"/></svg>
+          <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+        </button>
+        <details class="menu">
+          <summary class="icon-btn" aria-label="قائمة الأقسام">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </summary>
+          <nav class="menu-panel" aria-label="أقسام الصفحة">
+            <a href="#services">الخدمات</a>
+            <a href="#projects">أنواع المشاريع</a>
+            <a href="#start">البدء</a>
+            <a href="#security">الأمان</a>
+            <a href="#faq">الأسئلة الشائعة</a>
+            <a href="https://github.com/MosaabGalmod/laragal" rel="noopener noreferrer">المستودع على <span dir="ltr">GitHub</span></a>
+          </nav>
+        </details>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero">
+      <div class="wrap">
+        <h1>شغّل مشاريعك على <span dir="ltr">https://*.test</span> في ويندوز، دون إعداد يدوي</h1>
+        <p class="lead">يجمع LaraGal خادم Caddy بشهادات HTTPS محلية موثوقة، وعدة إصدارات PHP تعمل معًا، وقاعدة بيانات MariaDB وRedis وMailpit وphpMyAdmin في برنامج واحد. اختر مجلد مشاريعك، فيكتشفها ويعطي كل مشروع نطاقًا خاصًا به.</p>
+
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="https://github.com/MosaabGalmod/laragal/releases/latest" rel="noopener noreferrer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+            تنزيل أحدث إصدار
+          </a>
+          <a class="btn btn-secondary" href="https://github.com/MosaabGalmod/laragal" rel="noopener noreferrer">عرض الشيفرة على <span dir="ltr">GitHub</span></a>
+        </div>
+
+        <ul class="facts">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>ويندوز <span dir="ltr">10</span> و<span dir="ltr">11</span> بمعمارية <span dir="ltr">x64</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>ملف تشغيل واحد بحجم <span dir="ltr">16 MB</span> تقريبًا</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>نسخة محمولة لا تكتب في السجل <span dir="ltr">(Registry)</span></li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>مجاني للتطوير وفق رخصة <span dir="ltr">BSL 1.1</span></li>
+        </ul>
+
+        <div class="shot">
+          <img class="light-only" src="assets/app-ar-light.webp" width="1360" height="860" fetchpriority="high" alt="لوحة LaraGal بالعربية: بطاقات Caddy وPHP 8.5 و8.4 و8.3 وMySQL وMailpit قيد التشغيل، وتحتها قائمة المشاريع">
+          <img class="dark-only" src="assets/app-ar-dark.webp" width="1360" height="860" loading="lazy" alt="لوحة LaraGal بالعربية في الوضع الداكن">
+        </div>
+      </div>
+    </section>
+
+    <section id="services" aria-labelledby="services-title">
+      <div class="wrap">
+        <h2 id="services-title">ما الذي يعمل داخل البرنامج</h2>
+        <p class="section-intro">كل خدمة تعمل عملية مستقلة يراقبها البرنامج، ويمكنك تشغيلها وإيقافها من بطاقتها. السجلات تُحفظ في <code>data\logs</code> لكل خدمة على حدة.</p>
+
+        <div class="services">
+          <article class="service">
+            <h3><span>Caddy</span><span class="mono"><span dir="ltr">:443</span></span></h3>
+            <p>خادم الويب والوكيل العكسي. يصدر شهادة لكل نطاق <span dir="ltr">.test</span> من جهة إصدار محلية، ويعيد تحميل الإعدادات عند إضافة مشروع دون إيقاف بقية المواقع.</p>
+          </article>
+          <article class="service">
+            <h3><span dir="ltr">PHP 8.1–8.5</span><span class="mono"><span dir="ltr">:9081–9085</span></span></h3>
+            <p>كل إصدار على منفذ <span dir="ltr">FastCGI</span> خاص به مع <span dir="ltr">OPcache</span>، فيعمل مشروع على <span dir="ltr">8.3</span> وآخر على <span dir="ltr">8.5</span> في الوقت نفسه. تغيير الإصدار من قائمة المشروع.</p>
+          </article>
+          <article class="service">
+            <h3><span>MariaDB</span><span class="mono"><span dir="ltr">:3306</span></span></h3>
+            <p>قاعدة بيانات متوافقة مع MySQL، مقيّدة بالعنوان <span dir="ltr">127.0.0.1</span>. يكتشف البرنامج ملفات <span dir="ltr">.sql</span> داخل المشروع ويستوردها، ويضبط ملف <span dir="ltr">.env</span> للاتصال بها.</p>
+          </article>
+          <article class="service">
+            <h3><span dir="ltr">phpMyAdmin / Adminer</span><span class="mono"><span dir="ltr">:3308 / :3307</span></span></h3>
+            <p>أداتان لإدارة قواعد البيانات، تُفتح أيهما من بطاقة MySQL أو من رأس النافذة. زر قاعدة البيانات في صف المشروع يفتح قاعدته مباشرة في Adminer.</p>
+          </article>
+          <article class="service">
+            <h3><span>Mailpit</span><span class="mono"><span dir="ltr">:1025 / :8025</span></span></h3>
+            <p>يلتقط كل بريد يرسله تطبيقك عبر <span dir="ltr">SMTP</span> ويعرضه في صندوق وارد محلي، فلا تصل رسائل الاختبار إلى أشخاص حقيقيين.</p>
+          </article>
+          <article class="service">
+            <h3><span>Redis</span><span class="mono"><span dir="ltr">:6379</span></span></h3>
+            <p>للتخزين المؤقت والطوابير والجلسات. متوقف افتراضيًا، ويُشغَّل بنقرة عند حاجة المشروع إليه.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="projects" aria-labelledby="projects-title">
+      <div class="wrap">
+        <h2 id="projects-title">المشاريع التي يتعرّف عليها</h2>
+        <p class="section-intro">يقرأ البرنامج ملفات كل مجلد داخل مجلد المشاريع، ويحدد طريقة تشغيله. مشاريع PHP تُخدم عبر <span dir="ltr">FastCGI</span>، والبقية عبر وكيل عكسي إلى منفذ التطبيق، أو تُخدم ملفاتها الثابتة مباشرة.</p>
+
+        <div class="table-scroll" role="region" aria-labelledby="projects-title" tabindex="0">
+          <table>
+            <thead>
+              <tr><th scope="col">النوع</th><th scope="col">علامات الاكتشاف</th><th scope="col">طريقة التشغيل</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Laravel</td><td><span class="sig"><code>artisan</code><code>composer.json</code></span></td><td>PHP FastCGI، والجذر مجلد <code>public</code></td></tr>
+              <tr><td>WordPress</td><td><span class="sig"><code>wp-config.php</code><code>wp-load.php</code></span></td><td>PHP FastCGI</td></tr>
+              <tr><td>PHP</td><td><span class="sig"><code>index.php</code></span></td><td>PHP FastCGI</td></tr>
+              <tr><td>Go</td><td><span class="sig"><code>go.mod</code></span></td><td>وكيل عكسي إلى منفذ التطبيق</td></tr>
+              <tr><td>Rust</td><td><span class="sig"><code>Cargo.toml</code></span></td><td>وكيل عكسي</td></tr>
+              <tr><td><span dir="ltr">.NET</span></td><td><span class="sig"><code>*.csproj</code><code>Program.cs</code></span></td><td>وكيل عكسي، والملفات الثابتة من <code>wwwroot</code></td></tr>
+              <tr><td>Python</td><td><span class="sig"><code>manage.py</code><code>requirements.txt</code></span></td><td>وكيل عكسي</td></tr>
+              <tr><td>Ruby</td><td><span class="sig"><code>Gemfile</code><code>config.ru</code></span></td><td>وكيل عكسي</td></tr>
+              <tr><td>Java</td><td><span class="sig"><code>pom.xml</code><code>build.gradle</code></span></td><td>وكيل عكسي</td></tr>
+              <tr><td>Node.js</td><td><span class="sig"><code>package.json</code></span></td><td>ملفات <code>dist</code> أو <code>build</code> الثابتة، أو وكيل إلى خادم التطوير</td></tr>
+              <tr><td>Flutter Web</td><td><span class="sig"><code>build/web/index.html</code></span></td><td>ملفات ثابتة</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="start" aria-labelledby="start-title">
+      <div class="wrap">
+        <h2 id="start-title">البدء</h2>
+        <p class="section-intro">لا يحتاج البرنامج مثبّتًا. فك الضغط في أي مجلد تملك صلاحية الكتابة فيه.</p>
+        <ol class="steps">
+          <li>
+            <h3>نزّل النسخة المحمولة</h3>
+            <p>من صفحة الإصدارات على <span dir="ltr">GitHub</span>، ثم فك ضغط الملف.</p>
+          </li>
+          <li>
+            <h3>شغّل <span dir="ltr">laragal.exe</span></h3>
+            <p>يطلب صلاحيات المدير مرة واحدة لتعديل ملف <span dir="ltr">hosts</span> وتثبيت الشهادة المحلية.</p>
+          </li>
+          <li>
+            <h3>اختر مجلد المشاريع</h3>
+            <p>مثل <span dir="ltr">D:\projects</span>. يظهر كل مشروع في القائمة بنطاقه ونوعه وإصدار PHP الخاص به.</p>
+          </li>
+          <li>
+            <h3>افتح النطاق</h3>
+            <p>مشروع في مجلد <span dir="ltr">shop</span> يفتح على <span dir="ltr">https://shop.test</span> بشهادة يثق بها المتصفح.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="security" aria-labelledby="security-title">
+      <div class="wrap">
+        <h2 id="security-title">ما الذي يغيّره البرنامج في جهازك</h2>
+        <p class="section-intro">بيئة التطوير تعمل بصلاحيات عالية، لذلك نوضح كل تغيير بدقة.</p>
+        <dl class="notes">
+          <div>
+            <dt>شهادة جذر محلية</dt>
+            <dd>ينشئها Caddy على جهازك، ولا تغادره، وتُضاف إلى مخزن الشهادات الموثوقة عند الضغط على «تثبيت ثقة SSL». مفتاحها الخاص يبقى في ملفات Caddy المحلية.</dd>
+          </div>
+          <div>
+            <dt>ملف <span dir="ltr">hosts</span></dt>
+            <dd>يضيف سطرًا لكل نطاق <span dir="ltr">.test</span> يشير إلى <span dir="ltr">127.0.0.1</span>، ولا يغيّر الأسطر الأخرى.</dd>
+          </div>
+          <div>
+            <dt>الخدمات مقيّدة بالجهاز</dt>
+            <dd>PHP وMariaDB وMailpit تستمع على <span dir="ltr">127.0.0.1</span> فقط. خادم Caddy يستمع على المنفذ <span dir="ltr">443</span>، فاحجبه في جدار الحماية إن كنت على شبكة عامة.</dd>
+          </div>
+          <div>
+            <dt>اتصالات الشبكة</dt>
+            <dd>يتصل البرنامج بالإنترنت فقط لفحص التحديثات من <span dir="ltr">windows.php.net</span> و<span dir="ltr">GitHub</span>، ولتنزيل الحزم حين تطلب ذلك.</dd>
+          </div>
+          <div>
+            <dt>كلمة مرور قاعدة البيانات</dt>
+            <dd>المستخدم <span dir="ltr">root</span> بلا كلمة مرور، وهذا مقبول لأنها لا تقبل اتصالات من خارج الجهاز. لا تستخدم هذا الإعداد على خادم إنتاج.</dd>
+          </div>
+          <div>
+            <dt>ملفاتك</dt>
+            <dd>البيانات والسجلات في مجلدي <span dir="ltr">data</span> و<span dir="ltr">bin</span> بجانب البرنامج. حذف المجلد يزيل البرنامج، وتبقى قواعد بياناتك في <span dir="ltr">data\mysql</span> إن أردت نقلها.</dd>
+          </div>
+        </dl>
+      </div>
+    </section>
+
+    <section id="faq" aria-labelledby="faq-title">
+      <div class="wrap">
+        <h2 id="faq-title">الأسئلة الشائعة</h2>
+        <p class="section-intro">إن لم تجد جوابك، افتح مسألة <span dir="ltr">(Issue)</span> في المستودع.</p>
+        <div class="faq">
+          <details>
+            <summary>هل LaraGal مجاني؟</summary>
+            <div class="answer"><p>نعم للتطوير والاختبار والتعليم والاستخدام غير التجاري، وفق رخصة <span dir="ltr">Business Source License 1.1</span>. تقديمه منتجًا أو خدمة منافسة لطرف ثالث يحتاج رخصة تجارية. بعد أربع سنوات من كل إصدار تتحول رخصته إلى <span dir="ltr">Apache 2.0</span>.</p></div>
+          </details>
+          <details>
+            <summary>لماذا يطلب صلاحيات المدير؟</summary>
+            <div class="answer"><p>لتعديل ملف <span dir="ltr">hosts</span> حتى تعمل نطاقات <span dir="ltr">.test</span>، ولتثبيت الشهادة المحلية في مخزن الشهادات الموثوقة.</p></div>
+          </details>
+          <details>
+            <summary>هل يمكن تشغيل أكثر من إصدار PHP في وقت واحد؟</summary>
+            <div class="answer"><p>نعم. كل إصدار يعمل على منفذ خاص به، وتختار إصدار كل مشروع من قائمته المنسدلة في صف المشروع.</p></div>
+          </details>
+          <details>
+            <summary>أول طلب لمشروع Laravel يتجاوز <span dir="ltr">30</span> ثانية، ما السبب؟</summary>
+            <div class="answer">
+              <p>في الغالب يفحص <span dir="ltr">Windows Defender</span> كل ملف PHP حين يُفتح أول مرة، وصفحة Laravel الأولى تفتح مئات الملفات. في قياس على جهاز بقرص <span dir="ltr">NVMe</span> استغرقت قراءة <span dir="ltr">800</span> ملف <span dir="ltr">14</span> ثانية، ونزلت إلى أقل من ثانية بعد الاستثناء.</p>
+              <p>شغّل في PowerShell بصلاحيات المدير، مع تعديل المسارات لتطابق جهازك:</p>
+              <pre><code>Add-MpPreference -ExclusionPath 'D:\projects', 'D:\laragal\bin'</code></pre>
+              <p>الاستثناء يعني أن Defender لن يفحص هذه المجلدات، فاقصره على مجلدات تثق بمحتواها.</p>
+            </div>
+          </details>
+          <details>
+            <summary>المنفذ <span dir="ltr">443</span> مستخدم من برنامج آخر، ماذا أفعل؟</summary>
+            <div class="answer"><p>يعرض البرنامج تنبيهًا عند التشغيل إن وجد المنفذ محجوزًا. اعرف العملية بالأمر <code>netstat -ano | findstr :443</code>، وأوقف IIS أو أي خادم ويب آخر، ثم أعد تشغيل Caddy من بطاقته.</p></div>
+          </details>
+          <details>
+            <summary>هل يعمل على macOS أو Linux؟</summary>
+            <div class="answer"><p>الإصدار الحالي لويندوز فقط. جزء من الشيفرة مكتوب بحيث يمكن نقله، لكن لا توجد نسخة جاهزة لأنظمة أخرى بعد.</p></div>
+          </details>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="dl-title">
+      <div class="wrap download">
+        <div>
+          <h2 id="dl-title">نزّل الإصدار <span dir="ltr">1.1.0</span></h2>
+          <p class="meta">ملف <span dir="ltr">ZIP</span> للنسخة المحمولة، ويمكنك بناء البرنامج من المصدر بالأمر <code>wails build</code>.</p>
+        </div>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="https://github.com/MosaabGalmod/laragal/releases/latest" rel="noopener noreferrer">صفحة الإصدارات</a>
+          <a class="btn btn-secondary" href="https://github.com/MosaabGalmod/laragal/blob/main/CONTRIBUTING.md" rel="noopener noreferrer">دليل المساهمة</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>LaraGal <span dir="ltr">v1.1.0</span>، رخصة <span dir="ltr">BSL 1.1</span></span>
+      <nav aria-label="روابط المشروع">
+        <a href="https://github.com/MosaabGalmod/laragal" rel="noopener noreferrer">المستودع</a>
+        <a href="https://github.com/MosaabGalmod/laragal/issues" rel="noopener noreferrer">الإبلاغ عن مشكلة</a>
+        <a href="https://github.com/MosaabGalmod/laragal/blob/main/LICENSE" rel="noopener noreferrer">الرخصة</a>
+        <a href="en/" hreflang="en" lang="en">English</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

@@ -199,6 +199,17 @@
       </button>
 
       <button
+        v-if="service.id === 'mysql' && service.running"
+        type="button"
+        @click="emit('open-phpmyadmin')"
+        class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-medium border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700/60 transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+        :title="t('open_phpmyadmin_title')"
+      >
+        <Database class="w-3.5 h-3.5 text-orange-600 dark:text-orange-400 shrink-0" />
+        <span>{{ t('open_phpmyadmin') }}</span>
+      </button>
+
+      <button
         v-if="service.running && service.url"
         type="button"
         @click="emit('open-url', service.url)"
@@ -260,6 +271,7 @@ const props = withDefaults(defineProps<Props>(), {
 const emit = defineEmits<{
   (e: 'toggle'): void
   (e: 'open-adminer'): void
+  (e: 'open-phpmyadmin'): void
   (e: 'open-url', url: string): void
   (e: 'copy', text: string): void
 }>()
