@@ -2,202 +2,117 @@
   <div :dir="currentLang === 'ar' ? 'rtl' : 'ltr'" class="h-screen w-screen flex flex-col overflow-hidden bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 transition-colors duration-150 select-none">
     <!-- ================= UNIFIED DESKTOP HEADER (Single Bar - Zero Duplication) ================= -->
     <header
-      dir="ltr"
       @dblclick="toggleMaximize"
       class="wails-drag flex-shrink-0 h-14 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-40 px-4 flex items-center justify-between select-none cursor-default"
     >
-      <!-- PHYSICAL LEFT (Window Controls + Actions in Arabic; Brand in English) -->
-      <div v-if="currentLang === 'ar'" class="flex items-center gap-2.5 wails-no-drag">
-        <!-- Window Controls: Always on physical LEFT in Arabic -->
-        <div class="flex items-center gap-1">
-          <button
-            @click.stop="closeWindow"
-            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-rose-600 hover:text-white transition-colors"
-            :title="t('close_to_background')"
-          >
-            <X class="w-3.5 h-3.5" />
-          </button>
-          <button
-            @click.stop="toggleMaximize"
-            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            :title="t('maximize_restore')"
-          >
-            <Square class="w-3 h-3" />
-          </button>
-          <button
-            @click.stop="minimizeWindow"
-            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-            :title="t('minimize')"
-          >
-            <Minus class="w-3.5 h-3.5" />
-          </button>
-        </div>
-
-        <div class="h-5 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
-
-        <!-- Quick Actions Toolbar -->
-        <button
-          @click="openNewModal"
-          class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
-        >
-          <Plus class="w-3.5 h-3.5" />
-          <span>{{ t('new_project_btn') }}</span>
-        </button>
-
-        <button
-          @click="syncHostsNow"
-          :disabled="isSyncingHosts"
-          class="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/80 transition-colors"
-          :title="t('sync_hosts_hint')"
-        >
-          <RefreshCw class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" :class="{ 'animate-spin': isSyncingHosts }" />
-          <span>{{ t('sync_hosts_btn') }}</span>
-        </button>
-
-        <button
-          @click="openAdminer()"
-          class="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/80 transition-colors"
-          :title="t('open_adminer_title')"
-        >
-          <Database class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-          <span>{{ t('open_adminer') }}</span>
-        </button>
-
-        <button
-          @click="openAdminer()"
-          class="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/80 transition-colors"
-          :title="t('open_adminer_title')"
-        >
-          <Database class="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-          <span>{{ t('open_adminer') }}</span>
-        </button>
-
-        <button
-          @click="installSSL"
-          class="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 transition-colors"
-          :title="t('ssl_install_hint')"
-        >
-          <ShieldCheck class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-          <span>{{ t('install_ssl_btn') }}</span>
-        </button>
-
-        <button
-          @click="toggleLang"
-          class="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-        >
-          English
-        </button>
-
-        <button
-          @click="toggleTheme"
-          class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-          :title="isDark ? t('light_mode') : t('dark_mode')"
-        >
-          <Sun v-if="isDark" class="w-3.5 h-3.5 text-amber-400" />
-          <Moon v-else class="w-3.5 h-3.5 text-slate-600" />
-        </button>
-      </div>
-
-      <!-- In English: Single Brand on Physical Left -->
-      <div v-else class="flex items-center gap-3 wails-no-drag">
-        <img src="/logo.png" alt="LaraGal" class="w-8 h-8 rounded-lg shadow-xs ring-1 ring-blue-500/20 object-contain flex-shrink-0" />
+      <!-- Brand Block -->
+      <div class="flex items-center gap-3 wails-no-drag shrink-0">
+        <img src="/logo.png" alt="LaraGal" class="w-8 h-8 rounded-lg shadow-xs ring-1 ring-blue-500/20 object-contain shrink-0" />
         <div class="flex items-center gap-2">
           <span class="text-lg font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
-          <span class="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
-            v1.1.0
+          <span dir="ltr" class="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
+            {{ appVersion }}
           </span>
         </div>
-        <div class="hidden md:block h-5 w-px bg-slate-200 dark:bg-slate-800"></div>
-        <p class="hidden md:block text-xs text-slate-500 dark:text-slate-400 font-medium">
-          Multi-Runtime Local Web Development &amp; Hosting Suite (PHP, Go, Rust, .NET, Python, Node.js)
+        <div class="hidden lg:block h-5 w-px bg-slate-200 dark:bg-slate-800"></div>
+        <p
+          class="hidden lg:block text-xs text-slate-500 dark:text-slate-400 font-medium truncate max-w-md"
+          :title="t('app_subtitle')"
+        >
+          {{ t('app_subtitle') }}
         </p>
       </div>
 
       <!-- CENTER: Draggable Window Space -->
-      <div class="flex-1 h-full flex items-center justify-center cursor-default"></div>
+      <div class="flex-1 h-full cursor-default"></div>
 
-      <!-- PHYSICAL RIGHT (Single Brand in Arabic; Actions + Controls in English) -->
-      <div v-if="currentLang === 'ar'" class="flex items-center gap-3 wails-no-drag" dir="rtl">
-        <img src="/logo.png" alt="LaraGal" class="w-8 h-8 rounded-lg shadow-xs ring-1 ring-blue-500/20 object-contain flex-shrink-0" />
-        <div class="flex items-center gap-2">
-          <span class="text-lg font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
-          <span class="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
-            v1.1.0
-          </span>
-        </div>
-        <div class="hidden md:block h-5 w-px bg-slate-200 dark:bg-slate-800"></div>
-        <p class="hidden md:block text-xs text-slate-500 dark:text-slate-400 font-medium" dir="rtl">
-          منصة الاستضافة والتطوير الشاملة لتطبيقات الويب (<bdi>PHP</bdi>، <bdi>Go</bdi>، <bdi>Rust</bdi>، <bdi>.NET</bdi>، <bdi>Python</bdi>، <bdi>Node.js</bdi>)
-        </p>
-      </div>
-
-      <!-- In English: Actions + Window Controls on Physical Right -->
-      <div v-else class="flex items-center gap-2.5 wails-no-drag">
+      <!-- Actions Toolbar & Window Controls -->
+      <div class="flex items-center gap-2.5 wails-no-drag shrink-0">
         <button
           @click="openNewModal"
-          class="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors"
+          class="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
+          :aria-label="t('new_project_btn')"
         >
-          <Plus class="w-3.5 h-3.5" />
+          <Plus class="w-3.5 h-3.5 shrink-0" />
           <span>{{ t('new_project_btn') }}</span>
         </button>
 
         <button
           @click="syncHostsNow"
           :disabled="isSyncingHosts"
-          class="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/80 transition-colors"
+          class="inline-flex items-center justify-center gap-1.5 h-8 w-8 xl:w-auto px-0 xl:px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
           :title="t('sync_hosts_hint')"
+          :aria-label="t('sync_hosts_btn')"
         >
-          <RefreshCw class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" :class="{ 'animate-spin': isSyncingHosts }" />
-          <span>{{ t('sync_hosts_btn') }}</span>
+          <RefreshCw class="w-3.5 h-3.5 shrink-0 text-blue-600 dark:text-blue-400" :class="{ 'animate-spin': isSyncingHosts }" />
+          <span class="hidden xl:inline">{{ t('sync_hosts_btn') }}</span>
+        </button>
+
+        <button
+          @click="openAdminer()"
+          class="inline-flex items-center justify-center gap-1.5 h-8 w-8 xl:w-auto px-0 xl:px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
+          :title="t('open_adminer_title')"
+          :aria-label="t('open_adminer')"
+        >
+          <Database class="w-3.5 h-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <span class="hidden xl:inline">{{ t('open_adminer') }}</span>
         </button>
 
         <button
           @click="installSSL"
-          class="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-900/80 transition-colors"
+          class="inline-flex items-center justify-center gap-1.5 h-8 w-8 xl:w-auto px-0 xl:px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
           :title="t('ssl_install_hint')"
+          :aria-label="t('install_ssl_btn')"
         >
-          <ShieldCheck class="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-          <span>{{ t('install_ssl_btn') }}</span>
+          <ShieldCheck class="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+          <span class="hidden xl:inline">{{ t('install_ssl_btn') }}</span>
         </button>
 
         <button
           @click="toggleLang"
-          class="px-2.5 py-1.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+          class="inline-flex items-center justify-center h-8 px-2.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
+          :title="currentLang === 'ar' ? 'English' : 'العربية'"
+          :aria-label="currentLang === 'ar' ? 'English' : 'العربية'"
         >
-          العربية
+          <span v-if="currentLang === 'ar'" lang="en">English</span>
+          <span v-else lang="ar">العربية</span>
         </button>
 
         <button
           @click="toggleTheme"
-          class="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
+          class="inline-flex items-center justify-center w-8 h-8 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
           :title="isDark ? t('light_mode') : t('dark_mode')"
+          :aria-label="isDark ? t('light_mode') : t('dark_mode')"
         >
           <Sun v-if="isDark" class="w-3.5 h-3.5 text-amber-400" />
-          <Moon v-else class="w-3.5 h-3.5 text-slate-600" />
+          <Moon v-else class="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
         </button>
 
-        <div class="h-5 w-px bg-slate-200 dark:bg-slate-800 mx-1"></div>
+        <div class="h-5 w-px bg-slate-200 dark:bg-slate-800 mx-1 shrink-0"></div>
 
-        <!-- Window Controls: Far Right in English -->
-        <div class="flex items-center gap-1">
+        <!-- Window Controls: minimize, maximize, close -->
+        <div class="flex items-center gap-1 shrink-0">
           <button
             @click.stop="minimizeWindow"
-            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
             :title="t('minimize')"
+            :aria-label="t('minimize')"
           >
             <Minus class="w-3.5 h-3.5" />
           </button>
           <button
             @click.stop="toggleMaximize"
-            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
             :title="t('maximize_restore')"
+            :aria-label="t('maximize_restore')"
           >
             <Square class="w-3 h-3" />
           </button>
           <button
             @click.stop="closeWindow"
-            class="w-7 h-7 rounded-md flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-rose-600 hover:text-white transition-colors"
+            class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-rose-600 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
             :title="t('close_to_background')"
+            :aria-label="t('close_to_background')"
           >
             <X class="w-3.5 h-3.5" />
           </button>
@@ -263,158 +178,31 @@
               <Download class="w-3.5 h-3.5" />
               <span>{{ t('download_runtimes_btn') }}</span>
             </button>
-            <span class="text-xs text-slate-500 dark:text-slate-400 font-mono">{{ services.filter(s => s.running).length }}/{{ services.length }} {{ t('status_running') }}</span>
+            <span class="text-xs text-slate-500 dark:text-slate-400 font-mono"><bdi>{{ services.filter(s => s.running).length }}/{{ services.length }}</bdi> {{ t('status_running') }}</span>
           </div>
         </div>
 
         <!-- Services Grid -->
-        <div class="grid grid-cols-2 md:grid-cols-3 2xl:grid-cols-6 gap-3.5">
-          <div
+        <div class="grid gap-3 grid-cols-[repeat(auto-fill,minmax(15rem,1fr))]">
+          <ServiceCard
             v-for="service in services"
             :key="service.id"
-            class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-xs flex flex-col justify-between hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
-          >
-            <div>
-              <div class="flex items-start justify-between gap-1 mb-2">
-                <span
-                  :class="[
-                    service.running
-                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
-                      : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200 dark:border-slate-700',
-                    'text-[10px] px-2 py-0.5 rounded-full border font-semibold flex items-center gap-1'
-                  ]"
-                >
-                  <span class="w-1.5 h-1.5 rounded-full" :class="service.running ? 'bg-emerald-500 animate-pulse' : 'bg-slate-400'"></span>
-                  {{ service.running ? t('status_running') : t('status_stopped') }}
-                </span>
-                <span dir="ltr" class="text-[11px] font-mono font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">:{{ service.port }}</span>
-              </div>
-
-              <h3 class="font-bold text-sm text-slate-900 dark:text-slate-100 leading-snug">{{ t(service.name_key) }}</h3>
-              <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 line-clamp-1" :title="t(service.desc_key)">
-                {{ t(service.desc_key) }}
-              </p>
-
-              <!-- Credentials & Connection Settings Box -->
-              <div v-if="service.credentials" class="mt-2.5 p-2 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800/80 text-[11px] space-y-1 select-text">
-                <!-- MySQL Credentials -->
-                <template v-if="service.id === 'mysql'">
-                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span class="text-slate-400 dark:text-slate-500">{{ t('user_label') }}:</span>
-                    <div class="flex items-center gap-1 font-mono font-semibold">
-                      <span>root</span>
-                      <button @click.stop="copyText('root')" class="p-0.5 hover:text-blue-600 transition-colors" :title="t('copy_url')">
-                        <Check v-if="copiedItem === 'root'" class="w-3 h-3 text-emerald-500" />
-                        <Copy v-else class="w-3 h-3 text-slate-400 hover:text-slate-600" />
-                      </button>
-                    </div>
-                  </div>
-                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span class="text-slate-400 dark:text-slate-500">{{ t('password_label') }}:</span>
-                    <span class="text-slate-400 italic font-mono text-[10px]">{{ t('empty_password') }}</span>
-                  </div>
-                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span class="text-slate-400 dark:text-slate-500">{{ t('host_label') }}:</span>
-                    <span dir="ltr" class="font-mono font-semibold text-[10px]">127.0.0.1:3306</span>
-                  </div>
-                </template>
-
-                <!-- Mailpit Settings -->
-                <template v-else-if="service.id === 'mailpit'">
-                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span class="text-slate-400 dark:text-slate-500">{{ t('smtp_label') }}:</span>
-                    <div class="flex items-center gap-1 font-mono font-semibold">
-                      <span dir="ltr">127.0.0.1:1025</span>
-                      <button @click.stop="copyText('127.0.0.1:1025')" class="p-0.5 hover:text-blue-600 transition-colors" :title="t('copy_url')">
-                        <Check v-if="copiedItem === '127.0.0.1:1025'" class="w-3 h-3 text-emerald-500" />
-                        <Copy v-else class="w-3 h-3 text-slate-400 hover:text-slate-600" />
-                      </button>
-                    </div>
-                  </div>
-                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span class="text-slate-400 dark:text-slate-500">{{ t('web_ui_label') }}:</span>
-                    <span dir="ltr" class="font-mono font-semibold text-[10px]">127.0.0.1:8025</span>
-                  </div>
-                </template>
-
-                <!-- Redis Settings -->
-                <template v-else-if="service.id === 'redis'">
-                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span class="text-slate-400 dark:text-slate-500">{{ t('host_label') }}:</span>
-                    <span dir="ltr" class="font-mono font-semibold text-[10px]">127.0.0.1:6379</span>
-                  </div>
-                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span class="text-slate-400 dark:text-slate-500">{{ t('password_label') }}:</span>
-                    <span class="text-slate-400 italic text-[10px]">{{ t('no_auth') }}</span>
-                  </div>
-                </template>
-
-                <!-- PHP FastCGI Settings -->
-                <template v-else-if="service.id.startsWith('php-')">
-                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span class="text-slate-400 dark:text-slate-500">{{ t('workers_label') }}:</span>
-                    <span class="font-mono font-semibold text-emerald-600 dark:text-emerald-400 text-[10px]">8 Workers</span>
-                  </div>
-                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span class="text-slate-400 dark:text-slate-500">{{ t('opcache_enabled') }}:</span>
-                    <span class="text-emerald-600 dark:text-emerald-400 font-semibold text-[10px]">✓</span>
-                  </div>
-                </template>
-
-                <!-- Caddy Settings -->
-                <template v-else-if="service.id === 'caddy'">
-                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span class="text-slate-400 dark:text-slate-500">API:</span>
-                    <span dir="ltr" class="font-mono font-semibold text-[10px]">localhost:2019</span>
-                  </div>
-                  <div class="flex items-center justify-between text-slate-600 dark:text-slate-300">
-                    <span class="text-slate-400 dark:text-slate-500">SSL:</span>
-                    <span class="font-semibold text-emerald-600 dark:text-emerald-400 text-[10px]">Auto *.test</span>
-                  </div>
-                </template>
-              </div>
-            </div>
-
-            <div class="mt-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
-              <div class="flex items-center gap-1.5">
-                <button
-                  v-if="service.id === 'mysql' && service.running"
-                  @click="openAdminer()"
-                  class="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-bold text-amber-700 hover:text-amber-800 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/60 dark:text-amber-300 dark:hover:bg-amber-900/60 transition-colors"
-                  :title="t('open_adminer_title')"
-                >
-                  <Database class="w-3 h-3" />
-                  <span>{{ t('open_adminer') }}</span>
-                </button>
-                <button
-                  v-if="service.running && service.url"
-                  @click="openBrowser(service.url)"
-                  class="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:text-blue-300 dark:hover:bg-blue-900/60 transition-colors"
-                  :title="service.url"
-                >
-                  <span>{{ t('open_dashboard') }}</span>
-                  <ExternalLink class="w-3 h-3" />
-                </button>
-              </div>
-
-              <button
-                @click="promptToggleService(service)"
-                :disabled="togglingServices.has(service.id)"
-                :aria-busy="togglingServices.has(service.id)"
-                class="text-xs font-bold px-3 py-1 rounded-md transition-colors border"
-                :class="[service.running ? 'text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-900/60 dark:hover:bg-rose-950/40' : 'text-blue-600 border-blue-200 hover:bg-blue-50 dark:border-blue-900/60 dark:hover:bg-blue-950/40', togglingServices.has(service.id) ? 'opacity-60 cursor-wait' : '']"
-              >
-                {{ service.running ? t('stop_btn') : t('start_btn') }}
-              </button>
-            </div>
-          </div>
+            :service="service"
+            :busy="togglingServices.has(service.id)"
+            :copied-item="copiedItem"
+            :t="t"
+            @toggle="promptToggleService(service)"
+            @open-adminer="openAdminer()"
+            @open-url="openBrowser"
+            @copy="copyText"
+          />
         </div>
       </section>
 
       <!-- Sites & Projects Section -->
       <section>
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-          <div class="flex items-center gap-3">
+        <div class="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-3">
+          <div class="flex flex-wrap items-center gap-2.5">
             <h2 class="text-base font-bold flex items-center gap-2 text-slate-900 dark:text-white">
               <Globe class="w-4 h-4 text-blue-600" />
               {{ t('sites_title') }}
@@ -427,295 +215,257 @@
                 <bdi>{{ nonWebCount }}</bdi> {{ t('non_web_count') }}
               </span>
             </div>
+
+            <!-- Single SSL trusted note in section header -->
+            <span class="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-700 dark:text-emerald-400 px-2 py-0.5 rounded-md bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/60 dark:border-emerald-800/60">
+              <Lock class="w-3 h-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>{{ t('ssl_trusted') }}</span>
+            </span>
           </div>
 
-          <!-- Filter tabs -->
-          <div class="flex items-center gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs font-semibold self-start md:self-auto overflow-x-auto">
+          <!-- Search Input -->
+          <div class="relative w-full lg:w-72">
+            <Search class="w-4 h-4 text-slate-400 absolute start-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              v-model="searchQuery"
+              type="search"
+              :placeholder="t('search_placeholder')"
+              :aria-label="t('search_aria_label')"
+              class="w-full ps-8 pe-8 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/90 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-colors"
+            />
             <button
-              @click="activeFilter = 'web'"
-              class="px-2.5 py-1 rounded-lg transition-all"
-              :class="activeFilter === 'web' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
+              v-if="searchQuery"
+              type="button"
+              @click="searchQuery = ''"
+              class="absolute end-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-blue-500"
+              :title="t('clear_search_btn')"
+              :aria-label="t('clear_search_btn')"
             >
-              {{ t('filter_web') }} (<bdi>{{ webSitesCount }}</bdi>)
-            </button>
-            <button
-              v-if="laravelSitesCount > 0"
-              @click="activeFilter = 'laravel'"
-              class="px-2.5 py-1 rounded-lg transition-all"
-              :class="activeFilter === 'laravel' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
-            >
-              Laravel (<bdi>{{ laravelSitesCount }}</bdi>)
-            </button>
-            <button
-              v-if="phpSitesCount > 0"
-              @click="activeFilter = 'php'"
-              class="px-2.5 py-1 rounded-lg transition-all"
-              :class="activeFilter === 'php' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
-            >
-              PHP (<bdi>{{ phpSitesCount }}</bdi>)
-            </button>
-            <button
-              v-if="goSitesCount > 0"
-              @click="activeFilter = 'go'"
-              class="px-2.5 py-1 rounded-lg transition-all"
-              :class="activeFilter === 'go' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
-            >
-              Go (<bdi>{{ goSitesCount }}</bdi>)
-            </button>
-            <button
-              v-if="rustSitesCount > 0"
-              @click="activeFilter = 'rust'"
-              class="px-2.5 py-1 rounded-lg transition-all"
-              :class="activeFilter === 'rust' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
-            >
-              Rust (<bdi>{{ rustSitesCount }}</bdi>)
-            </button>
-            <button
-              v-if="dotnetSitesCount > 0"
-              @click="activeFilter = 'dotnet'"
-              class="px-2.5 py-1 rounded-lg transition-all"
-              :class="activeFilter === 'dotnet' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
-            >
-              .NET (<bdi>{{ dotnetSitesCount }}</bdi>)
-            </button>
-            <button
-              v-if="pythonSitesCount > 0"
-              @click="activeFilter = 'python'"
-              class="px-2.5 py-1 rounded-lg transition-all"
-              :class="activeFilter === 'python' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
-            >
-              Python (<bdi>{{ pythonSitesCount }}</bdi>)
-            </button>
-            <button
-              v-if="nodeSitesCount > 0"
-              @click="activeFilter = 'node'"
-              class="px-2.5 py-1 rounded-lg transition-all"
-              :class="activeFilter === 'node' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
-            >
-              Node.js (<bdi>{{ nodeSitesCount }}</bdi>)
-            </button>
-            <button
-              v-if="flutterSitesCount > 0"
-              @click="activeFilter = 'flutter'"
-              class="px-2.5 py-1 rounded-lg transition-all"
-              :class="activeFilter === 'flutter' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
-            >
-              Flutter (<bdi>{{ flutterSitesCount }}</bdi>)
-            </button>
-            <button
-              v-if="nonWebCount > 0"
-              @click="activeFilter = 'non_web'"
-              class="px-2.5 py-1 rounded-lg transition-all"
-              :class="activeFilter === 'non_web' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
-            >
-              {{ t('filter_non_web') }} (<bdi>{{ nonWebCount }}</bdi>)
-            </button>
-            <button
-              @click="activeFilter = 'all'"
-              class="px-2.5 py-1 rounded-lg transition-all"
-              :class="activeFilter === 'all' ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-xs' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'"
-            >
-              {{ t('filter_all') }} (<bdi>{{ sites.length }}</bdi>)
+              <X class="w-3.5 h-3.5" />
             </button>
           </div>
         </div>
 
+        <!-- Filter Chips Row -->
+        <div class="flex items-center gap-1.5 pb-2 mb-3 overflow-x-auto text-xs font-semibold">
+          <button
+            type="button"
+            :aria-pressed="activeFilter === 'web'"
+            @click="activeFilter = 'web'"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+            :class="activeFilter === 'web' ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs border border-slate-300 dark:border-slate-600 font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60'"
+          >
+            <span>{{ t('filter_web') }}</span>
+            <bdi class="px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight" :class="activeFilter === 'web' ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'">
+              {{ webSitesCount }}
+            </bdi>
+          </button>
+
+          <button
+            v-if="laravelSitesCount > 0"
+            type="button"
+            :aria-pressed="activeFilter === 'laravel'"
+            @click="activeFilter = 'laravel'"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+            :class="activeFilter === 'laravel' ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs border border-slate-300 dark:border-slate-600 font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60'"
+          >
+            <bdi>Laravel</bdi>
+            <bdi class="px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight" :class="activeFilter === 'laravel' ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'">
+              {{ laravelSitesCount }}
+            </bdi>
+          </button>
+
+          <button
+            v-if="phpSitesCount > 0"
+            type="button"
+            :aria-pressed="activeFilter === 'php'"
+            @click="activeFilter = 'php'"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+            :class="activeFilter === 'php' ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs border border-slate-300 dark:border-slate-600 font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60'"
+          >
+            <bdi>PHP</bdi>
+            <bdi class="px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight" :class="activeFilter === 'php' ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'">
+              {{ phpSitesCount }}
+            </bdi>
+          </button>
+
+          <button
+            v-if="goSitesCount > 0"
+            type="button"
+            :aria-pressed="activeFilter === 'go'"
+            @click="activeFilter = 'go'"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+            :class="activeFilter === 'go' ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs border border-slate-300 dark:border-slate-600 font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60'"
+          >
+            <bdi>Go</bdi>
+            <bdi class="px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight" :class="activeFilter === 'go' ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'">
+              {{ goSitesCount }}
+            </bdi>
+          </button>
+
+          <button
+            v-if="rustSitesCount > 0"
+            type="button"
+            :aria-pressed="activeFilter === 'rust'"
+            @click="activeFilter = 'rust'"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+            :class="activeFilter === 'rust' ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs border border-slate-300 dark:border-slate-600 font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60'"
+          >
+            <bdi>Rust</bdi>
+            <bdi class="px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight" :class="activeFilter === 'rust' ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'">
+              {{ rustSitesCount }}
+            </bdi>
+          </button>
+
+          <button
+            v-if="dotnetSitesCount > 0"
+            type="button"
+            :aria-pressed="activeFilter === 'dotnet'"
+            @click="activeFilter = 'dotnet'"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+            :class="activeFilter === 'dotnet' ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs border border-slate-300 dark:border-slate-600 font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60'"
+          >
+            <bdi>.NET</bdi>
+            <bdi class="px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight" :class="activeFilter === 'dotnet' ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'">
+              {{ dotnetSitesCount }}
+            </bdi>
+          </button>
+
+          <button
+            v-if="pythonSitesCount > 0"
+            type="button"
+            :aria-pressed="activeFilter === 'python'"
+            @click="activeFilter = 'python'"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+            :class="activeFilter === 'python' ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs border border-slate-300 dark:border-slate-600 font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60'"
+          >
+            <bdi>Python</bdi>
+            <bdi class="px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight" :class="activeFilter === 'python' ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'">
+              {{ pythonSitesCount }}
+            </bdi>
+          </button>
+
+          <button
+            v-if="nodeSitesCount > 0"
+            type="button"
+            :aria-pressed="activeFilter === 'node'"
+            @click="activeFilter = 'node'"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+            :class="activeFilter === 'node' ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs border border-slate-300 dark:border-slate-600 font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60'"
+          >
+            <bdi>Node.js</bdi>
+            <bdi class="px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight" :class="activeFilter === 'node' ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'">
+              {{ nodeSitesCount }}
+            </bdi>
+          </button>
+
+          <button
+            v-if="flutterSitesCount > 0"
+            type="button"
+            :aria-pressed="activeFilter === 'flutter'"
+            @click="activeFilter = 'flutter'"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+            :class="activeFilter === 'flutter' ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs border border-slate-300 dark:border-slate-600 font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60'"
+          >
+            <bdi>Flutter</bdi>
+            <bdi class="px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight" :class="activeFilter === 'flutter' ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'">
+              {{ flutterSitesCount }}
+            </bdi>
+          </button>
+
+          <button
+            v-if="nonWebCount > 0"
+            type="button"
+            :aria-pressed="activeFilter === 'non_web'"
+            @click="activeFilter = 'non_web'"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+            :class="activeFilter === 'non_web' ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs border border-slate-300 dark:border-slate-600 font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60'"
+          >
+            <span>{{ t('filter_non_web') }}</span>
+            <bdi class="px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight" :class="activeFilter === 'non_web' ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'">
+              {{ nonWebCount }}
+            </bdi>
+          </button>
+
+          <button
+            type="button"
+            :aria-pressed="activeFilter === 'all'"
+            @click="activeFilter = 'all'"
+            class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+            :class="activeFilter === 'all' ? 'bg-white dark:bg-slate-700 text-blue-700 dark:text-blue-300 shadow-xs border border-slate-300 dark:border-slate-600 font-bold' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 bg-slate-100/80 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-700/60'"
+          >
+            <span>{{ t('filter_all') }}</span>
+            <bdi class="px-1.5 py-0.2 rounded-full text-[10px] font-mono leading-tight" :class="activeFilter === 'all' ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'">
+              {{ sites.length }}
+            </bdi>
+          </button>
+        </div>
+
+        <!-- Empty State -->
         <div v-if="filteredSites.length === 0" class="p-12 text-center rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900/60">
           <Globe class="w-10 h-10 text-slate-400 mx-auto mb-3 opacity-60" />
           <p class="text-sm text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-            <span v-if="activeFilter === 'web' && sites.length > 0">
+            <span v-if="searchQuery.trim()">
+              {{ t('no_search_results', { query: searchQuery.trim() }) }}
+            </span>
+            <span v-else-if="activeFilter === 'web' && sites.length > 0">
               {{ t('no_web_sites_in_dir') }}
             </span>
             <span v-else>{{ t('empty_sites') }}</span>
           </p>
           <div class="mt-4 flex items-center justify-center gap-2">
             <button
-              v-if="activeFilter === 'web' && sites.length > 0"
-              @click="activeFilter = 'all'"
-              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors"
+              v-if="searchQuery.trim()"
+              type="button"
+              @click="searchQuery = ''"
+              class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
             >
-              <Folder class="w-3.5 h-3.5" />
-              <span>{{ t('show_all_folders') }} (<bdi>{{ sites.length }}</bdi>)</span>
+              <X class="w-3.5 h-3.5" />
+              <span>{{ t('clear_search_btn') }}</span>
             </button>
-            <button
-              @click="openNewModal"
-              class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-sm transition-colors"
-            >
-              <Plus class="w-4 h-4" />
-              {{ t('new_project_btn') }}
-            </button>
+            <template v-else>
+              <button
+                v-if="activeFilter === 'web' && sites.length > 0"
+                type="button"
+                @click="activeFilter = 'all'"
+                class="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+              >
+                <Folder class="w-3.5 h-3.5" />
+                <span>{{ t('show_all_folders') }} (<bdi>{{ sites.length }}</bdi>)</span>
+              </button>
+              <button
+                type="button"
+                @click="openNewModal"
+                class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold bg-blue-600 text-white hover:bg-blue-700 shadow-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+              >
+                <Plus class="w-4 h-4" />
+                {{ t('new_project_btn') }}
+              </button>
+            </template>
           </div>
         </div>
 
-        <div v-else class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          <div
+        <!-- Project Row List Container -->
+        <div v-else class="rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 divide-y divide-slate-100 dark:divide-slate-800/80 shadow-2xs overflow-hidden">
+          <ProjectRow
             v-for="site in filteredSites"
             :key="site.domain || site.root_path"
-            class="p-5 rounded-2xl border bg-white dark:bg-slate-900 shadow-xs transition-all flex flex-col justify-between"
-            :class="site.is_web ? 'border-slate-200 dark:border-slate-800 hover:border-blue-500/50 dark:hover:border-blue-600' : 'border-dashed border-slate-300 dark:border-slate-800 opacity-90'"
-          >
-            <div>
-              <div class="flex items-center justify-between mb-3">
-                <span v-if="site.is_web" class="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-mono font-bold">
-                  <Lock class="w-3 h-3 text-emerald-600" />
-                  HTTPS
-                </span>
-                <span v-else class="inline-flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700 font-sans font-semibold">
-                  <Folder class="w-3 h-3 text-slate-400" />
-                  {{ t('non_web_badge') }}
-                </span>
-
-                <!-- Interactive PHP Version Selector for PHP Projects -->
-                <div v-if="isPhpProject(site)" dir="ltr" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-blue-50/90 dark:bg-blue-950/70 border border-blue-200 dark:border-blue-900/80 text-xs font-mono">
-                  <span v-if="site.project_type === 'laravel'" class="font-bold text-blue-700 dark:text-blue-300">Laravel •</span>
-                  <span v-else-if="site.project_type === 'wordpress'" class="font-bold text-blue-700 dark:text-blue-300">WordPress •</span>
-                  <select
-                    :value="extractPhpVersionNumber(site.php_version)"
-                    @change="updateSitePHPVersion(site, $event)"
-                    class="bg-transparent text-blue-800 dark:text-blue-200 font-bold focus:outline-none cursor-pointer text-xs"
-                    :title="t('change_php_hint')"
-                  >
-                    <option class="bg-white dark:bg-slate-900 text-slate-800 dark:text-white" value="8.4">PHP 8.4</option>
-                    <option class="bg-white dark:bg-slate-900 text-slate-800 dark:text-white" value="8.3">PHP 8.3</option>
-                    <option class="bg-white dark:bg-slate-900 text-slate-800 dark:text-white" value="8.2">PHP 8.2</option>
-                    <option class="bg-white dark:bg-slate-900 text-slate-800 dark:text-white" value="8.1">PHP 8.1</option>
-                  </select>
-                </div>
-
-                <span v-else-if="site.is_web" dir="ltr" class="text-xs font-mono px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
-                  <span v-if="site.project_type === 'go'">Go • Proxy :{{ site.proxy_port || 8080 }}</span>
-                  <span v-else-if="site.project_type === 'rust'">Rust • Proxy :{{ site.proxy_port || 8080 }}</span>
-                  <span v-else-if="site.project_type === 'dotnet'">.NET • Proxy :{{ site.proxy_port || 5000 }}</span>
-                  <span v-else-if="site.project_type === 'python'">Python • Proxy :{{ site.proxy_port || 8000 }}</span>
-                  <span v-else-if="site.project_type === 'ruby'">Ruby • Proxy :{{ site.proxy_port || 3000 }}</span>
-                  <span v-else-if="site.project_type === 'java'">Java • Proxy :{{ site.proxy_port || 8080 }}</span>
-                  <span v-else-if="site.project_type === 'flutter'">Flutter Web</span>
-                  <span v-else-if="site.project_type === 'static'">HTML / ثابت</span>
-                  <span v-else-if="site.project_type === 'node'">Node.js</span>
-                  <span v-else>{{ site.type_label || site.php_version || 'Web' }}</span>
-                </span>
-                <span v-else class="text-xs font-sans px-2.5 py-1 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
-                  {{ t('local_folder_badge') }}
-                </span>
-              </div>
-
-              <h3 class="text-base font-bold text-slate-900 dark:text-white truncate">
-                {{ site.is_web ? site.domain : (site.name || site.domain) }}
-              </h3>
-
-              <!-- Monospace Main Project Path Box with Actions -->
-              <div dir="ltr" class="mt-3 flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-[11px] font-mono text-slate-600 dark:text-slate-300">
-                <span class="truncate flex-1 text-left select-all" :title="site.path || site.root_path">{{ site.path || site.root_path }}</span>
-                <div class="flex items-center gap-1 flex-shrink-0 ms-2">
-                  <button
-                    @click="openDiagnosticsModal(site)"
-                    :title="t('diagnose_project_btn')"
-                    class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-amber-500 transition-colors"
-                  >
-                    <Wrench class="w-3 h-3" />
-                  </button>
-                  <button
-                    @click="openSettingsModal(site)"
-                    :title="t('project_settings_btn')"
-                    class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400 hover:text-blue-500 transition-colors"
-                  >
-                    <Settings class="w-3 h-3" />
-                  </button>
-                  <button
-                    @click="copyText(site.path || site.root_path)"
-                    :title="t('copy_url')"
-                    class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    <Check v-if="copiedItem === (site.path || site.root_path)" class="w-3 h-3 text-emerald-500" />
-                    <Copy v-else class="w-3 h-3 text-slate-400" />
-                  </button>
-                  <button
-                    @click="openExplorer(site.path || site.root_path)"
-                    :title="t('open_folder')"
-                    class="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                  >
-                    <Folder class="w-3 h-3 text-slate-400" />
-                  </button>
-                </div>
-              </div>
-
-              <!-- DocRoot Subfolder indicator if distinct from main project directory -->
-              <div v-if="getDocRootRelative(site)" class="mt-1.5 flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 font-mono">
-                <div class="flex items-center gap-1.5">
-                  <span class="font-sans font-semibold text-slate-400">{{ t('doc_root') }}:</span>
-                  <span class="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold border border-slate-200 dark:border-slate-700">
-                    <bdi>{{ getDocRootRelative(site) }}</bdi>
-                  </span>
-                </div>
-                <span v-if="site.project_type === 'go'" class="text-amber-600 dark:text-amber-400 font-sans font-semibold">
-                  <bdi>Reverse Proxy &rarr; :{{ site.proxy_port || 8080 }}</bdi>
-                </span>
-              </div>
-            </div>
-
-            <!-- Quick action bar -->
-            <div class="mt-5 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-              <div class="flex items-center gap-2">
-                <span v-if="site.is_web" class="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
-                  <CheckCircle2 class="w-3.5 h-3.5" />
-                  {{ t('ssl_trusted') }}
-                </span>
-                <span v-else class="text-[11px] text-slate-500 dark:text-slate-400 font-semibold flex items-center gap-1">
-                  <Folder class="w-3.5 h-3.5" />
-                  {{ t('local_folder_badge') }}
-                </span>
-                <button
-                  @click="openVSCode(site.path || site.root_path)"
-                  class="hidden sm:inline-flex items-center gap-1 text-[11px] font-bold text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 transition-colors ms-1"
-                  :title="t('open_vscode')"
-                >
-                  <Code class="w-3.5 h-3.5" />
-                  <span>VS Code</span>
-                </button>
-              </div>
-
-              <div class="flex items-center gap-1.5">
-                <button
-                  v-if="site.is_web && ((site.proxy_port && site.proxy_port > 0) || site.project_type === 'go' || site.project_type === 'rust' || site.project_type === 'dotnet' || site.project_type === 'python' || site.project_type === 'ruby' || site.project_type === 'java' || site.project_type === 'proxy')"
-                  @click="toggleProjectApp(site)"
-                  :title="runningProjects[site.domain] ? t('stop_app_btn') : t('start_app_btn')"
-                  class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-colors"
-                  :class="runningProjects[site.domain] ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100'"
-                >
-                  <Power class="w-3.5 h-3.5" :class="runningProjects[site.domain] ? 'text-amber-600' : 'text-emerald-600'" />
-                  <span>{{ runningProjects[site.domain] ? t('stop_btn') : t('start_app_btn') }}</span>
-                </button>
-
-                <button
-                  v-if="site.is_web && (site.project_type === 'laravel' || site.project_type === 'wordpress' || (site.php_port && site.php_port > 0))"
-                  @click="openAdminer(site.name ? site.name.replace(/-/g, '_') : '')"
-                  class="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg text-xs font-semibold text-slate-600 hover:text-amber-700 bg-slate-50 hover:bg-amber-50 dark:bg-slate-800 dark:hover:bg-amber-950/50 dark:text-slate-300 dark:hover:text-amber-300 border border-slate-200 hover:border-amber-200 dark:border-slate-700 dark:hover:border-amber-800 transition-colors"
-                  :title="t('open_project_db_hint')"
-                >
-                  <Database class="w-3.5 h-3.5 text-amber-500" />
-                  <span class="hidden sm:inline">{{ t('db_label') }}</span>
-                </button>
-                <a
-                  v-if="site.is_web"
-                  :href="'https://' + site.domain"
-                  target="_blank"
-                  @click.prevent="openBrowser('https://' + site.domain)"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-blue-50 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/80 transition-colors"
-                >
-                  <span>{{ t('open_browser') }}</span>
-                  <ExternalLink class="w-3.5 h-3.5" />
-                </a>
-                <button
-                  v-else
-                  @click="openExplorer(site.path || site.root_path)"
-                  class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
-                >
-                  <span>{{ t('open_folder_btn') }}</span>
-                  <FolderOpen class="w-3.5 h-3.5" />
-                </button>
-              </div>
-            </div>
-          </div>
+            :site="site"
+            :t="t"
+            :copied-item="copiedItem"
+            :is-running="Boolean(runningProjects[site.domain])"
+            :doc-root-relative="getDocRootRelative(site)"
+            :is-php="isPhpProject(site)"
+            @open-browser="openBrowser('https://' + site.domain)"
+            @open-folder="openExplorer(site.path || site.root_path)"
+            @open-vscode="openVSCode(site.path || site.root_path)"
+            @open-adminer="openAdminer(site.name ? site.name.replace(/-/g, '_') : '')"
+            @copy="copyText"
+            @settings="openSettingsModal(site)"
+            @diagnostics="openDiagnosticsModal(site)"
+            @toggle-app="toggleProjectApp(site)"
+            @change-php="updateSitePHPVersion(site, $event)"
+          />
         </div>
       </section>
     </main>
@@ -1484,14 +1234,20 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import {
   Server, Globe, Plus, ShieldCheck, Sun, Moon,
-  Lock, ExternalLink, CheckCircle2, Info, Download,
-  Folder, Code, Copy, Check, Minus, Square, X,
+  Lock, CheckCircle2, Info, Download,
+  Folder, Check, Minus, Square, X,
   AlertCircle, AlertTriangle, FolderOpen, Power, RefreshCw,
-  Settings, Wrench, Database, ShieldAlert, ArrowUpCircle
+  Settings, Wrench, Database, ShieldAlert, ArrowUpCircle,
+  Search
 } from 'lucide-vue-next'
+
+import ServiceCard from './components/ServiceCard.vue'
+import ProjectRow from './components/ProjectRow.vue'
 
 import arLocale from './locales/ar.json'
 import enLocale from './locales/en.json'
+
+const appVersion = 'v1.1.0'
 
 // Dark theme preference persistence
 const isDark = ref(localStorage.getItem('laragal_theme') !== 'light')
@@ -1701,6 +1457,7 @@ function mapSiteItem(item: any): SiteItem {
 
 const sites = ref<SiteItem[]>([])
 const activeFilter = ref<'web' | 'all' | 'laravel' | 'php' | 'go' | 'rust' | 'dotnet' | 'python' | 'node' | 'flutter' | 'non_web'>('web')
+const searchQuery = ref('')
 const isSyncingHosts = ref(false)
 
 const webSites = computed(() => sites.value.filter(s => s.is_web))
@@ -1716,17 +1473,41 @@ const flutterSitesCount = computed(() => sites.value.filter(s => s.project_type 
 const nonWebCount = computed(() => sites.value.filter(s => !s.is_web).length)
 
 const filteredSites = computed(() => {
-  if (activeFilter.value === 'web') return sites.value.filter(s => s.is_web)
-  if (activeFilter.value === 'laravel') return sites.value.filter(s => s.project_type === 'laravel')
-  if (activeFilter.value === 'php') return sites.value.filter(s => s.project_type === 'php')
-  if (activeFilter.value === 'go') return sites.value.filter(s => s.project_type === 'go' || s.project_type === 'proxy')
-  if (activeFilter.value === 'rust') return sites.value.filter(s => s.project_type === 'rust')
-  if (activeFilter.value === 'dotnet') return sites.value.filter(s => s.project_type === 'dotnet')
-  if (activeFilter.value === 'python') return sites.value.filter(s => s.project_type === 'python')
-  if (activeFilter.value === 'node') return sites.value.filter(s => s.project_type === 'node')
-  if (activeFilter.value === 'flutter') return sites.value.filter(s => s.project_type === 'flutter')
-  if (activeFilter.value === 'non_web') return sites.value.filter(s => !s.is_web)
-  return sites.value
+  let list = sites.value
+
+  if (activeFilter.value === 'web') {
+    list = list.filter(s => s.is_web)
+  } else if (activeFilter.value === 'laravel') {
+    list = list.filter(s => s.project_type === 'laravel')
+  } else if (activeFilter.value === 'php') {
+    list = list.filter(s => s.project_type === 'php')
+  } else if (activeFilter.value === 'go') {
+    list = list.filter(s => s.project_type === 'go' || s.project_type === 'proxy')
+  } else if (activeFilter.value === 'rust') {
+    list = list.filter(s => s.project_type === 'rust')
+  } else if (activeFilter.value === 'dotnet') {
+    list = list.filter(s => s.project_type === 'dotnet')
+  } else if (activeFilter.value === 'python') {
+    list = list.filter(s => s.project_type === 'python')
+  } else if (activeFilter.value === 'node') {
+    list = list.filter(s => s.project_type === 'node')
+  } else if (activeFilter.value === 'flutter') {
+    list = list.filter(s => s.project_type === 'flutter')
+  } else if (activeFilter.value === 'non_web') {
+    list = list.filter(s => !s.is_web)
+  }
+
+  const q = searchQuery.value.trim().toLowerCase()
+  if (q) {
+    list = list.filter(s => {
+      const name = (s.name || '').toLowerCase()
+      const domain = (s.domain || '').toLowerCase()
+      const path = (s.path || s.root_path || '').toLowerCase()
+      return name.includes(q) || domain.includes(q) || path.includes(q)
+    })
+  }
+
+  return list
 })
 
 function getDocRootRelative(site: SiteItem): string {
@@ -1749,6 +1530,7 @@ function isPhpProject(site: SiteItem): boolean {
 function extractPhpVersionNumber(ver?: string): string {
   if (!ver) return '8.3'
   const clean = ver.replace(/PHP\s*/i, '').trim()
+  if (clean.startsWith('8.5')) return '8.5'
   if (clean.startsWith('8.4')) return '8.4'
   if (clean.startsWith('8.3')) return '8.3'
   if (clean.startsWith('8.2')) return '8.2'
@@ -1766,7 +1548,7 @@ async function updateSitePHPVersion(site: SiteItem, event: Event) {
     try {
       const updated = await (window as any).go.main.App.SetProjectPHPVersion(targetPath, newVer)
       site.php_version = `PHP ${newVer}`
-      site.php_port = newVer === '8.4' ? 9084 : (newVer === '8.3' ? 9083 : (newVer === '8.2' ? 9082 : 9081))
+      site.php_port = newVer === '8.5' ? 9085 : (newVer === '8.4' ? 9084 : (newVer === '8.3' ? 9083 : (newVer === '8.2' ? 9082 : 9081)))
       notification.value = `${t('php_version_changed')} ${site.domain} ➔ PHP ${newVer}`
       if (Array.isArray(updated)) {
         sites.value = updated.map(mapSiteItem)
@@ -1776,6 +1558,7 @@ async function updateSitePHPVersion(site: SiteItem, event: Event) {
     }
   } else {
     site.php_version = `PHP ${newVer}`
+    site.php_port = newVer === '8.5' ? 9085 : (newVer === '8.4' ? 9084 : (newVer === '8.3' ? 9083 : (newVer === '8.2' ? 9082 : 9081)))
     notification.value = `${t('php_version_changed')} ${site.domain} ➔ PHP ${newVer}`
   }
 }

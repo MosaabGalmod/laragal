@@ -1,6 +1,6 @@
 {
   "app_name": "LaraGal",
-  "app_subtitle": "منصة الاستضافة والتطوير الشاملة لكافة تطبيقات الويب (PHP ،Go ،Rust ،.NET ،Python ،Node.js)",
+  "app_subtitle": "بيئة تطوير واستضافة محلية لتطبيقات الويب",
   "app_title_bar": "LaraGal — بيئة الاستضافة والتطوير المحلية الشاملة",
   "services_title": "الخدمات المحلية",
   "sites_title": "المشاريع والنطاقات",
@@ -202,5 +202,22 @@
   "service_node_desc": "محرك تشغيل جافاسكريبت وأدوات الـ Frontend (Vite / Next)",
   "service_started_msg": "تم تشغيل {service} بنجاح.",
   "service_stopped_msg": "تم إيقاف {service} بنجاح.",
-  "service_toggle_error": "خطأ أثناء تبديل حالة {service}: {error}"
+  "service_toggle_error": "خطأ أثناء تبديل حالة {service}: {error}",
+  "port_label": "المنفذ",
+  "admin_api_label": "إدارة API",
+  "tls_label": "شهادة TLS",
+  "tls_auto_value": "تلقائي",
+  "workers_value": "{count} عمال متزامنون",
+  "opcache_label": "OPcache",
+  "enabled_value": "مفعّل",
+  "copy_value": "نسخ",
+  "info_label": "معلومات",
+  "workers_unit": "عمال متزامنون",
+  "search_placeholder": "بحث في المشاريع والنطاقات والمسارات...",
+  "search_aria_label": "البحث في المشاريع",
+  "no_search_results": "لم يتم العثور على أي نتائج تطابق «{query}»",
+  "clear_search_btn": "مسح البحث",
+  "type_static": "HTML ثابت",
+  "type_web": "موقع ويب",
+  "copy_path": "نسخ المسار"
 }

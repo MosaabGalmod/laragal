@@ -1,6 +1,6 @@
 {
   "app_name": "LaraGal",
-  "app_subtitle": "Multi-Runtime Local Web Development & Hosting Suite (PHP, Go, Rust, .NET, Python, Node.js)",
+  "app_subtitle": "Local development & hosting environment for web apps",
   "app_title_bar": "LaraGal — Multi-Runtime Local Dev Suite",
   "services_title": "Managed Services",
   "sites_title": "Projects & Domains",
@@ -202,5 +202,22 @@
   "service_node_desc": "JavaScript runtime & frontend tooling engine (Vite / Next)",
   "service_started_msg": "{service} started successfully.",
   "service_stopped_msg": "{service} stopped successfully.",
-  "service_toggle_error": "Error toggling {service}: {error}"
+  "service_toggle_error": "Error toggling {service}: {error}",
+  "port_label": "Port",
+  "admin_api_label": "Admin API",
+  "tls_label": "TLS",
+  "tls_auto_value": "Auto",
+  "workers_value": "{count} Workers",
+  "opcache_label": "OPcache",
+  "enabled_value": "Enabled",
+  "copy_value": "Copy",
+  "info_label": "Info",
+  "workers_unit": "Workers",
+  "search_placeholder": "Search projects, domains, and paths...",
+  "search_aria_label": "Search projects",
+  "no_search_results": "No projects found matching \"{query}\"",
+  "clear_search_btn": "Clear search",
+  "type_static": "Static HTML",
+  "type_web": "Web",
+  "copy_path": "Copy path"
 }
