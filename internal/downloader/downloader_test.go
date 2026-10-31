@@ -1,4 +1,4 @@
-﻿package downloader_test
+package downloader_test
 
 import (
 	"archive/zip"
@@ -40,6 +40,20 @@ func TestGetDownloadURL(t *testing.T) {
 		}
 		if !strings.HasPrefix(url, "https://") {
 			t.Errorf("url for %s must start with https://, got: %s", target, url)
+		}
+	}
+
+	const expectedPHP85URL = "https://windows.php.net/downloads/releases/php-8.5.12-1-nts-Win32-vs17-x64.zip"
+	for _, target := range []string{"php-8.5", "php85"} {
+		url, err := downloader.GetDownloadURL(target)
+		if err != nil {
+			t.Errorf("GetDownloadURL(%q) unexpected error: %v", target, err)
+		}
+		if url != expectedPHP85URL {
+			t.Errorf("GetDownloadURL(%q) = %q, want %q", target, url, expectedPHP85URL)
+		}
+		if strings.Contains(url, "8.4") {
+			t.Errorf("GetDownloadURL(%q) url %q must not contain '8.4'", target, url)
 		}
 	}
 

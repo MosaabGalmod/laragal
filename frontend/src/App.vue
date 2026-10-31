@@ -59,6 +59,16 @@
         </button>
 
         <button
+          @click="openPhpMyAdmin()"
+          class="inline-flex items-center justify-center gap-1.5 h-8 w-8 xl:w-auto px-0 xl:px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
+          :title="t('open_phpmyadmin_title')"
+          :aria-label="t('open_phpmyadmin')"
+        >
+          <Database class="w-3.5 h-3.5 shrink-0 text-orange-600 dark:text-orange-400" />
+          <span class="hidden xl:inline">{{ t('open_phpmyadmin') }}</span>
+        </button>
+
+        <button
           @click="installSSL"
           class="inline-flex items-center justify-center gap-1.5 h-8 w-8 xl:w-auto px-0 xl:px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
           :title="t('ssl_install_hint')"
@@ -1211,7 +1221,7 @@
         <div class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
           <button
             type="button"
-            @click="openSettingsModal(selectedSiteForDiag)"
+            @click="showDiagModal = false; openSettingsModal(selectedSiteForDiag)"
             class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <Settings class="w-3.5 h-3.5" />
@@ -2054,10 +2064,24 @@ function openExplorer(path: string) {
 function openAdminer(dbName?: string) {
   const app = (window as any).go?.main?.App
   if (app?.OpenAdminer) {
-    app.OpenAdminer(dbName || '')
+    app.OpenAdminer(dbName || '').catch((err: any) => {
+      notification.value = err?.message || String(err)
+    })
   } else {
     const dbParam = dbName ? `&db=${encodeURIComponent(dbName)}` : ''
     openBrowser(`http://localhost:3307/?server=127.0.0.1&username=root${dbParam}`)
+  }
+}
+
+function openPhpMyAdmin(dbName?: string) {
+  const app = (window as any).go?.main?.App
+  if (app?.OpenPhpMyAdmin) {
+    app.OpenPhpMyAdmin(dbName || '').catch((err: any) => {
+      notification.value = err?.message || String(err)
+    })
+  } else {
+    const dbParam = dbName ? `index.php?route=/database/structure&db=${encodeURIComponent(dbName)}` : ''
+    openBrowser(`http://localhost:3308/${dbParam}`)
   }
 }
 

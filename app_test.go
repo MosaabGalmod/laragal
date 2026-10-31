@@ -4,10 +4,12 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/laragal/laragal/internal/config"
+	"github.com/laragal/laragal/internal/process"
 	"github.com/laragal/laragal/internal/services/adminer"
 	"github.com/laragal/laragal/internal/services/caddy"
 )
@@ -342,5 +344,105 @@ func TestEnsurePHPServiceRunning_UserStopped(t *testing.T) {
 	app.clearUserStopped("php-8.5")
 	if app.isUserStopped("php-8.5") {
 		t.Fatalf("expected php-8.5 user stopped to be cleared")
+	}
+}
+
+func TestReloadCaddyAtomicWrite(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
+	cfg := config.NewDefaultConfig()
+	cfg.ProjectsPath = tempDir
+
+	app := &App{
+		cfg:        cfg,
+		supervisor: process.NewSupervisor(),
+		sites: []caddy.SiteDef{
+			{
+				Name:        "testsite",
+				Domain:      "testsite.test",
+				Path:        tempDir,
+				RootPath:    tempDir,
+				PHPPort:     9083,
+				PHPVersion:  "8.3",
+				ProjectType: "laravel",
+				IsWeb:       true,
+			},
+		},
+	}
+
+	err := app.ReloadCaddy()
+	if err != nil {
+		t.Fatalf("ReloadCaddy failed: %v", err)
+	}
+
+	caddyfilePath := filepath.Join("data", "caddy", "Caddyfile")
+	content, err := os.ReadFile(caddyfilePath)
+	if err != nil {
+		t.Fatalf("expected Caddyfile at %s: %v", caddyfilePath, err)
+	}
+
+	if !strings.Contains(string(content), "testsite.test") {
+		t.Errorf("expected Caddyfile to contain testsite.test, got:\n%s", string(content))
+	}
+
+	tmpPath := filepath.Join("data", "caddy", "Caddyfile.tmp")
+	if _, err := os.Stat(tmpPath); !os.IsNotExist(err) {
+		t.Errorf("temporary file %s still exists", tmpPath)
+	}
+}
+
+func TestReloadCaddy_IncludesPhpMyAdminWhenInstalled(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
+	// Create fake data/phpmyadmin/index.php
+	pmaDir := filepath.Join(tempDir, "data", "phpmyadmin")
+	if err := os.MkdirAll(pmaDir, 0755); err != nil {
+		t.Fatalf("failed to create fake phpmyadmin dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pmaDir, "index.php"), []byte("<?php // phpmyadmin"), 0644); err != nil {
+		t.Fatalf("failed to create fake phpmyadmin index.php: %v", err)
+	}
+
+	cfg := config.NewDefaultConfig()
+	cfg.ProjectsPath = tempDir
+
+	app := &App{
+		cfg:        cfg,
+		supervisor: process.NewSupervisor(),
+		sites:      []caddy.SiteDef{},
+	}
+
+	if err := app.ReloadCaddy(); err != nil {
+		t.Fatalf("ReloadCaddy failed: %v", err)
+	}
+
+	caddyfilePath := filepath.Join("data", "caddy", "Caddyfile")
+	content, err := os.ReadFile(caddyfilePath)
+	if err != nil {
+		t.Fatalf("expected Caddyfile at %s: %v", caddyfilePath, err)
+	}
+
+	caddyStr := string(content)
+	if !strings.Contains(caddyStr, "phpmyadmin.test") {
+		t.Errorf("expected Caddyfile to contain phpmyadmin.test when installed, got:\n%s", caddyStr)
+	}
+	if !strings.Contains(caddyStr, "3308") {
+		t.Errorf("expected Caddyfile to contain port 3308 for phpmyadmin, got:\n%s", caddyStr)
+	}
+}
+
+func TestOpenPhpMyAdmin_NotInstalled(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
+	app := &App{
+		cfg: config.NewDefaultConfig(),
+	}
+
+	err := app.OpenPhpMyAdmin("")
+	if err == nil {
+		t.Fatalf("expected error when phpMyAdmin is not installed, got nil")
 	}
 }

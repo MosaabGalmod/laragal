@@ -15,7 +15,7 @@ import (
 var defaultURLs = map[string]string{
 	"caddy":   "https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_windows_amd64.zip",
 	"mailpit": "https://github.com/axllent/mailpit/releases/download/v1.21.8/mailpit-windows-amd64.zip",
-	// php-8.5 is handled dynamically with preview fallback
+	"php-8.5": "https://windows.php.net/downloads/releases/php-8.5.12-1-nts-Win32-vs17-x64.zip",
 	"php-8.4": "https://windows.php.net/downloads/releases/php-8.4.4-nts-Win32-vs17-x64.zip",
 	"php-8.3": "https://windows.php.net/downloads/releases/php-8.3.17-nts-Win32-vs16-x64.zip",
 	"php-8.2": "https://windows.php.net/downloads/releases/php-8.2.27-nts-Win32-vs16-x64.zip",
@@ -58,10 +58,6 @@ func normalizeBinaryName(name string) string {
 // GetDownloadURL returns the direct download URL for known portable runtimes
 func GetDownloadURL(name string) (string, error) {
 	norm := normalizeBinaryName(name)
-	if norm == "php-8.5" {
-		// PHP 8.5 preview is mapped to the modern PHP engine
-		return "https://windows.php.net/downloads/releases/php-8.4.4-nts-Win32-vs17-x64.zip", nil
-	}
 	url, exists := defaultURLs[norm]
 	if exists {
 		return url, nil

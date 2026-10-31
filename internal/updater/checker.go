@@ -1,4 +1,4 @@
-package updater
+﻿package updater
 
 import (
 	"context"
@@ -125,6 +125,11 @@ var fallbackStableVersions = map[string]RuntimeUpdateInfo{
 		LatestVersion: "1.21.8",
 		DownloadURL:   "https://github.com/axllent/mailpit/releases/download/v1.21.8/mailpit-windows-amd64.zip",
 	},
+	"php-8.5": {
+		Name:          "php-8.5",
+		LatestVersion: "8.5.12",
+		DownloadURL:   "https://windows.php.net/downloads/releases/php-8.5.12-1-nts-Win32-vs17-x64.zip",
+	},
 	"php-8.4": {
 		Name:          "php-8.4",
 		LatestVersion: "8.4.4",
@@ -227,15 +232,6 @@ func DetectInstalledBinaryVersion(binDir string, name string) string {
 				}
 			}
 		}
-		// Fallback for php-8.5 preview: if 8.4 engine is available, consider preview ready
-		if ver == "8.5" {
-			if _, err := os.Stat(exe); err != nil {
-				v84 := DetectInstalledBinaryVersion(binDir, "php-8.4")
-				if v84 != "" {
-					return v84 + " (معاينة)"
-				}
-			}
-		}
 		if _, err := os.Stat(exe); err == nil {
 			out, _ := winutil.Command(exe, "-v").CombinedOutput()
 			return ExtractVersion(string(out))
@@ -294,7 +290,7 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 		}
 	}
 
-	runtimesToCheck := []string{"caddy", "php-8.4", "php-8.3", "php-8.2", "php-8.1", "mysql", "redis", "mailpit", "phpmyadmin", "adminer"}
+	runtimesToCheck := []string{"caddy", "php-8.5", "php-8.4", "php-8.3", "php-8.2", "php-8.1", "mysql", "redis", "mailpit", "phpmyadmin", "adminer"}
 	if opts.BaseBinDir != "" {
 		if entries, err := os.ReadDir(opts.BaseBinDir); err == nil {
 			for _, e := range entries {

@@ -24,6 +24,7 @@ import (
 	"github.com/laragal/laragal/internal/services/caddy"
 	"github.com/laragal/laragal/internal/services/mysql"
 	"github.com/laragal/laragal/internal/services/php"
+	"github.com/laragal/laragal/internal/services/phpmyadmin"
 	"github.com/laragal/laragal/internal/updater"
 	"github.com/laragal/laragal/internal/winutil"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -48,12 +49,18 @@ func NewApp() *App {
 		_ = cfg.Save(cfgPath)
 	}
 
+	sup := process.NewSupervisor()
 	app := &App{
-		cfg:        cfg,
-		supervisor: process.NewSupervisor(),
-		sites:      make([]caddy.SiteDef, 0),
+		cfg:         cfg,
+		supervisor:  sup,
+		sites:       make([]caddy.SiteDef, 0),
 		cfgPath:     cfgPath,
 		userStopped: make(map[string]bool),
+	}
+	sup.OnExit = func(name string) {
+		if app.ctx != nil {
+			runtime.EventsEmit(app.ctx, "services-updated", app.GetServices())
+		}
 	}
 	app.loadSitesCache()
 	return app
@@ -100,27 +107,28 @@ func (a *App) startup(ctx context.Context) {
 
 	a.loadSitesCache()
 
-	// 1. Scan projects immediately in independent goroutine so UI has sites in < 20ms!
+	// 1. Scan projects synchronously at the start of background services goroutine so UI has sites in < 20ms and Caddyfile is written
 	go func() {
 		sites := a.ScanProjects()
 		a.saveSitesCache()
 		if a.ctx != nil {
 			runtime.EventsEmit(a.ctx, "sites-updated", sites)
 		}
-	}()
 
-	// 2. Launch background services asynchronously
-	go func() {
+		// 2. Launch background services asynchronously (Caddyfile is already written)
 		a.StartServices()
 		_ = a.EnsureAdminerInstalled()
 		if a.ctx != nil {
 			runtime.EventsEmit(a.ctx, "services-updated", a.GetServices())
 		}
-		// Check runtime updates in background without blocking UI
-		updates := a.CheckRuntimeUpdates()
-		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "runtime-updates", updates)
-		}
+
+		// 3. Check runtime updates in background without blocking UI
+		go func() {
+			updates := a.CheckRuntimeUpdates()
+			if a.ctx != nil {
+				runtime.EventsEmit(a.ctx, "runtime-updates", updates)
+			}
+		}()
 	}()
 }
 
@@ -389,6 +397,9 @@ func (a *App) StartServices() {
 		caddyDir := filepath.Join("data", "caddy")
 		_ = os.MkdirAll(caddyDir, 0755)
 		caddyfilePath := filepath.Join(caddyDir, "Caddyfile")
+		if _, err := os.Stat(caddyfilePath); os.IsNotExist(err) {
+			_ = a.ReloadCaddy()
+		}
 		_ = a.supervisor.StartService("caddy", caddyExe, []string{"run", "--config", caddyfilePath, "--adapter", "caddyfile"}, 443)
 	}
 
@@ -489,6 +500,7 @@ func (a *App) ToggleService(name string) (bool, error) {
 		if caddyExe == "" {
 			return false, fmt.Errorf("خادم Caddy غير مثبت بعد. يرجى تنزيله من قسم الحزم المحمولة.")
 		}
+		_ = a.ReloadCaddy()
 		caddyDir := filepath.Join("data", "caddy")
 		_ = os.MkdirAll(caddyDir, 0755)
 		caddyfilePath := filepath.Join(caddyDir, "Caddyfile")
@@ -1613,7 +1625,10 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 	a.sites = scannedSites
 	a.sitesMu.Unlock()
 
-	// Ensure needed PHP FastCGI instances and reload Caddy in background to not block the caller
+	// Write Caddyfile synchronously so callers (like StartServices) always find a valid Caddyfile
+	_ = a.ReloadCaddy()
+
+	// Ensure needed PHP FastCGI instances asynchronously in background
 	go func(sites []caddy.SiteDef) {
 		for i := range sites {
 			s := &sites[i]
@@ -1625,7 +1640,6 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 				_ = a.ensurePHPServiceRunning(s.PHPVersion)
 			}
 		}
-		_ = a.ReloadCaddy()
 	}(scannedSites)
 
 	// 2. Update system hosts file asynchronously in background (prevents ipconfig /flushdns UI freezes)
@@ -1640,11 +1654,28 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 		suffix = a.cfg.DomainSuffix
 	}
 	webDomains = append(webDomains, "adminer"+suffix)
+	webDomains = append(webDomains, "phpmyadmin"+suffix)
 	go func(domains []string) {
 		_ = hosts.UpdateSystemHosts(domains)
 	}(webDomains)
 
 	return scannedSites
+}
+
+func (a *App) writeAtomicFile(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, data, perm); err != nil {
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	return nil
 }
 
 // ReloadCaddy writes the updated Caddyfile configuration and reloads Caddy if running
@@ -1664,13 +1695,33 @@ func (a *App) ReloadCaddy() error {
 		PHPPort:  a.getActivePHPPort(),
 		Port:     3307,
 	}
-	caddyContent := caddy.GenerateCaddyfile(a.sites, 2019, adminerCfg)
-	if err := os.WriteFile(caddyfilePath, []byte(caddyContent), 0644); err != nil {
+	pmaCfg := caddy.PhpMyAdminConfig{}
+	if phpmyadmin.IsInstalled(".") {
+		_ = phpmyadmin.EnsureConfig(".")
+		absPmaPath, _ := filepath.Abs(filepath.Join("data", "phpmyadmin"))
+		pmaDomain := "phpmyadmin.test"
+		if a.cfg != nil && a.cfg.DomainSuffix != "" {
+			pmaDomain = "phpmyadmin" + a.cfg.DomainSuffix
+		}
+		pmaCfg = caddy.PhpMyAdminConfig{
+			Enabled:  true,
+			Domain:   pmaDomain,
+			RootPath: absPmaPath,
+			Port:     phpmyadmin.DefaultPort,
+			PHPPort:  a.getActivePHPPort(),
+		}
+	}
+	a.sitesMu.RLock()
+	sites := a.sites
+	a.sitesMu.RUnlock()
+	caddyContent := caddy.GenerateCaddyfileWithTools(sites, 2019, adminerCfg, pmaCfg)
+
+	if err := a.writeAtomicFile(caddyfilePath, []byte(caddyContent), 0644); err != nil {
 		return err
 	}
 
 	// Also write to data/Caddyfile for standard root access
-	_ = os.WriteFile(filepath.Join("data", "Caddyfile"), []byte(caddyContent), 0644)
+	_ = a.writeAtomicFile(filepath.Join("data", "Caddyfile"), []byte(caddyContent), 0644)
 
 	// Attempt live reload via Caddy admin API asynchronously so it never delays UI or caller
 	go func(content string) {
@@ -1701,6 +1752,7 @@ func (a *App) SyncHosts() (string, error) {
 		suffix = a.cfg.DomainSuffix
 	}
 	webDomains = append(webDomains, "adminer"+suffix)
+	webDomains = append(webDomains, "phpmyadmin"+suffix)
 	if err := hosts.UpdateSystemHosts(webDomains); err != nil {
 		return "", err
 	}
@@ -1769,5 +1821,53 @@ func (a *App) OpenAdminer(dbName string) error {
 	_ = a.ReloadCaddy()
 
 	targetURL := adminer.BuildURL("adminer"+a.cfg.DomainSuffix, 3307, dbName)
+	return a.OpenBrowser(targetURL)
+}
+
+// OpenPhpMyAdmin starts prerequisites (MySQL, PHP, Caddy) and opens phpMyAdmin in browser
+func (a *App) OpenPhpMyAdmin(dbName string) error {
+	if !phpmyadmin.IsInstalled(".") {
+		return fmt.Errorf("أداة phpMyAdmin غير مثبتة حالياً في data/phpmyadmin")
+	}
+
+	_ = phpmyadmin.EnsureConfig(".")
+
+	if a.supervisor != nil {
+		// 1. Ensure MySQL is running
+		mysqlStatus, _ := a.supervisor.GetServiceStatus("mysql")
+		if !mysqlStatus.Running && !a.IsPortListening(3306) {
+			_, _ = a.ToggleService("mysql")
+		}
+
+		// 2. Ensure at least one PHP FastCGI instance is running
+		phpRunning := false
+		for _, v := range []string{"8.4", "8.3", "8.2", "8.1"} {
+			if st, ok := a.supervisor.GetServiceStatus("php-" + v); ok && st.Running {
+				phpRunning = true
+				break
+			}
+		}
+		if !phpRunning {
+			defVer := "8.4"
+			if a.cfg != nil && a.cfg.DefaultPHP != "" {
+				defVer = a.cfg.DefaultPHP
+			}
+			_ = a.ensurePHPServiceRunning(defVer)
+		}
+
+		// 3. Ensure Caddy is running
+		caddyStatus, _ := a.supervisor.GetServiceStatus("caddy")
+		if !caddyStatus.Running {
+			_, _ = a.ToggleService("caddy")
+		}
+	}
+
+	_ = a.ReloadCaddy()
+
+	suffix := ".test"
+	if a.cfg != nil && a.cfg.DomainSuffix != "" {
+		suffix = a.cfg.DomainSuffix
+	}
+	targetURL := phpmyadmin.BuildURL("phpmyadmin"+suffix, phpmyadmin.DefaultPort, dbName)
 	return a.OpenBrowser(targetURL)
 }
