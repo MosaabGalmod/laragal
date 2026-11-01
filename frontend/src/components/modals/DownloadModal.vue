@@ -53,7 +53,7 @@
         <div
           v-for="rt in availableRuntimes"
           :key="rt.name"
-          class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 space-y-2 transition-all"
+          class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 space-y-2 transition-all"
           :class="{
             'border-rose-300 dark:border-rose-900/60 bg-rose-50/20 dark:bg-rose-950/20':
               (runtimeUpdates[rt.name]?.has_update && runtimeUpdates[rt.name]?.is_security_fix) ||

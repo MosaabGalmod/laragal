@@ -5,7 +5,7 @@
       href="https://www.figma.com/files"
       target="_blank"
       rel="noopener noreferrer"
-      class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all flex items-start gap-3.5 group cursor-pointer"
+      class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all flex items-start gap-3.5 group cursor-pointer"
       :title="t('open_external_resource')"
       @click.prevent="openUrl('https://www.figma.com/files')"
     >
@@ -32,7 +32,7 @@
       href="https://coolors.co/generate"
       target="_blank"
       rel="noopener noreferrer"
-      class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all flex items-start gap-3.5 group cursor-pointer"
+      class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all flex items-start gap-3.5 group cursor-pointer"
       :title="t('open_external_resource')"
       @click.prevent="openUrl('https://coolors.co/generate')"
     >
@@ -59,7 +59,7 @@
       href="https://fonts.google.com"
       target="_blank"
       rel="noopener noreferrer"
-      class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all flex items-start gap-3.5 group cursor-pointer"
+      class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all flex items-start gap-3.5 group cursor-pointer"
       :title="t('open_external_resource')"
       @click.prevent="openUrl('https://fonts.google.com')"
     >
@@ -86,7 +86,7 @@
       href="https://lucide.dev/icons"
       target="_blank"
       rel="noopener noreferrer"
-      class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all flex items-start gap-3.5 group cursor-pointer"
+      class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 hover:border-indigo-400 dark:hover:border-indigo-600 transition-all flex items-start gap-3.5 group cursor-pointer"
       :title="t('open_external_resource')"
       @click.prevent="openUrl('https://lucide.dev/icons')"
     >

@@ -23,7 +23,7 @@
             v-model="contrastTextColor"
             type="text"
             dir="ltr"
-            class="flex-1 px-3 py-2 rounded-xl text-xs font-mono border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850 text-slate-900 dark:text-white uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            class="flex-1 px-3 py-2 rounded-xl text-xs font-mono border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500"
             maxlength="7"
           >
         </div>
@@ -63,7 +63,7 @@
             v-model="contrastBgColor"
             type="text"
             dir="ltr"
-            class="flex-1 px-3 py-2 rounded-xl text-xs font-mono border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-850 text-slate-900 dark:text-white uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            class="flex-1 px-3 py-2 rounded-xl text-xs font-mono border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white uppercase focus:outline-none focus:ring-2 focus:ring-indigo-500"
             maxlength="7"
           >
         </div>
@@ -100,7 +100,7 @@
 
     <!-- Results & Badges -->
     <div
-      class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 space-y-4"
+      class="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800 space-y-4"
     >
       <!-- Contrast Ratio Big Banner -->
       <div class="flex items-center justify-between flex-wrap gap-2">
