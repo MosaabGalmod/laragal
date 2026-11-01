@@ -189,3 +189,71 @@ func TestGenerateCaddyfileWithPhpMyAdmin(t *testing.T) {
 	}
 }
 
+func TestCaddyfileSitesLoopbackBinding(t *testing.T) {
+	sites := []caddy.SiteDef{
+		{
+			Domain:   "laravel.test",
+			RootPath: "D:/projects/laravel/public",
+			PHPPort:  9083,
+			IsWeb:    true,
+		},
+		{
+			Domain:      "nodeapp.test",
+			RootPath:    "D:/projects/nodeapp",
+			ProjectType: "node",
+			ProxyPort:   3000,
+			IsWeb:       true,
+		},
+		{
+			Domain:   "static.test",
+			RootPath: "D:/projects/static",
+			IsWeb:    true,
+		},
+	}
+	adminerCfg := caddy.AdminerConfig{
+		Enabled:  true,
+		Domain:   "adminer.test",
+		RootPath: "D:/projects/laragal/data/adminer",
+		PHPPort:  9084,
+		Port:     3307,
+	}
+	pmaCfg := caddy.PhpMyAdminConfig{
+		Enabled:  true,
+		Domain:   "phpmyadmin.test",
+		RootPath: "D:/projects/laragal/data/phpmyadmin",
+		PHPPort:  9084,
+		Port:     3308,
+	}
+
+	caddyfile := caddy.GenerateCaddyfileWithTools(sites, 2019, adminerCfg, pmaCfg)
+
+	lines := strings.Split(caddyfile, "\n")
+	siteBlockCount := 0
+	bindCount := 0
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Top-level site block opener: non-indented, ends with '{', and is not the global '{' block
+		if strings.HasSuffix(trimmed, "{") && !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+			if trimmed == "{" {
+				// Global options block
+				continue
+			}
+			siteBlockCount++
+			if i+1 >= len(lines) || strings.TrimSpace(lines[i+1]) != "bind 127.0.0.1 [::1]" {
+				t.Errorf("site block %q at line %d does not have 'bind 127.0.0.1 [::1]' as first directive; next line: %q", line, i+1, lines[i+1])
+			}
+		}
+		if trimmed == "bind 127.0.0.1 [::1]" {
+			bindCount++
+		}
+	}
+
+	expectedSites := len(sites) + 2 // 3 user sites + adminer + phpmyadmin
+	if siteBlockCount != expectedSites {
+		t.Fatalf("expected %d site blocks, found %d", expectedSites, siteBlockCount)
+	}
+	if bindCount != siteBlockCount {
+		t.Errorf("bind directive count (%d) does not match site block count (%d)", bindCount, siteBlockCount)
+	}
+}

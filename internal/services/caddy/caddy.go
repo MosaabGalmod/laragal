@@ -69,6 +69,7 @@ func GenerateCaddyfileWithTools(sites []SiteDef, adminPort int, adminerCfg Admin
 		normalizedRoot := strings.ReplaceAll(site.RootPath, "\\", "/")
 
 		sb.WriteString(fmt.Sprintf("%s {\n", site.Domain))
+		sb.WriteString("    bind 127.0.0.1 [::1]\n")
 		sb.WriteString(fmt.Sprintf("    root * \"%s\"\n", normalizedRoot))
 		sb.WriteString("    encode gzip zstd\n")
 		if site.PHPPort > 0 {
@@ -143,6 +144,7 @@ func GenerateCaddyfileWithTools(sites []SiteDef, adminPort int, adminerCfg Admin
 		}
 
 		sb.WriteString(fmt.Sprintf("%s, http://localhost:%d {\n", adminerDomain, adminerPort))
+		sb.WriteString("    bind 127.0.0.1 [::1]\n")
 		sb.WriteString(fmt.Sprintf("    root * \"%s\"\n", normalizedRoot))
 		sb.WriteString("    encode gzip zstd\n")
 		if cfg.PHPPort > 0 {
@@ -155,7 +157,7 @@ func GenerateCaddyfileWithTools(sites []SiteDef, adminPort int, adminerCfg Admin
 		sb.WriteString("}\n\n")
 	}
 
-		// Render phpMyAdmin database manager virtual host if enabled
+	// Render phpMyAdmin database manager virtual host if enabled
 	if pmaCfg.Enabled {
 		normalizedRoot := strings.ReplaceAll(pmaCfg.RootPath, "\\", "/")
 		pmaDomain := pmaCfg.Domain
@@ -168,6 +170,7 @@ func GenerateCaddyfileWithTools(sites []SiteDef, adminPort int, adminerCfg Admin
 		}
 
 		sb.WriteString(fmt.Sprintf("%s, http://localhost:%d {\n", pmaDomain, pmaPort))
+		sb.WriteString("    bind 127.0.0.1 [::1]\n")
 		sb.WriteString(fmt.Sprintf("    root * \"%s\"\n", normalizedRoot))
 		sb.WriteString("    encode gzip zstd\n")
 		if pmaCfg.PHPPort > 0 {
