@@ -4,8 +4,10 @@ import (
 	"archive/zip"
 	"context"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"fmt"
+	"hash"
 	"io"
 	"log"
 	"net/http"
@@ -90,10 +92,11 @@ func getArchiveFallbackURL(rawURL string) string {
 	return ""
 }
 
-// DownloadFile streams a remote binary to a temporary file, computes its SHA-256 checksum,
+// DownloadFile streams a remote binary to a temporary file, computes its checksum (SHA-256 or SHA-512),
 // verifies integrity before placing the file into destPath, and reports progress.
+// Supports passing checksum as value (auto-detects sha256 vs sha512) or algo + value ("sha512", "<hash>").
 // On hash mismatch, the temporary file is deleted and an error is returned.
-func DownloadFile(ctx context.Context, url string, destPath string, onProgress ProgressCallback, expectedSHA256 ...string) error {
+func DownloadFile(ctx context.Context, url string, destPath string, onProgress ProgressCallback, checksumArgs ...string) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
@@ -148,7 +151,41 @@ func DownloadFile(ctx context.Context, url string, destPath string, onProgress P
 		}
 	}()
 
-	hasher := sha256.New()
+	// Determine expected checksum and hashing algorithm (sha256 vs sha512)
+	var expected string
+	algo := "sha256"
+
+	if len(checksumArgs) == 1 {
+		val := strings.TrimSpace(checksumArgs[0])
+		if len(val) == 128 {
+			algo = "sha512"
+			expected = val
+		} else {
+			expected = val
+		}
+	} else if len(checksumArgs) >= 2 {
+		arg1 := strings.ToLower(strings.TrimSpace(checksumArgs[0]))
+		arg2 := strings.ToLower(strings.TrimSpace(checksumArgs[1]))
+		if arg1 == "sha512" || arg1 == "sha256" {
+			algo = arg1
+			expected = strings.TrimSpace(checksumArgs[1])
+		} else if arg2 == "sha512" || arg2 == "sha256" {
+			algo = arg2
+			expected = strings.TrimSpace(checksumArgs[0])
+		} else {
+			expected = strings.TrimSpace(checksumArgs[0])
+		}
+	} else {
+		expected = GetExpectedSHA256(url)
+	}
+
+	var hasher hash.Hash
+	if strings.EqualFold(algo, "sha512") {
+		hasher = sha512.New()
+	} else {
+		hasher = sha256.New()
+	}
+
 	pw := &progressWriter{
 		total:      resp.ContentLength,
 		callback:   onProgress,
@@ -164,22 +201,14 @@ func DownloadFile(ctx context.Context, url string, destPath string, onProgress P
 		return fmt.Errorf("failed to finalize temporary download file: %w", err)
 	}
 
-	// Determine expected SHA-256 hash
-	var expected string
-	if len(expectedSHA256) > 0 && strings.TrimSpace(expectedSHA256[0]) != "" {
-		expected = strings.TrimSpace(expectedSHA256[0])
-	} else {
-		expected = GetExpectedSHA256(url)
-	}
-
 	actualHash := hex.EncodeToString(hasher.Sum(nil))
 
 	if expected != "" {
 		if !strings.EqualFold(expected, actualHash) {
-			return fmt.Errorf("SHA-256 checksum mismatch for %s: expected %s, got %s", url, expected, actualHash)
+			return fmt.Errorf("%s checksum mismatch for %s: expected %s, got %s", strings.ToUpper(algo), url, expected, actualHash)
 		}
 	} else {
-		log.Printf("WARNING: no SHA-256 checksum configured for %s; skipping integrity verification", url)
+		log.Printf("WARNING: no %s checksum configured for %s; skipping integrity verification", strings.ToUpper(algo), url)
 	}
 
 	// Safely move verified file into destPath (handling Windows existing file replacement)

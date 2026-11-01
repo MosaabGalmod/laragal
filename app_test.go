@@ -22,6 +22,7 @@ import (
 	"github.com/laragal/laragal/internal/runtimes"
 	"github.com/laragal/laragal/internal/services/adminer"
 	"github.com/laragal/laragal/internal/services/caddy"
+	"github.com/laragal/laragal/internal/updater"
 )
 
 func TestProjectsDirectoryLogic(t *testing.T) {
@@ -721,6 +722,224 @@ func TestUpgradeRuntime_NoHashErrors(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no verified artifact") {
 		t.Errorf("expected clear error message, got: %v", err)
+	}
+}
+
+func TestLiveRelease_PHP86_CheckAndInstall(t *testing.T) {
+	feedBinContent := []byte("PHP 8.6.0-1 binary payload from live releases feed")
+	// Make a zip with php-cgi.exe and php.exe
+	buf := new(bytes.Buffer)
+	zw := zip.NewWriter(buf)
+	w1, _ := zw.Create("php.exe")
+	_, _ = w1.Write(feedBinContent)
+	w2, _ := zw.Create("php-cgi.exe")
+	_, _ = w2.Write(feedBinContent)
+	_ = zw.Close()
+	feedZipBytes := buf.Bytes()
+
+	hasher := sha256.New()
+	hasher.Write(feedZipBytes)
+	feedZipHash := hex.EncodeToString(hasher.Sum(nil))
+
+	rawFeed, err := os.ReadFile(filepath.Join("internal", "updater", "testdata", "releases.json"))
+	if err != nil {
+		t.Fatalf("failed to read testdata/releases.json: %v", err)
+	}
+
+	fake86Block := `
+ "8.6": {
+  "version": "8.6.0-1",
+  "nts-vs17-x64": {
+   "zip": {
+    "path": "php-8.6.0-1-nts-Win32-vs17-x64.zip",
+    "sha256": "` + feedZipHash + `"
+   }
+  }
+ },`
+	feedJSON := strings.Replace(string(rawFeed), "{", "{"+fake86Block, 1)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/releases.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(feedJSON))
+		case "/downloads/releases/php-8.6.0-1-nts-Win32-vs17-x64.zip":
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(feedZipBytes)))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(feedZipBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	tmpDir := filepath.Join(tempDir, "tmp")
+
+	app := &App{
+		supervisor:     process.NewSupervisor(),
+		phpReleasesURL: server.URL + "/releases.json",
+		baseBinDir:     binDir,
+		tempDir:        tmpDir,
+	}
+
+	// 1. CheckUpdates returns php-8.6 with IsNew=true and feed sha256
+	updates := app.CheckRuntimeUpdates()
+	var update86 *updater.RuntimeUpdateInfo
+	for i := range updates {
+		if updates[i].Name == "php-8.6" {
+			update86 = &updates[i]
+			break
+		}
+	}
+	if update86 == nil {
+		t.Fatalf("expected CheckRuntimeUpdates to return php-8.6")
+	}
+	if !update86.IsNew {
+		t.Errorf("expected php-8.6 IsNew=true, got false")
+	}
+	if update86.SHA256 != feedZipHash {
+		t.Errorf("expected SHA256 %s, got %s", feedZipHash, update86.SHA256)
+	}
+
+	// 2. Install of php-8.6 via httptest
+	msg, err := app.DownloadBinary("php-8.6")
+	if err != nil {
+		t.Fatalf("DownloadBinary(php-8.6) failed: %v", err)
+	}
+	if msg.Params["name"] != "php-8.6" {
+		t.Errorf("unexpected message params: %+v", msg)
+	}
+
+	// 3. Verify installed executable
+	installedExe := filepath.Join(binDir, "php-8.6", "php-cgi.exe")
+	content, err := os.ReadFile(installedExe)
+	if err != nil {
+		t.Fatalf("failed to read installed php-cgi.exe: %v", err)
+	}
+	if !bytes.Equal(content, feedBinContent) {
+		t.Errorf("installed binary content mismatch")
+	}
+
+	// 4. Verify port 9086
+	port := runtimes.PHPPortForVersion("8.6")
+	if port != 9086 {
+		t.Errorf("PHPPortForVersion(8.6) = %d, want 9086", port)
+	}
+
+	// 5. Verify ini 8.6 has no active zend_extension=opcache
+	iniPath := filepath.Join(binDir, "php-8.6", "php.ini")
+	iniContent, err := os.ReadFile(iniPath)
+	if err != nil {
+		t.Fatalf("failed to read php.ini for 8.6: %v", err)
+	}
+	for _, line := range strings.Split(string(iniContent), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "zend_extension") && strings.Contains(trimmed, "opcache") {
+			t.Errorf("expected no active zend_extension=opcache line in php.ini, found: %s", line)
+		}
+	}
+	if !strings.Contains(string(iniContent), ";zend_extension=opcache") {
+		t.Errorf("expected ;zend_extension=opcache commented out in 8.6 php.ini")
+	}
+
+	// 6. Verify GetServices includes php-8.6 discovered on disk
+	services := app.GetServices()
+	foundService := false
+	for _, s := range services {
+		if s.Name == "php-8.6" {
+			foundService = true
+			break
+		}
+	}
+	if !foundService {
+		t.Errorf("expected GetServices to include on-disk php-8.6")
+	}
+}
+
+func TestLiveRelease_PHP86_HashMismatchFails(t *testing.T) {
+	tamperedContent := []byte("Tampered 8.6 binary")
+	tamperedZipBytes, _ := createTestZip(t, "php.exe", tamperedContent)
+
+	rawFeed, err := os.ReadFile(filepath.Join("internal", "updater", "testdata", "releases.json"))
+	if err != nil {
+		t.Fatalf("failed to read testdata/releases.json: %v", err)
+	}
+
+	const realHash = "e860000000000000000000000000000000000000000000000000000000000086"
+	fake86Block := `
+ "8.6": {
+  "version": "8.6.0-1",
+  "nts-vs17-x64": {
+   "zip": {
+    "path": "php-8.6.0-1-nts-Win32-vs17-x64.zip",
+    "sha256": "` + realHash + `"
+   }
+  }
+ },`
+	feedJSON := strings.Replace(string(rawFeed), "{", "{"+fake86Block, 1)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/releases.json":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(feedJSON))
+		case "/downloads/releases/php-8.6.0-1-nts-Win32-vs17-x64.zip":
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(tamperedZipBytes)))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(tamperedZipBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	tmpDir := filepath.Join(tempDir, "tmp")
+
+	app := &App{
+		supervisor:     process.NewSupervisor(),
+		phpReleasesURL: server.URL + "/releases.json",
+		baseBinDir:     binDir,
+		tempDir:        tmpDir,
+	}
+
+	_, err = app.DownloadBinary("php-8.6")
+	if err == nil {
+		t.Fatalf("expected hash mismatch error on DownloadBinary(php-8.6), got nil")
+	}
+	if !strings.Contains(err.Error(), "mismatch") {
+		t.Errorf("expected error message to mention 'mismatch', got: %v", err)
+	}
+
+	// Verify bin/php-8.6 directory does not exist or has no executable
+	destDir := filepath.Join(binDir, "php-8.6")
+	if _, statErr := os.Stat(filepath.Join(destDir, "php.exe")); !os.IsNotExist(statErr) {
+		t.Errorf("expected php.exe not to exist after hash mismatch")
+	}
+}
+
+func TestLiveRelease_PHP86_FeedDownErrors(t *testing.T) {
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	tmpDir := filepath.Join(tempDir, "tmp")
+
+	app := &App{
+		supervisor:     process.NewSupervisor(),
+		phpReleasesURL: "http://127.0.0.1:59998/unreachable",
+		baseBinDir:     binDir,
+		tempDir:        tmpDir,
+	}
+
+	// php-8.6 is not in catalog and feed is unreachable -> install must fail with clear error
+	_, err := app.DownloadBinary("php-8.6")
+	if err == nil {
+		t.Fatalf("expected error when downloading unpinned runtime with feed down, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown") && !strings.Contains(err.Error(), "no verified artifact") {
+		t.Errorf("expected clear error message for uncataloged runtime when feed down, got: %v", err)
 	}
 }
 

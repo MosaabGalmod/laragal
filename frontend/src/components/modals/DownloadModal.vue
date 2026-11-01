@@ -67,7 +67,13 @@
                   {{ rt.label }}
                 </h4>
                 <span
-                  v-if="getCatalogItem(rt.name)?.eol"
+                  v-if="rt.is_feed_only || runtimeUpdates[rt.name]?.is_new"
+                  class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-blue-100 text-blue-700 dark:bg-blue-950/80 dark:text-blue-300 border border-blue-200 dark:border-blue-900"
+                >
+                  <Globe class="w-2.5 h-2.5" /> {{ t('runtime_new_from_feed') }}
+                </span>
+                <span
+                  v-else-if="getCatalogItem(rt.name)?.eol"
                   class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-900"
                   :title="t('runtime_eol_tooltip')"
                 >
@@ -183,6 +189,7 @@ import {
   ShieldAlert,
   ArrowUpCircle,
   Check,
+  Globe,
 } from 'lucide-vue-next'
 import { useI18n } from '../../composables/useI18n'
 import { useRuntimeCatalog } from '../../composables/useRuntimeCatalog'

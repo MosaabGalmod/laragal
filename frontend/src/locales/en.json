@@ -347,5 +347,6 @@
   "preview_open_in_browser": "Open in System Browser",
   "preview_load_timeout": "The preview took too long to load without responding. The project may require user action or block embedding; you can open it directly in the browser.",
   "runtime_installed": "Installed",
-  "runtime_reinstall": "Reinstall"
+  "runtime_reinstall": "Reinstall",
+  "runtime_new_from_feed": "New release from official source"
 }

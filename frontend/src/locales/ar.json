@@ -347,5 +347,6 @@
   "preview_open_in_browser": "فتح في المتصفح الخارجي",
   "preview_load_timeout": "استغرقت المعاينة وقتاً طويلاً للتحميل دون استجابة؛ قد يتطلب المشروع تدخلاً أو يمنع التضمين، يمكنك فتحه مباشرة في المتصفح.",
   "runtime_installed": "مثبَّت",
-  "runtime_reinstall": "إعادة التثبيت"
+  "runtime_reinstall": "إعادة التثبيت",
+  "runtime_new_from_feed": "إصدار جديد من المصدر الرسمي"
 }

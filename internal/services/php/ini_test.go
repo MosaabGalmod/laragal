@@ -251,3 +251,74 @@ opcache.enable = 1
 		t.Errorf("expected ;zend_extension=opcache to be commented out via auto-detection")
 	}
 }
+
+
+func TestEnsurePHPIni_OPcache_PHP86_NoZendExtension(t *testing.T) {
+	tempDir := t.TempDir()
+	devContent := `[PHP]
+memory_limit = 128M
+;zend_extension=opcache
+[opcache]
+opcache.enable = 1
+`
+	devFile := filepath.Join(tempDir, "php.ini-development")
+	if err := os.WriteFile(devFile, []byte(devContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := php.EnsurePHPIni(tempDir, "8.6"); err != nil {
+		t.Fatalf("EnsurePHPIni failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tempDir, "php.ini"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+
+	// For 8.6, zend_extension=opcache must NOT be active
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "zend_extension") && strings.Contains(trimmed, "opcache") {
+			t.Errorf("expected no active zend_extension=opcache in PHP 8.6, found: %s", line)
+		}
+	}
+	if !strings.Contains(content, ";zend_extension=opcache") {
+		t.Errorf("expected ;zend_extension=opcache to be commented out in PHP 8.6")
+	}
+	if !strings.Contains(content, "[opcache]") {
+		t.Errorf("expected [opcache] block to be present in PHP 8.6")
+	}
+}
+
+func TestEnsurePHPIni_OPcache_PHP90_NoZendExtension(t *testing.T) {
+	tempDir := t.TempDir()
+	existingIni := `[PHP]
+zend_extension=opcache
+[opcache]
+opcache.enable = 1
+`
+	if err := os.WriteFile(filepath.Join(tempDir, "php.ini"), []byte(existingIni), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := php.EnsurePHPIni(tempDir, "9.0"); err != nil {
+		t.Fatalf("EnsurePHPIni failed: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tempDir, "php.ini"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "zend_extension") && strings.Contains(trimmed, "opcache") {
+			t.Errorf("expected no active zend_extension=opcache in PHP 9.0, found: %s", line)
+		}
+	}
+	if !strings.Contains(content, ";zend_extension=opcache") {
+		t.Errorf("expected ;zend_extension=opcache to be commented out in PHP 9.0")
+	}
+}

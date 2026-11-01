@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -127,5 +128,98 @@ func TestCheckUpdates_GracefulOfflineFallback(t *testing.T) {
 	updates := updater.CheckUpdates(context.Background(), opts)
 	if len(updates) == 0 {
 		t.Errorf("expected graceful fallback updates list even when offline")
+	}
+}
+
+func TestCheckUpdates_WithNewMinorFromFeed(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "releases.json"))
+	if err != nil {
+		t.Fatalf("failed to read testdata/releases.json: %v", err)
+	}
+
+	const fake86SHA = "e860000000000000000000000000000000000000000000000000000000000086"
+	fake86Block := `
+ "8.6": {
+  "version": "8.6.0-1",
+  "nts-vs17-x64": {
+   "zip": {
+    "path": "php-8.6.0-1-nts-Win32-vs17-x64.zip",
+    "sha256": "` + fake86SHA + `"
+   }
+  }
+ },`
+
+	// Insert "8.6" entry right after the opening "{"
+	feedJSON := strings.Replace(string(data), "{", "{"+fake86Block, 1)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(feedJSON))
+	}))
+	defer server.Close()
+
+	opts := updater.CheckOptions{
+		PHPReleasesURL: server.URL,
+		HTTPTimeout:    2 * time.Second,
+	}
+
+	updates := updater.CheckUpdates(context.Background(), opts)
+	var found86 *updater.RuntimeUpdateInfo
+	for i := range updates {
+		if updates[i].Name == "php-8.6" {
+			found86 = &updates[i]
+			break
+		}
+	}
+
+	if found86 == nil {
+		t.Fatalf("expected CheckUpdates to discover feed-only php-8.6")
+	}
+	if !found86.IsNew {
+		t.Errorf("expected php-8.6 to have IsNew=true, got false")
+	}
+	if found86.LatestVersion != "8.6.0-1" {
+		t.Errorf("expected latest version 8.6.0-1, got %s", found86.LatestVersion)
+	}
+	if found86.SHA256 != fake86SHA {
+		t.Errorf("expected SHA256 %s, got %s", fake86SHA, found86.SHA256)
+	}
+}
+
+func TestPHPSource_Latest(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "releases.json"))
+	if err != nil {
+		t.Fatalf("failed to read testdata/releases.json: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(data)
+	}))
+	defer server.Close()
+
+	var src updater.ReleaseSource = updater.NewPHPSource(server.URL)
+	releases, err := src.Latest(context.Background(), "php")
+	if err != nil {
+		t.Fatalf("src.Latest failed: %v", err)
+	}
+	if len(releases) == 0 {
+		t.Fatalf("expected non-empty live releases from PHPSource")
+	}
+
+	found84 := false
+	for _, rel := range releases {
+		if rel.Name == "php-8.4" {
+			found84 = true
+			if rel.Version != "8.4.27-1" {
+				t.Errorf("expected version 8.4.27-1, got %s", rel.Version)
+			}
+			if rel.ChecksumAlgo != "sha256" {
+				t.Errorf("expected ChecksumAlgo sha256, got %s", rel.ChecksumAlgo)
+			}
+		}
+	}
+	if !found84 {
+		t.Errorf("expected php-8.4 in live releases")
 	}
 }

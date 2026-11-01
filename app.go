@@ -226,10 +226,11 @@ func (a *App) findPHPExecutable() string {
 
 func (a *App) findPHPExecutableForVersion(version string) string {
 	normVer := projects.NormalizePHPVersion(version)
+	baseBin := a.getBaseBinDir()
 	candidates := []string{
-		filepath.Join("bin", fmt.Sprintf("php-%s", normVer), "php-cgi.exe"),
-		filepath.Join("bin", fmt.Sprintf("php%s", strings.ReplaceAll(normVer, ".", "")), "php-cgi.exe"),
-		filepath.Join("bin", "php", "php-cgi.exe"),
+		filepath.Join(baseBin, fmt.Sprintf("php-%s", normVer), "php-cgi.exe"),
+		filepath.Join(baseBin, fmt.Sprintf("php%s", strings.ReplaceAll(normVer, ".", "")), "php-cgi.exe"),
+		filepath.Join(baseBin, "php", "php-cgi.exe"),
 	}
 
 	if localApp := os.Getenv("LOCALAPPDATA"); localApp != "" {
@@ -421,8 +422,18 @@ func (a *App) StartServices() {
 		"PHP_FCGI_MAX_REQUESTS=10000",
 	}
 
-	// 1. Start PHP FastCGI services from runtime catalog
+	// 1. Start PHP FastCGI services from discovered / catalog PHP versions
+	defVer := "8.4"
+	if a.cfg != nil && a.cfg.DefaultPHP != "" {
+		defVer = runtimes.NormalizePHPVersion(a.cfg.DefaultPHP)
+	}
+	versionsToStart := []string{defVer}
 	for _, ver := range []string{"8.4", "8.3"} {
+		if ver != defVer {
+			versionsToStart = append(versionsToStart, ver)
+		}
+	}
+	for _, ver := range versionsToStart {
 		rtName := fmt.Sprintf("php-%s", ver)
 		port := runtimes.PHPPortForVersion(ver)
 		if phpExe := a.findPHPExecutableForVersion(ver); phpExe != "" {
@@ -608,8 +619,60 @@ func (a *App) CheckPortConflict(port int) UIMessage {
 	return UIMessage{}
 }
 
+func (a *App) getDiscoveredPHPServices() []string {
+	seen := make(map[string]bool)
+	var list []string
+
+	// 1. Catalog PHP runtimes
+	for _, rt := range runtimes.All() {
+		if strings.HasPrefix(rt.Name, "php-") {
+			if !seen[rt.Name] {
+				seen[rt.Name] = true
+				list = append(list, rt.Name)
+			}
+		}
+	}
+
+	// 2. On-disk php-X.Y folders in baseBinDir containing php-cgi.exe (or php.exe)
+	binDir := a.getBaseBinDir()
+	if entries, err := os.ReadDir(binDir); err == nil {
+		for _, e := range entries {
+			if e.IsDir() && strings.HasPrefix(e.Name(), "php-") {
+				cgi := filepath.Join(binDir, e.Name(), "php-cgi.exe")
+				exe := filepath.Join(binDir, e.Name(), "php.exe")
+				cgiExists := false
+				if info, sErr := os.Stat(cgi); sErr == nil && !info.IsDir() {
+					cgiExists = true
+				} else if info, sErr := os.Stat(exe); sErr == nil && !info.IsDir() {
+					cgiExists = true
+				}
+				if cgiExists && !seen[e.Name()] {
+					seen[e.Name()] = true
+					list = append(list, e.Name())
+				}
+			}
+		}
+	}
+
+	// 3. Any php-* service currently registered or running in supervisor
+	if a.supervisor != nil {
+		for _, st := range a.supervisor.GetAllServices() {
+			if strings.HasPrefix(st.Name, "php-") && !seen[st.Name] {
+				seen[st.Name] = true
+				list = append(list, st.Name)
+			}
+		}
+	}
+
+	return list
+}
+
 func (a *App) GetServices() []process.ServiceStatus {
-	serviceNames := []string{"caddy", "php-8.5", "php-8.4", "php-8.3", "mysql", "redis", "mailpit"}
+	phpServices := a.getDiscoveredPHPServices()
+	serviceNames := []string{"caddy"}
+	serviceNames = append(serviceNames, phpServices...)
+	serviceNames = append(serviceNames, "mysql", "redis", "mailpit")
+
 	result := make([]process.ServiceStatus, 0, len(serviceNames))
 	for _, name := range serviceNames {
 		status, _ := a.supervisor.GetServiceStatus(name)
@@ -870,7 +933,7 @@ func (a *App) CheckFrameable(domain string) (FrameCheck, error) {
 	}, nil
 }
 
-func (a *App) downloadAndInstallArtifact(name string, url string, expectedSHA string) (UIMessage, error) {
+func (a *App) downloadAndInstallArtifact(name string, url string, expectedChecksum string, checksumAlgo ...string) (UIMessage, error) {
 	tempDir := a.getTempDir()
 	_ = os.MkdirAll(tempDir, 0755)
 	destDir := filepath.Join(a.getBaseBinDir(), name)
@@ -891,11 +954,16 @@ func (a *App) downloadAndInstallArtifact(name string, url string, expectedSHA st
 		ctx = a.ctx
 	}
 
+	algo := "sha256"
+	if len(checksumAlgo) > 0 && checksumAlgo[0] != "" {
+		algo = checksumAlgo[0]
+	}
+
 	if strings.ToLower(name) == "adminer" {
 		adminerDir := filepath.Join("data", "adminer")
 		_ = os.MkdirAll(adminerDir, 0755)
 		adminerPath := filepath.Join(adminerDir, "index.php")
-		if err := downloader.DownloadFile(ctx, url, adminerPath, onProgress, expectedSHA); err != nil {
+		if err := downloader.DownloadFile(ctx, url, adminerPath, onProgress, algo, expectedChecksum); err != nil {
 			return UIMessage{}, err
 		}
 		if a.ctx != nil {
@@ -911,7 +979,7 @@ func (a *App) downloadAndInstallArtifact(name string, url string, expectedSHA st
 	}
 
 	zipPath := filepath.Join(tempDir, fmt.Sprintf("%s.zip", name))
-	if err := downloader.DownloadFile(ctx, url, zipPath, onProgress, expectedSHA); err != nil {
+	if err := downloader.DownloadFile(ctx, url, zipPath, onProgress, algo, expectedChecksum); err != nil {
 		_ = os.Remove(zipPath)
 		return UIMessage{}, err
 	}
@@ -935,51 +1003,101 @@ func (a *App) downloadAndInstallArtifact(name string, url string, expectedSHA st
 	return UIMessage{Key: "runtime_install_success_path", Params: map[string]string{"name": name, "dest": filepath.ToSlash(destDir)}}, nil
 }
 
-func (a *App) DownloadBinary(name string) (UIMessage, error) {
-	art, err := downloader.GetDownloadArtifact(name)
-	if err != nil {
-		return UIMessage{}, err
-	}
-	if art.SHA256 == "" {
-		return UIMessage{}, fmt.Errorf("no verified checksum available for binary: %s", name)
-	}
-	return a.downloadAndInstallArtifact(name, art.URL, art.SHA256)
-}
-
-func (a *App) resolveUpgradeArtifact(name string) (string, string, error) {
+// resolveArtifact resolves an artifact for any name: live release (with checksum) if available, else catalog pinned.
+// Names not in the catalog are installable only via a live release with a checksum; otherwise returns clear error.
+func (a *App) resolveArtifact(name string) (string, string, string, error) {
 	norm := runtimes.NormalizeName(name)
 	ctx := context.Background()
 	if a.ctx != nil {
 		ctx = a.ctx
 	}
 
-	// 1. If PHP, try live feed first
-	if strings.HasPrefix(norm, "php-") {
-		minor := strings.TrimPrefix(norm, "php-")
-		feedURL := a.phpReleasesURL
-		if feedURL == "" {
-			feedURL = "https://windows.php.net/downloads/releases/releases.json"
-		}
-		liveReleases, err := updater.FetchPHPReleases(ctx, feedURL, 5*time.Second)
-		if err == nil && liveReleases != nil {
-			if meta, ok := liveReleases[minor]; ok && meta.ZipURL != "" && meta.SHA256 != "" {
-				return meta.ZipURL, meta.SHA256, nil
+	// 1. Try live release via the registry
+	family := updater.RuntimeFamily(norm)
+	var source updater.ReleaseSource
+	if family == "php" && a.phpReleasesURL != "" {
+		source = &updater.PHPSource{BaseURL: a.phpReleasesURL}
+	} else if updater.DefaultRegistry != nil {
+		source = updater.DefaultRegistry[family]
+	}
+
+	if source != nil {
+		liveReleases, err := source.Latest(ctx, norm)
+		if err == nil {
+			for _, rel := range liveReleases {
+				if rel.Name == norm || rel.Name == name {
+					if rel.Checksum != "" && rel.URL != "" {
+						algo := rel.ChecksumAlgo
+						if algo == "" {
+							algo = "sha256"
+						}
+						return rel.URL, rel.Checksum, algo, nil
+					}
+				}
 			}
 		}
 	}
 
 	// 2. Fall back to pinned catalog artifact
-	art, err := downloader.GetDownloadArtifact(name)
-	if err == nil && art.URL != "" && art.SHA256 != "" {
-		return art.URL, art.SHA256, nil
+	if rt, exists := runtimes.Get(norm); exists {
+		if rt.URL != "" && rt.SHA256 != "" {
+			return rt.URL, rt.SHA256, "sha256", nil
+		}
 	}
 
-	return "", "", fmt.Errorf("no verified artifact or checksum available to upgrade %s", name)
+	// 3. Names not in catalog are installable ONLY via a live release with a checksum
+	return "", "", "", fmt.Errorf("unknown runtime or version: %s (no verified artifact or checksum available)", name)
 }
 
-// GetRuntimeCatalog returns all runtime artifacts from the catalog.
+func (a *App) DownloadBinary(name string) (UIMessage, error) {
+	url, checksum, algo, err := a.resolveArtifact(name)
+	if err != nil {
+		return UIMessage{}, err
+	}
+	if checksum == "" {
+		return UIMessage{}, fmt.Errorf("no verified checksum available for binary: %s", name)
+	}
+	return a.downloadAndInstallArtifact(name, url, checksum, algo)
+}
+
+func (a *App) resolveUpgradeArtifact(name string) (string, string, error) {
+	url, checksum, _, err := a.resolveArtifact(name)
+	return url, checksum, err
+}
+
+// GetRuntimeCatalog returns all runtime artifacts from the catalog plus on-disk PHP runtimes.
 func (a *App) GetRuntimeCatalog() []runtimes.Artifact {
-	return runtimes.All()
+	all := runtimes.All()
+	seen := make(map[string]bool, len(all))
+	for _, rt := range all {
+		seen[rt.Name] = true
+	}
+
+	binDir := a.getBaseBinDir()
+	if entries, err := os.ReadDir(binDir); err == nil {
+		for _, e := range entries {
+			if e.IsDir() && strings.HasPrefix(e.Name(), "php-") {
+				cgiPath := filepath.Join(binDir, e.Name(), "php-cgi.exe")
+				exePath := filepath.Join(binDir, e.Name(), "php.exe")
+				cgiExists := false
+				if info, statErr := os.Stat(cgiPath); statErr == nil && !info.IsDir() {
+					cgiExists = true
+				} else if info, statErr := os.Stat(exePath); statErr == nil && !info.IsDir() {
+					cgiExists = true
+				}
+				if cgiExists && !seen[e.Name()] {
+					seen[e.Name()] = true
+					minor := strings.TrimPrefix(e.Name(), "php-")
+					all = append(all, runtimes.Artifact{
+						Name:    e.Name(),
+						Version: minor,
+						PHPPort: runtimes.PHPPortForVersion(minor),
+					})
+				}
+			}
+		}
+	}
+	return all
 }
 
 // CheckRuntimeUpdates inspects available version upgrades and security releases for managed runtimes
@@ -1003,7 +1121,7 @@ func (a *App) UpgradeRuntime(name string) (UIMessage, error) {
 		_ = a.supervisor.StopService(name)
 	}
 
-	url, sha, err := a.resolveUpgradeArtifact(name)
+	url, checksum, algo, err := a.resolveArtifact(name)
 	if err != nil {
 		if wasRunning {
 			_, _ = a.ToggleService(name)
@@ -1011,7 +1129,7 @@ func (a *App) UpgradeRuntime(name string) (UIMessage, error) {
 		return UIMessage{}, err
 	}
 
-	msg, err := a.downloadAndInstallArtifact(name, url, sha)
+	msg, err := a.downloadAndInstallArtifact(name, url, checksum, algo)
 	if err != nil {
 		if wasRunning {
 			_, _ = a.ToggleService(name)
@@ -2031,16 +2149,18 @@ func (a *App) OpenAdminer(dbName string) error {
 
 	// 2. Ensure at least one PHP FastCGI instance is running
 	phpRunning := false
-	for _, v := range []string{"8.4", "8.3", "8.2", "8.1"} {
-		if st, ok := a.supervisor.GetServiceStatus("php-" + v); ok && st.Running {
-			phpRunning = true
-			break
+	if a.supervisor != nil {
+		for _, st := range a.supervisor.GetAllServices() {
+			if strings.HasPrefix(st.Name, "php-") && st.Running {
+				phpRunning = true
+				break
+			}
 		}
 	}
 	if !phpRunning {
-		defVer := a.cfg.DefaultPHP
-		if defVer == "" {
-			defVer = "8.4"
+		defVer := "8.4"
+		if a.cfg != nil && a.cfg.DefaultPHP != "" {
+			defVer = a.cfg.DefaultPHP
 		}
 		_ = a.ensurePHPServiceRunning(defVer)
 	}
@@ -2074,10 +2194,12 @@ func (a *App) OpenPhpMyAdmin(dbName string) error {
 
 		// 2. Ensure at least one PHP FastCGI instance is running
 		phpRunning := false
-		for _, v := range []string{"8.4", "8.3", "8.2", "8.1"} {
-			if st, ok := a.supervisor.GetServiceStatus("php-" + v); ok && st.Running {
-				phpRunning = true
-				break
+		if a.supervisor != nil {
+			for _, st := range a.supervisor.GetAllServices() {
+				if strings.HasPrefix(st.Name, "php-") && st.Running {
+					phpRunning = true
+					break
+				}
 			}
 		}
 		if !phpRunning {

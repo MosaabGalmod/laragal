@@ -161,5 +161,34 @@ describe('Modal smoke tests', () => {
     // Not-installed runtime should show download now button
     expect(wrapper.text()).toContain(t('download_now'))
   })
+
+  it('DownloadModal displays feed-only runtime with badge runtime_new_from_feed', async () => {
+    ;(window as any).go.main.App.CheckRuntimeUpdates = async () => [
+      {
+        name: 'php-8.6',
+        current_version: '',
+        latest_version: '8.6.0',
+        has_update: false,
+        is_security_fix: false,
+        download_url: 'https://example.com/php-8.6.zip',
+        is_new: true,
+      },
+    ]
+
+    const wrapper = mount(DownloadModal, {
+      props: {
+        modelValue: true,
+      },
+    })
+
+    const { useRuntimeCatalog } = await import('../../composables/useRuntimeCatalog')
+    const { checkUpdatesNow } = useRuntimeCatalog()
+    await checkUpdatesNow({ silent: true })
+    await wrapper.vm.$nextTick()
+
+    // Feed-only runtime should display the badge t('runtime_new_from_feed')
+    expect(wrapper.text()).toContain(t('runtime_new_from_feed'))
+    expect(wrapper.text()).toContain('PHP 8.6')
+  })
 })
 

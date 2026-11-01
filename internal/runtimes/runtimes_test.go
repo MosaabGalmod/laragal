@@ -156,6 +156,15 @@ func TestPortMapping(t *testing.T) {
 	if p := runtimes.PHPPortForVersion("8.6"); p != 9086 {
 		t.Errorf("PHPPortForVersion(8.6) = %d; want 9086", p)
 	}
+	if p := runtimes.PHPPortForVersion("php-8.6"); p != 9086 {
+		t.Errorf("PHPPortForVersion(php-8.6) = %d; want 9086", p)
+	}
+	if p := runtimes.PHPPortForVersion("9.0"); p != 9090 {
+		t.Errorf("PHPPortForVersion(9.0) = %d; want 9090", p)
+	}
+	if p := runtimes.PHPPortForVersion("php-9.0"); p != 9090 {
+		t.Errorf("PHPPortForVersion(php-9.0) = %d; want 9090", p)
+	}
 }
 
 func TestEOLFlags(t *testing.T) {

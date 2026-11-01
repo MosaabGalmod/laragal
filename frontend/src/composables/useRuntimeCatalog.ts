@@ -19,12 +19,14 @@ export interface RuntimeUpdateInfo {
   has_update: boolean
   is_security_fix: boolean
   download_url: string
+  is_new?: boolean
 }
 
 export interface RuntimeDefinition {
   name: string
   label: string
   desc_key: string
+  is_feed_only?: boolean
 }
 
 const runtimeCatalog = ref<RuntimeArtifact[]>([])
@@ -60,11 +62,8 @@ export function compareVersions(v1: string, v2: string): number {
 export function extractPhpVersionNumber(ver?: string): string {
   if (!ver) return '8.3'
   const clean = ver.replace(/PHP\s*/i, '').trim()
-  if (clean.startsWith('8.5')) return '8.5'
-  if (clean.startsWith('8.4')) return '8.4'
-  if (clean.startsWith('8.3')) return '8.3'
-  if (clean.startsWith('8.2')) return '8.2'
-  if (clean.startsWith('8.1')) return '8.1'
+  const match = clean.match(/^(\d+\.\d+)/)
+  if (match) return match[1]
   return clean || '8.3'
 }
 
@@ -114,9 +113,14 @@ export function useRuntimeCatalog() {
   }
 
   const phpCatalog = computed(() => {
-    return runtimeCatalog.value.filter(
+    const list = runtimeCatalog.value.filter(
       (r) => r.name.startsWith('php-') && (r.php_port || 0) > 0,
     )
+    return [...list].sort((a, b) => {
+      const va = a.name.replace(/^php-/, '')
+      const vb = b.name.replace(/^php-/, '')
+      return compareVersions(vb, va)
+    })
   })
 
   const latestPhpVersion = computed(() => {
@@ -191,6 +195,17 @@ export function useRuntimeCatalog() {
             if (item && item.name) {
               map[item.name] = item
               if (item.has_update) count++
+
+              // Feed-only entries: add to available runtimes dynamically
+              if (item.is_new && !availableRuntimes.value.some((r) => r.name === item.name)) {
+                const ver = item.name.replace(/^php-/, '')
+                availableRuntimes.value.push({
+                  name: item.name,
+                  label: `PHP ${ver} (NTS x64)`,
+                  desc_key: 'runtime_new_from_feed',
+                  is_feed_only: true,
+                })
+              }
             }
           }
           runtimeUpdates.value = map
@@ -220,6 +235,7 @@ export function useRuntimeCatalog() {
         const msg = await w.go.main.App.UpgradeRuntime(name)
         downloadingRuntime.value = ''
         downloadProgress.value[name] = 100
+        await loadRuntimeCatalog()
         await checkUpdatesNow({ silent: true })
         showToast(
           renderUIMessage(msg) || t('runtime_upgrade_success', { name }),
@@ -240,6 +256,7 @@ export function useRuntimeCatalog() {
         const msg = await w.go.main.App.DownloadBinary(name)
         downloadingRuntime.value = ''
         downloadProgress.value[name] = 100
+        await loadRuntimeCatalog()
         await checkUpdatesNow({ silent: true })
         showToast(
           renderUIMessage(msg) || t('runtime_install_success', { name }),

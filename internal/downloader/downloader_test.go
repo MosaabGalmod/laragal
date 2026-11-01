@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"crypto/sha512"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -313,5 +314,71 @@ func TestExtractZipWithSingleRootDir(t *testing.T) {
 	expectedReadme := filepath.Join(destDir, "README.txt")
 	if _, err := os.Stat(expectedReadme); err != nil {
 		t.Errorf("expected %s to exist after root stripping, got: %v", expectedReadme, err)
+	}
+}
+
+func TestDownloadFileIntegrity_SHA512_MatchingHash(t *testing.T) {
+	payload := []byte("Secure artifact payload content for SHA-512 integrity verification test")
+	hasher := sha512.New()
+	hasher.Write(payload)
+	expectedHash := hex.EncodeToString(hasher.Sum(nil))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(payload)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	destFile := filepath.Join(tempDir, "verified_sha512.bin")
+
+	// 1. Test passing algo ("sha512") and value
+	err := downloader.DownloadFile(context.Background(), server.URL, destFile, nil, "sha512", expectedHash)
+	if err != nil {
+		t.Fatalf("DownloadFile with sha512 algo+value failed: %v", err)
+	}
+
+	content, err := os.ReadFile(destFile)
+	if err != nil {
+		t.Fatalf("failed to read verified file: %v", err)
+	}
+	if !bytes.Equal(content, payload) {
+		t.Errorf("content mismatch, got %q, want %q", string(content), string(payload))
+	}
+
+	// 2. Test passing 128-char hex string directly without explicit algo (auto-detected as sha512)
+	destFile2 := filepath.Join(tempDir, "verified_sha512_auto.bin")
+	err = downloader.DownloadFile(context.Background(), server.URL, destFile2, nil, expectedHash)
+	if err != nil {
+		t.Fatalf("DownloadFile with 128-char sha512 auto-detect failed: %v", err)
+	}
+}
+
+func TestDownloadFileIntegrity_SHA512_MismatchFails(t *testing.T) {
+	payload := []byte("Corrupted content for SHA-512 mismatch test")
+	wrongHash := strings.Repeat("f", 128)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(payload)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	destFile := filepath.Join(tempDir, "compromised_sha512.bin")
+
+	err := downloader.DownloadFile(context.Background(), server.URL, destFile, nil, "sha512", wrongHash)
+	if err == nil {
+		t.Fatalf("expected error on SHA-512 hash mismatch, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "SHA512") && !strings.Contains(err.Error(), "sha512") && !strings.Contains(err.Error(), "mismatch") {
+		t.Errorf("expected error message to mention SHA512 and mismatch, got: %v", err)
+	}
+
+	if _, err := os.Stat(destFile); !os.IsNotExist(err) {
+		t.Errorf("destination file %s must not exist after mismatch", destFile)
 	}
 }

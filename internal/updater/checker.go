@@ -16,6 +16,92 @@ import (
 	"github.com/laragal/laragal/internal/winutil"
 )
 
+type LiveRelease struct {
+	Name         string `json:"name"`
+	Version      string `json:"version"`
+	URL          string `json:"url"`
+	Checksum     string `json:"checksum"`
+	ChecksumAlgo string `json:"checksum_algo"` /* "sha256"|"sha512" */
+	MajorChange  bool   `json:"major_change"`
+	Source       string `json:"source"`
+}
+
+type ReleaseSource interface {
+	Latest(ctx context.Context, name string) ([]LiveRelease, error)
+} // may return several entries (e.g. one per PHP minor)
+
+type Registry map[string]ReleaseSource
+
+// RuntimeFamily returns the family identifier for a runtime name (e.g. "php-8.4" -> "php", "mariadb" -> "mysql").
+func RuntimeFamily(name string) string {
+	n := strings.ToLower(strings.TrimSpace(name))
+	if strings.HasPrefix(n, "php") {
+		return "php"
+	}
+	if n == "mariadb" || n == "mysql" {
+		return "mysql"
+	}
+	return n
+}
+
+type PHPSource struct {
+	BaseURL     string
+	HTTPTimeout time.Duration
+}
+
+func NewPHPSource(baseURL ...string) *PHPSource {
+	u := ""
+	if len(baseURL) > 0 {
+		u = baseURL[0]
+	}
+	return &PHPSource{BaseURL: u}
+}
+
+func (s *PHPSource) Latest(ctx context.Context, name string) ([]LiveRelease, error) {
+	url := s.BaseURL
+	if url == "" {
+		url = "https://windows.php.net/downloads/releases/releases.json"
+	}
+	timeout := s.HTTPTimeout
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+
+	metas, err := FetchPHPReleases(ctx, url, timeout)
+	if err != nil {
+		return nil, err
+	}
+
+	var results []LiveRelease
+	for minor, meta := range metas {
+		if meta.Version == "" || meta.ZipURL == "" {
+			continue
+		}
+		rtName := "php-" + minor
+		if name != "" && name != "php" {
+			norm := runtimes.NormalizePHPVersion(name)
+			if minor != norm && rtName != name {
+				continue
+			}
+		}
+		results = append(results, LiveRelease{
+			Name:         rtName,
+			Version:      meta.Version,
+			URL:          meta.ZipURL,
+			Checksum:     meta.SHA256,
+			ChecksumAlgo: "sha256",
+			MajorChange:  false,
+			Source:       "windows.php.net",
+		})
+	}
+	return results, nil
+}
+
+// DefaultRegistry defines the global registry mapping runtime families to ReleaseSource.
+var DefaultRegistry = Registry{
+	"php": &PHPSource{},
+}
+
 type RuntimeUpdateInfo struct {
 	Name            string `json:"name"`              // "php-8.4", "caddy", etc.
 	CurrentVersion  string `json:"current_version"`   // e.g. "8.4.4"
@@ -25,6 +111,7 @@ type RuntimeUpdateInfo struct {
 	DownloadURL     string `json:"download_url"`
 	ReleaseNotesURL string `json:"release_notes_url"`
 	SHA256          string `json:"sha256,omitempty"`
+	IsNew           bool   `json:"is_new,omitempty"`
 }
 
 type CheckOptions struct {
@@ -32,6 +119,7 @@ type CheckOptions struct {
 	HTTPTimeout       time.Duration
 	BaseBinDir        string
 	InstalledVersions map[string]string // Optional manual/mocked overrides for testing
+	Registry          Registry          // Optional custom registry overrides
 }
 
 type PHPVersionMeta struct {
@@ -270,33 +358,77 @@ func DetectInstalledBinaryVersion(binDir string, name string) string {
 	return ""
 }
 
-// CheckUpdates inspects available releases and compares them with current local installations
+// CheckUpdates inspects available releases and compares them with current local installations.
+// Uses the registry to enrich catalog runtimes and discover new PHP minors in the feed.
 func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
-	// 1. Fetch live PHP releases feed
-	livePHPReleases, _ := FetchPHPReleases(ctx, opts.PHPReleasesURL, opts.HTTPTimeout)
+	reg := opts.Registry
+	if reg == nil {
+		reg = DefaultRegistry
+	}
 
-	runtimesToCheck := []string{"caddy", "php-8.5", "php-8.4", "php-8.3", "php-8.2", "php-8.1", "mysql", "redis", "mailpit", "phpmyadmin", "adminer"}
+	// 1. Fetch live releases from the registry (starting with PHP family)
+	var livePHPReleases []LiveRelease
+	var phpSrc ReleaseSource
+	if reg != nil {
+		phpSrc = reg["php"]
+	}
+	if opts.PHPReleasesURL != "" {
+		phpSrc = &PHPSource{
+			BaseURL:     opts.PHPReleasesURL,
+			HTTPTimeout: opts.HTTPTimeout,
+		}
+	}
+	if phpSrc != nil {
+		livePHPReleases, _ = phpSrc.Latest(ctx, "php")
+	}
+
+	liveMap := make(map[string]LiveRelease, len(livePHPReleases))
+	for _, rel := range livePHPReleases {
+		liveMap[rel.Name] = rel
+	}
+
+	// 2. Base catalog runtimes
+	catalogItems := runtimes.All()
+	runtimesToCheck := make([]string, 0, len(catalogItems))
+	for _, rt := range catalogItems {
+		runtimesToCheck = append(runtimesToCheck, rt.Name)
+	}
+
+	// Include any on-disk php-X.Y folders containing php-cgi.exe or php.exe
 	if opts.BaseBinDir != "" {
 		if entries, err := os.ReadDir(opts.BaseBinDir); err == nil {
 			for _, e := range entries {
 				if e.IsDir() && strings.HasPrefix(e.Name(), "php-") {
-					found := false
-					for _, r := range runtimesToCheck {
-						if r == e.Name() {
-							found = true
-							break
-						}
+					cgi := filepath.Join(opts.BaseBinDir, e.Name(), "php-cgi.exe")
+					exe := filepath.Join(opts.BaseBinDir, e.Name(), "php.exe")
+					cgiExists := false
+					if _, sErr := os.Stat(cgi); sErr == nil {
+						cgiExists = true
+					} else if _, sErr := os.Stat(exe); sErr == nil {
+						cgiExists = true
 					}
-					if !found {
-						runtimesToCheck = append(runtimesToCheck, e.Name())
+					if cgiExists {
+						found := false
+						for _, r := range runtimesToCheck {
+							if r == e.Name() {
+								found = true
+								break
+							}
+						}
+						if !found {
+							runtimesToCheck = append(runtimesToCheck, e.Name())
+						}
 					}
 				}
 			}
 		}
 	}
-	results := make([]RuntimeUpdateInfo, 0, len(runtimesToCheck))
+
+	results := make([]RuntimeUpdateInfo, 0, len(runtimesToCheck)+len(livePHPReleases))
+	processed := make(map[string]bool)
 
 	for _, name := range runtimesToCheck {
+		processed[name] = true
 		info := RuntimeUpdateInfo{Name: name}
 		if rt, exists := runtimes.Get(name); exists {
 			info.LatestVersion = rt.Version
@@ -316,22 +448,19 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 		}
 		info.CurrentVersion = curVer
 
-		// If live PHP releases available, enrich PHP runtimes
-		if strings.HasPrefix(name, "php-") && livePHPReleases != nil {
-			minorKey := strings.TrimPrefix(name, "php-")
-			if meta, ok := livePHPReleases[minorKey]; ok && meta.Version != "" {
-				info.LatestVersion = meta.Version
-				info.IsSecurityFix = meta.IsSecurity
-				if meta.ZipURL != "" {
-					info.DownloadURL = meta.ZipURL
-				}
-				if meta.SHA256 != "" {
-					info.SHA256 = meta.SHA256
-				}
+		// If live release available in feed, enrich
+		if liveRel, ok := liveMap[name]; ok {
+			if liveRel.Version != "" {
+				info.LatestVersion = liveRel.Version
+			}
+			if liveRel.URL != "" {
+				info.DownloadURL = liveRel.URL
+			}
+			if liveRel.Checksum != "" {
+				info.SHA256 = liveRel.Checksum
 			}
 		}
 
-		// Check if update is available
 		if curVer != "" && info.LatestVersion != "" {
 			info.HasUpdate = IsVersionNewer(curVer, info.LatestVersion)
 		} else {
@@ -339,6 +468,48 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 		}
 
 		results = append(results, info)
+	}
+
+	// 3. Any PHP minor in the feed but not in the catalog (e.g. 8.6, 9.0) becomes an entry with IsNew=true
+	for _, liveRel := range livePHPReleases {
+		if processed[liveRel.Name] {
+			// If already processed (e.g. found on disk), mark IsNew if not in catalog
+			if _, inCatalog := runtimes.Get(liveRel.Name); !inCatalog {
+				for i := range results {
+					if results[i].Name == liveRel.Name {
+						results[i].IsNew = true
+						break
+					}
+				}
+			}
+			continue
+		}
+
+		curVer := ""
+		if opts.InstalledVersions != nil {
+			if v, ok := opts.InstalledVersions[liveRel.Name]; ok {
+				curVer = v
+			}
+		}
+		if curVer == "" && opts.BaseBinDir != "" {
+			curVer = DetectInstalledBinaryVersion(opts.BaseBinDir, liveRel.Name)
+		}
+
+		hasUpdate := false
+		if curVer != "" && liveRel.Version != "" {
+			hasUpdate = IsVersionNewer(curVer, liveRel.Version)
+		}
+
+		results = append(results, RuntimeUpdateInfo{
+			Name:           liveRel.Name,
+			CurrentVersion: curVer,
+			LatestVersion:  liveRel.Version,
+			DownloadURL:    liveRel.URL,
+			SHA256:         liveRel.Checksum,
+			HasUpdate:      hasUpdate,
+			IsNew:          true,
+		})
+		processed[liveRel.Name] = true
 	}
 
 	return results

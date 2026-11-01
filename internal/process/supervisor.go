@@ -184,3 +184,15 @@ func (s *Supervisor) GetServiceStatus(name string) (ServiceStatus, bool) {
 	}
 	return p.status, true
 }
+
+
+func (s *Supervisor) GetAllServices() []ServiceStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	res := make([]ServiceStatus, 0, len(s.processes))
+	for _, p := range s.processes {
+		res = append(res, p.status)
+	}
+	return res
+}
