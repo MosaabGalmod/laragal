@@ -45,6 +45,16 @@ func ExtractVersion(output string) string {
 	return ""
 }
 
+// ExtractSeries extracts the major.minor series string from a version (e.g. "11.8.9" -> "11.8", "10.11.19" -> "10.11")
+func ExtractSeries(v string) string {
+	clean := CleanVersionString(v)
+	parts := strings.Split(clean, ".")
+	if len(parts) >= 2 {
+		return parts[0] + "." + parts[1]
+	}
+	return clean
+}
+
 func parseVersionComponents(v string) ([]int, int, bool) {
 	clean := CleanVersionString(v)
 	build := 0

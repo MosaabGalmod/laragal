@@ -71,6 +71,16 @@ export function extractPhpVersionNumber(ver?: string): string {
   return clean || '8.3'
 }
 
+export function getMajorMinor(v?: string): string {
+  if (!v) return ''
+  const clean = v.replace(/^PHP\s*/i, '').replace(/^[vV]/, '').trim()
+  const parts = clean.split('.')
+  if (parts.length >= 2) {
+    return `${parts[0]}.${parts[1]}`
+  }
+  return parts[0] || ''
+}
+
 export function useRuntimeCatalog() {
   const { t, renderUIMessage } = useI18n()
   const { showToast } = useToast()
@@ -193,6 +203,7 @@ export function useRuntimeCatalog() {
       try {
         const list = await w.go.main.App.CheckRuntimeUpdates()
         if (Array.isArray(list)) {
+          availableRuntimes.value = availableRuntimes.value.filter((r) => !r.is_feed_only)
           const map: Record<string, RuntimeUpdateInfo> = {}
           let count = 0
           for (const item of list) {
@@ -203,17 +214,20 @@ export function useRuntimeCatalog() {
               // Feed-only entries: add to available runtimes dynamically
               if (item.is_new && !availableRuntimes.value.some((r) => r.name === item.name)) {
                 let label = item.name
+                let desc_key = 'service_mysql_desc'
                 if (item.name.startsWith('php-')) {
                   const ver = item.name.replace(/^php-/, '')
                   label = `PHP ${ver} (NTS x64)`
+                  desc_key = 'service_php85_desc'
                 } else if (item.name.startsWith('mariadb-') || item.name.startsWith('mysql-')) {
                   const ver = item.name.replace(/^(mariadb|mysql)-/, '')
                   label = `MariaDB ${ver} (LTS)`
+                  desc_key = 'service_mysql_desc'
                 }
                 availableRuntimes.value.push({
                   name: item.name,
                   label,
-                  desc_key: 'runtime_new_from_feed',
+                  desc_key,
                   is_feed_only: true,
                 })
               }

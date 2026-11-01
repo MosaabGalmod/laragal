@@ -552,6 +552,17 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 		logDir = filepath.Join(dataDir, "logs")
 	}
 
+	// Detect installed version for mysql if available
+	installedMySQL := ""
+	if opts.InstalledVersions != nil {
+		if v, ok := opts.InstalledVersions["mysql"]; ok {
+			installedMySQL = v
+		}
+	}
+	if installedMySQL == "" && opts.BaseBinDir != "" {
+		installedMySQL = DetectInstalledBinaryVersion(opts.BaseBinDir, "mysql", opts.DataDir)
+	}
+
 	// 1. Fetch live releases from the registry across all families
 	liveMap := make(map[string]LiveRelease)
 	var livePHPReleases []LiveRelease
@@ -566,6 +577,11 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 				src = &PHPSource{
 					BaseURL:     opts.PHPReleasesURL,
 					HTTPTimeout: opts.HTTPTimeout,
+				}
+			}
+			if family == "mysql" && installedMySQL != "" {
+				if mariaSrc, ok := src.(*MariaDBSource); ok && mariaSrc != nil {
+					mariaSrc.InstalledVersion = installedMySQL
 				}
 			}
 			releases, err := src.Latest(ctx, family)

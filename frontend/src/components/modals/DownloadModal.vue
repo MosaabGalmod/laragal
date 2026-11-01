@@ -57,7 +57,7 @@
           :class="{
             'border-rose-300 dark:border-rose-900/60 bg-rose-50/20 dark:bg-rose-950/20':
               (runtimeUpdates[rt.name]?.has_update && runtimeUpdates[rt.name]?.is_security_fix) ||
-              getCatalogItem(rt.name)?.eol,
+              shouldShowEol(rt.name),
           }"
         >
           <div class="flex items-center justify-between gap-2">
@@ -73,14 +73,14 @@
                   <Globe class="w-2.5 h-2.5" /> {{ t('runtime_new_from_feed') }}
                 </span>
                 <span
-                  v-else-if="getCatalogItem(rt.name)?.eol"
+                  v-else-if="shouldShowEol(rt.name)"
                   class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-900"
                   :title="t('runtime_eol_tooltip')"
                 >
                   <AlertTriangle class="w-2.5 h-2.5" /> {{ t('runtime_eol_badge') }}
                 </span>
                 <span
-                  v-else-if="getCatalogItem(rt.name)?.eol_date"
+                  v-else-if="shouldShowSecurityOnly(rt.name)"
                   class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-900"
                 >
                   {{ t('runtime_security_only', { date: getCatalogItem(rt.name)?.eol_date }) }}
@@ -100,14 +100,14 @@
                   <bdi dir="ltr">v{{ runtimeUpdates[rt.name].latest_version }}</bdi>
                 </span>
                 <span
-                  v-if="runtimeUpdates[rt.name]?.major_change"
+                  v-if="runtimeUpdates[rt.name]?.major_change && runtimeUpdates[rt.name]?.has_update"
                   class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-200 border border-amber-300 dark:border-amber-800"
                 >
                   <AlertTriangle class="w-2.5 h-2.5" /> {{ t('runtime_major_change') }}
                 </span>
               </div>
               <p class="text-[11px] text-slate-400 font-mono">
-                {{ t(rt.desc_key) }}
+                {{ getRuntimeDescription(rt) }}
               </p>
               <p
                 v-if="runtimeUpdates[rt.name]?.compat_note"
@@ -139,11 +139,22 @@
               <template v-else-if="runtimeUpdates[rt.name]?.has_update">
                 <button
                   type="button"
-                  class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                  class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer text-white shadow-xs"
+                  :class="
+                    runtimeUpdates[rt.name]?.major_change
+                      ? 'bg-amber-600 hover:bg-amber-700'
+                      : 'bg-emerald-600 hover:bg-emerald-700'
+                  "
                   @click="handleRuntimeAction(rt)"
                 >
                   <Download class="w-3.5 h-3.5" />
-                  <span>{{ t('upgrade_one_click') }}</span>
+                  <span>
+                    {{
+                      runtimeUpdates[rt.name]?.major_change
+                        ? t('runtime_major_upgrade_btn')
+                        : t('upgrade_one_click')
+                    }}
+                  </span>
                 </button>
               </template>
               <template v-else-if="runtimeUpdates[rt.name]?.current_version">
@@ -272,7 +283,7 @@ import {
   Info,
 } from 'lucide-vue-next'
 import { useI18n } from '../../composables/useI18n'
-import { useRuntimeCatalog } from '../../composables/useRuntimeCatalog'
+import { useRuntimeCatalog, getMajorMinor } from '../../composables/useRuntimeCatalog'
 
 interface Props {
   modelValue: boolean
@@ -299,6 +310,37 @@ const {
 } = useRuntimeCatalog()
 
 const confirmMajorChange = ref<{ name: string; label: string } | null>(null)
+
+function shouldShowEol(name: string): boolean {
+  const item = getCatalogItem(name)
+  if (!item?.eol) return false
+  const update = runtimeUpdates.value[name]
+  const curVer = update?.current_version
+  if (!curVer) return true
+  return getMajorMinor(curVer) === getMajorMinor(item.version)
+}
+
+function shouldShowSecurityOnly(name: string): boolean {
+  const item = getCatalogItem(name)
+  if (!item?.eol_date || item?.eol) return false
+  const update = runtimeUpdates.value[name]
+  const curVer = update?.current_version
+  if (!curVer) return true
+  return getMajorMinor(curVer) === getMajorMinor(item.version)
+}
+
+function getRuntimeDescription(rt: { name: string; desc_key: string }): string {
+  if (!rt.desc_key || rt.desc_key === 'runtime_new_from_feed') {
+    if (rt.name.startsWith('mariadb-') || rt.name.startsWith('mysql-')) {
+      return t('service_mysql_desc')
+    }
+    if (rt.name.startsWith('php-')) {
+      return t('service_php85_desc')
+    }
+    return t('service_mysql_desc')
+  }
+  return t(rt.desc_key)
+}
 
 function isMySQLFamily(name: string): boolean {
   const n = name.toLowerCase()

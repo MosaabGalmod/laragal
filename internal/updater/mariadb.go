@@ -15,15 +15,17 @@ import (
 var mariadbFileRegex = regexp.MustCompile(`^mariadb-[\d.]+-winx64\.zip$`)
 
 type MariaDBSource struct {
-	BaseURL     string        // e.g. "https://downloads.mariadb.org/rest-api/mariadb/" or httptest URL
-	BaseSeries  string        // Default: "10.11"
-	HTTPClient  *http.Client  // Optional HTTP client
-	HTTPTimeout time.Duration // Default 10s
-	CacheTTL    time.Duration // Default 1h (if < 0, caching disabled)
+	BaseURL          string        // e.g. "https://downloads.mariadb.org/rest-api/mariadb/" or httptest URL
+	BaseSeries       string        // Default: "10.11"
+	InstalledVersion string        // Detected or specified installed version (e.g. "11.8.9")
+	HTTPClient       *http.Client  // Optional HTTP client
+	HTTPTimeout      time.Duration // Default 10s
+	CacheTTL         time.Duration // Default 1h (if < 0, caching disabled)
 
-	mu       sync.Mutex
-	cached   []LiveRelease
-	cachedAt time.Time
+	mu           sync.Mutex
+	cached       []LiveRelease
+	cachedSeries string
+	cachedAt     time.Time
 }
 
 func NewMariaDBSource(baseURL ...string) *MariaDBSource {
@@ -65,12 +67,20 @@ type mariaDBChecksum struct {
 }
 
 func (s *MariaDBSource) Latest(ctx context.Context, name string) ([]LiveRelease, error) {
+	curSeries := s.BaseSeries
+	if s.InstalledVersion != "" {
+		curSeries = ExtractSeries(s.InstalledVersion)
+	}
+	if curSeries == "" {
+		curSeries = "10.11"
+	}
+
 	s.mu.Lock()
 	cacheTTL := s.CacheTTL
 	if cacheTTL == 0 {
 		cacheTTL = 1 * time.Hour
 	}
-	if cacheTTL > 0 && len(s.cached) > 0 && time.Since(s.cachedAt) < cacheTTL {
+	if cacheTTL > 0 && len(s.cached) > 0 && s.cachedSeries == curSeries && time.Since(s.cachedAt) < cacheTTL {
 		res := make([]LiveRelease, len(s.cached))
 		copy(res, s.cached)
 		s.mu.Unlock()
@@ -93,11 +103,6 @@ func (s *MariaDBSource) Latest(ctx context.Context, name string) ([]LiveRelease,
 	client := s.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: timeout}
-	}
-
-	curSeries := s.BaseSeries
-	if curSeries == "" {
-		curSeries = "10.11"
 	}
 
 	// If a specific series is requested (e.g. "mariadb-11.4" or "mysql-11.4")
@@ -160,6 +165,7 @@ func (s *MariaDBSource) Latest(ctx context.Context, name string) ([]LiveRelease,
 		s.mu.Lock()
 		s.cached = make([]LiveRelease, len(results))
 		copy(s.cached, results)
+		s.cachedSeries = curSeries
 		s.cachedAt = time.Now()
 		s.mu.Unlock()
 	}

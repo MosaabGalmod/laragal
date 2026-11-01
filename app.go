@@ -109,6 +109,11 @@ func (a *App) getRegistry() updater.Registry {
 	if pmaSrc, ok := reg["phpmyadmin"].(*updater.PhpMyAdminSource); ok && pmaSrc != nil {
 		pmaSrc.ActivePHPVersion = a.getActivePHPVersion()
 	}
+	if mariaSrc, ok := reg["mysql"].(*updater.MariaDBSource); ok && mariaSrc != nil {
+		if installed := a.detectInstalledVersion("mysql"); installed != "" {
+			mariaSrc.InstalledVersion = installed
+		}
+	}
 	return reg
 }
 
