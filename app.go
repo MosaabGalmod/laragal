@@ -31,6 +31,12 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+
+type UIMessage struct {
+	Key    string            `json:"key"`
+	Params map[string]string `json:"params,omitempty"`
+}
+
 type App struct {
 	ctx            context.Context
 	cfg            *config.AppConfig
@@ -572,21 +578,24 @@ func (a *App) ToggleService(name string) (bool, error) {
 		return err == nil, err
 	}
 
-	return false, fmt.Errorf("الخدمة %s غير معروفة", name)
+	return false, fmt.Errorf("unknown service: %s", name)
 }
 
-func (a *App) CheckPortConflict(port int) string {
+func (a *App) CheckPortConflict(port int) UIMessage {
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 200*time.Millisecond)
 	if err == nil {
 		_ = conn.Close()
 		for _, s := range a.GetServices() {
 			if s.Running && s.Port == port {
-				return ""
+				return UIMessage{}
 			}
 		}
-		return fmt.Sprintf("تنبيه: المنفذ %d مستخدم حالياً من قِبل برنامج آخر على جهازك (مثل خادم محلي قديم).", port)
+		return UIMessage{
+			Key:    "port_conflict_warning",
+			Params: map[string]string{"port": fmt.Sprintf("%d", port)},
+		}
 	}
-	return ""
+	return UIMessage{}
 }
 
 func (a *App) GetServices() []process.ServiceStatus {
@@ -672,20 +681,20 @@ func (a *App) AddSite(domain string, rootPath string, phpVersion string) error {
 	return nil
 }
 
-func (a *App) InstallSSLTrust() (string, error) {
+func (a *App) InstallSSLTrust() (UIMessage, error) {
 	rootCertPath := a.findCaddyRootCert()
 	if rootCertPath == "" {
-		return "لم يتم العثور على شهادة الجذر لـ Caddy بعد. يرجى تشغيل خادم Caddy أولاً لتوليدها.", nil
+		return UIMessage{Key: "ssl_root_cert_not_found"}, nil
 	}
 
 	fingerprint, err := certs.ReadCertFingerprint(rootCertPath)
 	if err != nil {
-		return "", err
+		return UIMessage{}, err
 	}
 
 	trusted, _ := certs.IsCertTrustedInWindowsStore(fingerprint)
 	if trusted {
-		return "شهادة الجذر المحلية موثوقة بالفعل في نظام ويندوز.", nil
+		return UIMessage{Key: "ssl_already_trusted"}, nil
 	}
 
 	// 1. Try native caddy trust if available
@@ -693,7 +702,7 @@ func (a *App) InstallSSLTrust() (string, error) {
 	if caddyExe != "" {
 		_ = winutil.Command(caddyExe, "trust").Run()
 		if trustedNow, _ := certs.IsCertTrustedInWindowsStore(fingerprint); trustedNow {
-			return "تم تثبيت شهادة الجذر في متجر شهادات ويندوز بنجاح.", nil
+			return UIMessage{Key: "ssl_install_success"}, nil
 		}
 	}
 
@@ -707,14 +716,14 @@ func (a *App) InstallSSLTrust() (string, error) {
 		elCmd := winutil.Command(elevatedCmd[0], elevatedCmd[1:]...)
 		elOut, elErr := elCmd.CombinedOutput()
 		if elErr != nil {
-			return string(out) + " " + string(elOut), elErr
+			return UIMessage{}, fmt.Errorf("%s %s: %w", string(out), string(elOut), elErr)
 		}
 	}
 
-	return "تم تثبيت شهادة الجذر في متجر شهادات ويندوز بنجاح.", nil
+	return UIMessage{Key: "ssl_install_success"}, nil
 }
 
-func (a *App) downloadAndInstallArtifact(name string, url string, expectedSHA string) (string, error) {
+func (a *App) downloadAndInstallArtifact(name string, url string, expectedSHA string) (UIMessage, error) {
 	tempDir := a.getTempDir()
 	_ = os.MkdirAll(tempDir, 0755)
 	destDir := filepath.Join(a.getBaseBinDir(), name)
@@ -740,7 +749,7 @@ func (a *App) downloadAndInstallArtifact(name string, url string, expectedSHA st
 		_ = os.MkdirAll(adminerDir, 0755)
 		adminerPath := filepath.Join(adminerDir, "index.php")
 		if err := downloader.DownloadFile(ctx, url, adminerPath, onProgress, expectedSHA); err != nil {
-			return "", err
+			return UIMessage{}, err
 		}
 		if a.ctx != nil {
 			runtime.EventsEmit(a.ctx, "download-progress", map[string]interface{}{
@@ -751,18 +760,18 @@ func (a *App) downloadAndInstallArtifact(name string, url string, expectedSHA st
 				"completed":  true,
 			})
 		}
-		return fmt.Sprintf("تم تنزيل وتحديث أداة Adminer بنجاح في %s", adminerPath), nil
+		return UIMessage{Key: "adminer_download_success", Params: map[string]string{"path": filepath.ToSlash(adminerPath)}}, nil
 	}
 
 	zipPath := filepath.Join(tempDir, fmt.Sprintf("%s.zip", name))
 	if err := downloader.DownloadFile(ctx, url, zipPath, onProgress, expectedSHA); err != nil {
 		_ = os.Remove(zipPath)
-		return "", err
+		return UIMessage{}, err
 	}
 
 	if err := downloader.ExtractZip(zipPath, destDir); err != nil {
 		_ = os.Remove(zipPath)
-		return "", err
+		return UIMessage{}, err
 	}
 	_ = os.Remove(zipPath)
 
@@ -780,16 +789,16 @@ func (a *App) downloadAndInstallArtifact(name string, url string, expectedSHA st
 		})
 	}
 
-	return fmt.Sprintf("تم تنزيل وتثبيت %s بنجاح في %s", name, destDir), nil
+	return UIMessage{Key: "runtime_install_success_path", Params: map[string]string{"name": name, "dest": filepath.ToSlash(destDir)}}, nil
 }
 
-func (a *App) DownloadBinary(name string) (string, error) {
+func (a *App) DownloadBinary(name string) (UIMessage, error) {
 	art, err := downloader.GetDownloadArtifact(name)
 	if err != nil {
-		return "", err
+		return UIMessage{}, err
 	}
 	if art.SHA256 == "" {
-		return "", fmt.Errorf("no verified checksum available for binary: %s", name)
+		return UIMessage{}, fmt.Errorf("no verified checksum available for binary: %s", name)
 	}
 	return a.downloadAndInstallArtifact(name, art.URL, art.SHA256)
 }
@@ -844,7 +853,7 @@ func (a *App) CheckRuntimeUpdates() []updater.RuntimeUpdateInfo {
 }
 
 // UpgradeRuntime stops running service if active, downloads latest release, preserves configs, and restarts service
-func (a *App) UpgradeRuntime(name string) (string, error) {
+func (a *App) UpgradeRuntime(name string) (UIMessage, error) {
 	wasRunning := false
 	if status, exists := a.supervisor.GetServiceStatus(name); exists && status.Running {
 		wasRunning = true
@@ -856,7 +865,7 @@ func (a *App) UpgradeRuntime(name string) (string, error) {
 		if wasRunning {
 			_, _ = a.ToggleService(name)
 		}
-		return "", err
+		return UIMessage{}, err
 	}
 
 	msg, err := a.downloadAndInstallArtifact(name, url, sha)
@@ -864,7 +873,7 @@ func (a *App) UpgradeRuntime(name string) (string, error) {
 		if wasRunning {
 			_, _ = a.ToggleService(name)
 		}
-		return "", err
+		return UIMessage{}, err
 	}
 
 	if wasRunning {
@@ -1165,7 +1174,7 @@ func (a *App) StartProjectApp(projectPath string, port int) (bool, error) {
 		}
 	}
 
-	return false, fmt.Errorf("لم يتم العثور على ملف تنفيذي أو أداة تشغيل للمشروع %s", projectName)
+	return false, fmt.Errorf("no executable or start script found for project %s", projectName)
 }
 
 func (a *App) StopProjectApp(projectName string) error {
@@ -1376,23 +1385,23 @@ func (a *App) SaveProjectSettings(projectPath string, settings config.ProjectCus
 }
 
 type ProjectDiagnostics struct {
-	ProjectPath    string   `json:"project_path"`
-	Domain         string   `json:"domain"`
-	ProjectType    string   `json:"project_type"`
-	PHPVersion     string   `json:"php_version"`
-	PHPPort        int      `json:"php_port"`
-	ProxyPort      int      `json:"proxy_port"`
-	DocRoot        string   `json:"doc_root"`
-	DocRootExists  bool     `json:"doc_root_exists"`
-	HasIndexFile   bool     `json:"has_index_file"`
-	IndexFile      string   `json:"index_file,omitempty"`
-	HasEnvFile     bool     `json:"has_env_file"`
-	HasVendorDir   bool     `json:"has_vendor_dir"`
-	HasNodeModules bool     `json:"has_node_modules"`
-	IsPortActive   bool     `json:"is_port_active"`
-	Status         string   `json:"status"` // "healthy", "warning", "error"
-	Issues         []string `json:"issues"`
-	Suggestions    []string `json:"suggestions"`
+	ProjectPath    string      `json:"project_path"`
+	Domain         string      `json:"domain"`
+	ProjectType    string      `json:"project_type"`
+	PHPVersion     string      `json:"php_version"`
+	PHPPort        int         `json:"php_port"`
+	ProxyPort      int         `json:"proxy_port"`
+	DocRoot        string      `json:"doc_root"`
+	DocRootExists  bool        `json:"doc_root_exists"`
+	HasIndexFile   bool        `json:"has_index_file"`
+	IndexFile      string      `json:"index_file,omitempty"`
+	HasEnvFile     bool        `json:"has_env_file"`
+	HasVendorDir   bool        `json:"has_vendor_dir"`
+	HasNodeModules bool        `json:"has_node_modules"`
+	IsPortActive   bool        `json:"is_port_active"`
+	Status         string      `json:"status"` // "healthy", "warning", "error"
+	Issues         []UIMessage `json:"issues"`
+	Suggestions    []UIMessage `json:"suggestions"`
 }
 
 // ScanProjectDatabases searches for preexisting schemas (.sql) and local MySQL databases for the given project
@@ -1447,8 +1456,8 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 		ProxyPort:   proxyPort,
 		DocRoot:     filepath.ToSlash(docRoot),
 		Status:      "healthy",
-		Issues:      make([]string, 0),
-		Suggestions: make([]string, 0),
+		Issues:      make([]UIMessage, 0),
+		Suggestions: make([]UIMessage, 0),
 	}
 
 	// 1. Check Document Root
@@ -1457,8 +1466,8 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 	} else {
 		diag.DocRootExists = false
 		diag.Status = "error"
-		diag.Issues = append(diag.Issues, fmt.Sprintf("مجلد الويب المحدد (%s) غير موجود على القرص.", filepath.Base(docRoot)))
-		diag.Suggestions = append(diag.Suggestions, "يرجى تعديل مجلد الويب واختيار المسار الصحيح للمشروع (مثل public أو dist).")
+		diag.Issues = append(diag.Issues, UIMessage{Key: "diag_issue_docroot_missing", Params: map[string]string{"base": filepath.Base(docRoot)}})
+		diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_docroot_fix"})
 	}
 
 	// Check index file in docRoot
@@ -1472,8 +1481,8 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 	}
 	if !diag.HasIndexFile && pType != "go" && pType != "rust" && pType != "dotnet" && pType != "python" {
 		diag.Status = "warning"
-		diag.Issues = append(diag.Issues, "لم يتم العثور على ملف بداية (index.php أو index.html) داخل مجلد الويب.")
-		diag.Suggestions = append(diag.Suggestions, "تأكد من اختيار المجلد الفرعي الذي يحتوي على ملف التشغيل (مثل مجلد public).")
+		diag.Issues = append(diag.Issues, UIMessage{Key: "diag_issue_index_missing"})
+		diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_index_fix"})
 	}
 
 	// 2. Check PHP projects (.env, vendor, fastcgi)
@@ -1485,11 +1494,11 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 			diag.HasEnvFile = false
 			if pType == "laravel" {
 				diag.Status = "warning"
-				diag.Issues = append(diag.Issues, "ملف إعدادات البيئة (.env) غير موجود.")
+				diag.Issues = append(diag.Issues, UIMessage{Key: "diag_issue_env_missing"})
 				if fileExists(filepath.Join(cleanPath, ".env.example")) {
-					diag.Suggestions = append(diag.Suggestions, "يمكنك إنشاء ملف .env تلقائياً بنقرة واحدة من زر «إنشاء .env».")
+					diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_env_create"})
 				} else {
-					diag.Suggestions = append(diag.Suggestions, "قم بإنشاء ملف .env وضبط مفتاح التطبيق وقاعدة البيانات.")
+					diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_env_manual"})
 				}
 			}
 		}
@@ -1501,8 +1510,8 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 			diag.HasVendorDir = false
 			if fileExists(filepath.Join(cleanPath, "composer.json")) {
 				diag.Status = "warning"
-				diag.Issues = append(diag.Issues, "حزم وتبعية المشروع غير مثبتة (vendor/autoload.php مفقود).")
-				diag.Suggestions = append(diag.Suggestions, "يرجى تشغيل أمر «composer install» في مجلد المشروع لتثبيت التبعيات.")
+				diag.Issues = append(diag.Issues, UIMessage{Key: "diag_issue_vendor_missing"})
+				diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_composer_install"})
 			}
 		}
 
@@ -1512,8 +1521,8 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 			} else {
 				diag.IsPortActive = false
 				diag.Status = "error"
-				diag.Issues = append(diag.Issues, fmt.Sprintf("خادم PHP FastCGI غير متصل على المنفذ :%d.", phpPort))
-				diag.Suggestions = append(diag.Suggestions, "تأكد من تشغيل خدمة PHP أو اختيار إصدار PHP متوفر على جهازك.")
+				diag.Issues = append(diag.Issues, UIMessage{Key: "diag_issue_php_port_inactive", Params: map[string]string{"port": fmt.Sprintf("%d", phpPort)}})
+				diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_php_service"})
 			}
 		}
 	}
@@ -1527,8 +1536,8 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 			if diag.Status != "error" {
 				diag.Status = "warning"
 			}
-			diag.Issues = append(diag.Issues, fmt.Sprintf("خادم التطبيق غير مشغل على المنفذ :%d.", proxyPort))
-			diag.Suggestions = append(diag.Suggestions, "اضغط على زر «تشغيل التطبيق» في بطاقة المشروع لتشغيل خادم التطبيق الداخلي.")
+			diag.Issues = append(diag.Issues, UIMessage{Key: "diag_issue_proxy_port_inactive", Params: map[string]string{"port": fmt.Sprintf("%d", proxyPort)}})
+			diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_start_app"})
 		}
 	}
 
@@ -1539,8 +1548,8 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 		} else if fileExists(filepath.Join(cleanPath, "package.json")) {
 			diag.HasNodeModules = false
 			diag.Status = "warning"
-			diag.Issues = append(diag.Issues, "مجلد الحزم node_modules غير موجود.")
-			diag.Suggestions = append(diag.Suggestions, "قم بتشغيل أمر «npm install» أو بناء المشروع «npm run build».")
+			diag.Issues = append(diag.Issues, UIMessage{Key: "diag_issue_node_modules_missing"})
+			diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_npm_install"})
 		}
 	}
 
@@ -1558,7 +1567,7 @@ func (a *App) FixProjectEnv(projectPath string) (bool, error) {
 	}
 
 	if !fileExists(examplePath) {
-		return false, fmt.Errorf("ملف .env.example غير موجود في المجلد")
+		return false, fmt.Errorf(".env.example not found in project directory")
 	}
 
 	data, err := os.ReadFile(examplePath)
@@ -1817,7 +1826,7 @@ func (a *App) ReloadCaddy() error {
 }
 
 // SyncHosts synchronizes the active web domains to the Windows hosts file and flushes DNS cache
-func (a *App) SyncHosts() (string, error) {
+func (a *App) SyncHosts() (UIMessage, error) {
 	webDomains := make([]string, 0)
 	for _, s := range a.sites {
 		if s.IsWeb && s.Domain != "" {
@@ -1831,13 +1840,16 @@ func (a *App) SyncHosts() (string, error) {
 	webDomains = append(webDomains, "adminer"+suffix)
 	webDomains = append(webDomains, "phpmyadmin"+suffix)
 	if err := hosts.UpdateSystemHosts(webDomains); err != nil {
-		return "", err
+		return UIMessage{}, err
 	}
 	if len(webDomains) == 0 {
-		return "تم تنظيف ملف hosts بنجاح (لا توجد مواقع نشطة حالياً).", nil
+		return UIMessage{Key: "hosts_clean_no_sites"}, nil
 	}
 
-	return fmt.Sprintf("تمت مزامنة %d نطاق بنجاح مع ملف hosts المحلي وتحديث كاش DNS.", len(webDomains)), nil
+	return UIMessage{
+		Key:    "hosts_synced_count",
+		Params: map[string]string{"count": fmt.Sprintf("%d", len(webDomains))},
+	}, nil
 }
 
 // getActivePHPPort returns the port of the currently running PHP FastCGI instance, or default port
@@ -1905,7 +1917,7 @@ func (a *App) OpenAdminer(dbName string) error {
 // OpenPhpMyAdmin starts prerequisites (MySQL, PHP, Caddy) and opens phpMyAdmin in browser
 func (a *App) OpenPhpMyAdmin(dbName string) error {
 	if !phpmyadmin.IsInstalled(".") {
-		return fmt.Errorf("أداة phpMyAdmin غير مثبتة حالياً في data/phpmyadmin")
+		return fmt.Errorf("phpMyAdmin is not installed in data/phpmyadmin")
 	}
 
 	_ = phpmyadmin.EnsureConfig(".")

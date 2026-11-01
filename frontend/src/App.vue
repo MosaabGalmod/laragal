@@ -1262,14 +1262,14 @@
           <div v-if="diagResult.issues && diagResult.issues.length > 0" class="p-3.5 rounded-xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 space-y-1.5">
             <span class="text-xs font-bold text-rose-700 dark:text-rose-300 block">{{ t('issues_found_title') }}</span>
             <ul class="text-xs text-rose-600 dark:text-rose-400 space-y-1 list-disc list-inside">
-              <li v-for="(issue, idx) in diagResult.issues" :key="idx">{{ issue }}</li>
+              <li v-for="(issue, idx) in diagResult.issues" :key="idx"><bdi>{{ renderUIMessage(issue) }}</bdi></li>
             </ul>
           </div>
 
           <div v-if="diagResult.suggestions && diagResult.suggestions.length > 0" class="p-3.5 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50 space-y-1.5">
             <span class="text-xs font-bold text-blue-700 dark:text-blue-300 block">{{ t('suggestions_title') }}</span>
             <ul class="text-xs text-blue-600 dark:text-blue-400 space-y-1 list-disc list-inside">
-              <li v-for="(sug, idx) in diagResult.suggestions" :key="idx">{{ sug }}</li>
+              <li v-for="(sug, idx) in diagResult.suggestions" :key="idx"><bdi>{{ renderUIMessage(sug) }}</bdi></li>
             </ul>
           </div>
         </div>
@@ -1965,6 +1965,15 @@ const locales: Record<string, Record<string, string>> = {
   en: enLocale
 }
 
+function renderUIMessage(msg: any): string {
+  if (!msg) return ''
+  if (typeof msg === 'string') return msg
+  if (msg.key) {
+    return t(msg.key, msg.params)
+  }
+  return ''
+}
+
 function t(key: string, params?: Record<string, string | number | undefined>): string {
   let str = locales[currentLang.value]?.[key] || key
   if (params) {
@@ -2219,7 +2228,7 @@ async function syncHostsNow() {
   try {
     if ((window as any).go?.main?.App?.SyncHosts) {
       const msg = await (window as any).go.main.App.SyncHosts()
-      notification.value = msg
+      notification.value = renderUIMessage(msg) || t('hosts_synced_success')
     } else {
       notification.value = t('hosts_synced_success')
     }
@@ -2253,7 +2262,7 @@ function openAdminer(dbName?: string) {
   const app = (window as any).go?.main?.App
   if (app?.OpenAdminer) {
     app.OpenAdminer(dbName || '').catch((err: any) => {
-      notification.value = err?.message || String(err)
+      notification.value = t('operation_failed', { error: err?.message || String(err) })
     })
   } else {
     const dbParam = dbName ? `&db=${encodeURIComponent(dbName)}` : ''
@@ -2265,7 +2274,7 @@ function openPhpMyAdmin(dbName?: string) {
   const app = (window as any).go?.main?.App
   if (app?.OpenPhpMyAdmin) {
     app.OpenPhpMyAdmin(dbName || '').catch((err: any) => {
-      notification.value = err?.message || String(err)
+      notification.value = t('operation_failed', { error: err?.message || String(err) })
     })
   } else {
     const dbParam = dbName ? `index.php?route=/database/structure&db=${encodeURIComponent(dbName)}` : ''
@@ -2337,8 +2346,9 @@ async function checkPortConflicts() {
   if ((window as any).go?.main?.App?.CheckPortConflict) {
     try {
       const msg = await (window as any).go.main.App.CheckPortConflict(443)
-      if (msg) {
-        notification.value = msg
+      const rendered = renderUIMessage(msg)
+      if (rendered) {
+        notification.value = rendered
       }
     } catch (e) {
       console.warn("CheckPortConflict err:", e)
@@ -2411,7 +2421,7 @@ async function installSSL() {
   if ((window as any).go?.main?.App?.InstallSSLTrust) {
     try {
       const res = await (window as any).go.main.App.InstallSSLTrust()
-      notification.value = res || t('success_ssl')
+      notification.value = renderUIMessage(res) || t('success_ssl')
       return
     } catch (err: any) {
       notification.value = t('error_installing_ssl', { error: err })
@@ -2498,7 +2508,7 @@ async function triggerDownloadRuntime(name: string) {
         runtimeUpdates.value[name].has_update = false
         runtimeUpdates.value[name].current_version = runtimeUpdates.value[name].latest_version
       }
-      notification.value = msg || t('runtime_upgrade_success', { name })
+      notification.value = renderUIMessage(msg) || t('runtime_upgrade_success', { name })
       return
     } catch (err: any) {
       console.warn("Upgrade err:", err)
@@ -2513,7 +2523,7 @@ async function triggerDownloadRuntime(name: string) {
       const msg = await (window as any).go.main.App.DownloadBinary(name)
       downloadingRuntime.value = ''
       downloadProgress.value[name] = 100
-      notification.value = msg || t('runtime_install_success', { name })
+      notification.value = renderUIMessage(msg) || t('runtime_install_success', { name })
       return
     } catch (err: any) {
       console.warn("Download err:", err)

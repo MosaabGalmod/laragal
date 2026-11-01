@@ -577,8 +577,8 @@ func TestUpgradeRuntime_PicksFeedVersionAndNTSZip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpgradeRuntime failed: %v", err)
 	}
-	if !strings.Contains(msg, "php-8.4") {
-		t.Errorf("unexpected success message: %s", msg)
+	if msg.Params["name"] != "php-8.4" || msg.Key != "runtime_install_success_path" {
+		t.Errorf("unexpected success message: %+v", msg)
 	}
 
 	installedExe := filepath.Join(binDir, "php-8.4", "php.exe")
@@ -695,8 +695,8 @@ func TestUpgradeRuntime_FeedDownFallsBackToPinnedCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("UpgradeRuntime failed on fallback to catalog: %v", err)
 	}
-	if !strings.Contains(msg, "php-8.4") {
-		t.Errorf("unexpected success message: %s", msg)
+	if msg.Params["name"] != "php-8.4" || msg.Key != "runtime_install_success_path" {
+		t.Errorf("unexpected success message: %+v", msg)
 	}
 
 	installedExe := filepath.Join(binDir, "php-8.4", "php.exe")
@@ -719,5 +719,65 @@ func TestUpgradeRuntime_NoHashErrors(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no verified artifact") {
 		t.Errorf("expected clear error message, got: %v", err)
+	}
+}
+
+func TestUIMessage_CheckPortConflict(t *testing.T) {
+	app := &App{
+		supervisor: process.NewSupervisor(),
+	}
+	msg := app.CheckPortConflict(39999)
+	if msg.Key != "" {
+		t.Errorf("expected empty key for unoccupied port, got: %v", msg)
+	}
+
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("failed to listen on ephemeral port: %v", err)
+	}
+	defer ln.Close()
+	port := ln.Addr().(*net.TCPAddr).Port
+
+	msgOpen := app.CheckPortConflict(port)
+	if msgOpen.Key != "port_conflict_warning" {
+		t.Errorf("expected port_conflict_warning key, got: %s", msgOpen.Key)
+	}
+	if msgOpen.Params["port"] != fmt.Sprintf("%d", port) {
+		t.Errorf("expected port param %d, got: %s", port, msgOpen.Params["port"])
+	}
+}
+
+func TestUIMessage_SyncHosts(t *testing.T) {
+	app := &App{
+		cfg:   config.NewDefaultConfig(),
+		sites: []caddy.SiteDef{},
+	}
+	msg, err := app.SyncHosts()
+	if err != nil {
+		t.Fatalf("SyncHosts failed: %v", err)
+	}
+	if msg.Key != "hosts_synced_count" && msg.Key != "hosts_clean_no_sites" {
+		t.Errorf("expected hosts_synced_count or hosts_clean_no_sites key, got: %s", msg.Key)
+	}
+}
+
+func TestUIMessage_DiagnoseProject(t *testing.T) {
+	tempDir := t.TempDir()
+	app := &App{
+		cfg: config.NewDefaultConfig(),
+	}
+	diag := app.DiagnoseProject(tempDir)
+	if len(diag.Issues) == 0 {
+		t.Errorf("expected diagnostic issues for empty folder, got 0")
+	}
+	hasKey := false
+	for _, issue := range diag.Issues {
+		if issue.Key != "" {
+			hasKey = true
+			break
+		}
+	}
+	if !hasKey {
+		t.Errorf("expected structured UIMessage with key in issues, got %+v", diag.Issues)
 	}
 }
