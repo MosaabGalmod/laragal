@@ -24,6 +24,7 @@ export interface RuntimeUpdateInfo {
   compat_note?: string
   source_status?: 'live' | 'catalog_fallback'
   source_error?: string
+  eol_date?: string
 }
 
 export interface RuntimeDefinition {
@@ -61,6 +62,57 @@ export function compareVersions(v1: string, v2: string): number {
     if (a < b) return -1
   }
   return 0
+}
+
+export function formatEolDate(dateStr?: string, locale: string = 'ar'): string {
+  if (!dateStr) return ''
+  try {
+    const parts = dateStr.trim().split('-').map(Number)
+    if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+      const d = new Date(parts[0], parts[1] - 1, parts[2])
+      return new Intl.DateTimeFormat(locale === 'ar' ? 'ar' : 'en', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      }).format(d)
+    }
+  } catch {
+    return dateStr
+  }
+  return dateStr
+}
+
+export function getRecommendedMariaDBSeries(updates: RuntimeUpdateInfo[]): RuntimeUpdateInfo | undefined {
+  if (!updates || updates.length === 0) return undefined
+  let best: RuntimeUpdateInfo | undefined
+  let bestTime = 0
+
+  for (const u of updates) {
+    let t = 0
+    if (u.eol_date) {
+      const parts = u.eol_date.trim().split('-').map(Number)
+      if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+        t = new Date(parts[0], parts[1] - 1, parts[2]).getTime()
+      }
+    }
+    if (!best) {
+      best = u
+      bestTime = t
+      continue
+    }
+    if (t > bestTime) {
+      best = u
+      bestTime = t
+    } else if (t === bestTime) {
+      const vBest = best.name.replace(/^(mariadb|mysql)-/, '')
+      const vCur = u.name.replace(/^(mariadb|mysql)-/, '')
+      if (compareVersions(vCur, vBest) > 0) {
+        best = u
+        bestTime = t
+      }
+    }
+  }
+  return best
 }
 
 export function extractPhpVersionNumber(ver?: string): string {
@@ -211,25 +263,17 @@ export function useRuntimeCatalog() {
               map[item.name] = item
               if (item.has_update) count++
 
-              // Feed-only entries: add to available runtimes dynamically
+              // Feed-only entries: add to available runtimes dynamically (only php-* for individual cards)
               if (item.is_new && !availableRuntimes.value.some((r) => r.name === item.name)) {
-                let label = item.name
-                let desc_key = 'service_mysql_desc'
                 if (item.name.startsWith('php-')) {
                   const ver = item.name.replace(/^php-/, '')
-                  label = `PHP ${ver} (NTS x64)`
-                  desc_key = 'service_php85_desc'
-                } else if (item.name.startsWith('mariadb-') || item.name.startsWith('mysql-')) {
-                  const ver = item.name.replace(/^(mariadb|mysql)-/, '')
-                  label = `MariaDB ${ver} (LTS)`
-                  desc_key = 'service_mysql_desc'
+                  availableRuntimes.value.push({
+                    name: item.name,
+                    label: `PHP ${ver} (NTS x64)`,
+                    desc_key: 'service_php85_desc',
+                    is_feed_only: true,
+                  })
                 }
-                availableRuntimes.value.push({
-                  name: item.name,
-                  label,
-                  desc_key,
-                  is_feed_only: true,
-                })
               }
             }
           }
@@ -332,10 +376,25 @@ export function useRuntimeCatalog() {
     }, 1500)
   }
 
+  const mariadbSeriesUpdates = computed<RuntimeUpdateInfo[]>(() => {
+    const list: RuntimeUpdateInfo[] = []
+    for (const [name, update] of Object.entries(runtimeUpdates.value)) {
+      if ((name.startsWith('mariadb-') || name.startsWith('mysql-')) && name !== 'mysql' && update) {
+        list.push(update)
+      }
+    }
+    return list.sort((a, b) => {
+      const va = a.name.replace(/^(mariadb|mysql)-/, '')
+      const vb = b.name.replace(/^(mariadb|mysql)-/, '')
+      return compareVersions(va, vb)
+    })
+  })
+
   return {
     runtimeCatalog,
     availableRuntimes,
     runtimeUpdates,
+    mariadbSeriesUpdates,
     isCheckingUpdates,
     downloadProgress,
     downloadingRuntime,
@@ -344,6 +403,8 @@ export function useRuntimeCatalog() {
     getPHPPort,
     extractPhpVersionNumber,
     compareVersions,
+    formatEolDate,
+    getRecommendedMariaDBSeries,
     phpCatalog,
     latestPhpVersion,
     phpSelectOptions,

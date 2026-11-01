@@ -355,5 +355,7 @@
   "runtime_major_change_mysql_extra": "تنبيه خاص بقواعد البيانات <bdi dir=\"ltr\">MariaDB</bdi>: يُنصح بشدة بأخذ نسخة احتياطية لكافة قواعد البيانات قبل المتابعة؛ وسيتم تشغيل أداة ترقية الجداول <bdi dir=\"ltr\">mariadb-upgrade</bdi> آليًا وتوثيق مخرجاتها في السجلات عند أول تشغيل.",
   "runtime_major_change_adminer_extra": "تنبيه خاص بأداة <bdi dir=\"ltr\">Adminer</bdi>: قد يتوقف تسجيل الدخول التلقائي المؤمّن محليًا عن العمل بعد الانتقال إلى إصدار رئيسي جديد.",
   "runtime_source_unavailable": "تعذّر الوصول إلى المصدر الرسمي الآن؛ المعروض هو الإصدار المضمَّن. أعد الفحص لاحقًا.",
-  "runtime_major_upgrade_btn": "ترقية رئيسية…"
+  "runtime_major_upgrade_btn": "ترقية رئيسية…",
+  "mariadb_newer_series": "سلسلة أحدث من MariaDB",
+  "runtime_supported_until": "مدعوم حتى {date}"
 }

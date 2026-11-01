@@ -45,6 +45,7 @@ type mariaDBMajorRelease struct {
 	ReleaseName        string `json:"release_name"`
 	ReleaseStatus      string `json:"release_status"`
 	ReleaseSupportType string `json:"release_support_type"`
+	ReleaseEolDate     string `json:"release_eol_date"`
 }
 
 type mariaDBSpecificReleaseResponse struct {
@@ -105,6 +106,15 @@ func (s *MariaDBSource) Latest(ctx context.Context, name string) ([]LiveRelease,
 		client = &http.Client{Timeout: timeout}
 	}
 
+	// Discover major releases & EOL dates from root API
+	majorReleases, majorErr := s.fetchMajorReleases(ctx, client, baseURL)
+	eolMap := make(map[string]string)
+	if majorErr == nil {
+		for _, mr := range majorReleases {
+			eolMap[mr.ReleaseID] = mr.ReleaseEolDate
+		}
+	}
+
 	// If a specific series is requested (e.g. "mariadb-11.4" or "mysql-11.4")
 	if strings.HasPrefix(name, "mariadb-") || strings.HasPrefix(name, "mysql-") {
 		reqSeries := strings.TrimPrefix(name, "mariadb-")
@@ -114,6 +124,9 @@ func (s *MariaDBSource) Latest(ctx context.Context, name string) ([]LiveRelease,
 		if err != nil {
 			return nil, err
 		}
+		if eol, ok := eolMap[reqSeries]; ok {
+			rel.EOLDate = eol
+		}
 		return []LiveRelease{rel}, nil
 	}
 
@@ -122,12 +135,14 @@ func (s *MariaDBSource) Latest(ctx context.Context, name string) ([]LiveRelease,
 	// 1. Fetch current/installed series patch release
 	patchRel, err := s.fetchSeriesRelease(ctx, client, baseURL, curSeries, "mysql", false)
 	if err == nil {
+		if eol, ok := eolMap[curSeries]; ok {
+			patchRel.EOLDate = eol
+		}
 		results = append(results, patchRel)
 	}
 
-	// 2. Fetch major releases list to discover newer Stable LTS series
-	majorReleases, err := s.fetchMajorReleases(ctx, client, baseURL)
-	if err == nil {
+	// 2. Discover newer Stable LTS series
+	if majorErr == nil {
 		for _, mr := range majorReleases {
 			// Policy: Only Stable LTS. Never offer Preview/RC/Rolling/Short Term Support.
 			statusLower := strings.ToLower(strings.TrimSpace(mr.ReleaseStatus))
@@ -151,6 +166,7 @@ func (s *MariaDBSource) Latest(ctx context.Context, name string) ([]LiveRelease,
 				newerRelName := "mariadb-" + mr.ReleaseID
 				newerRel, err := s.fetchSeriesRelease(ctx, client, baseURL, mr.ReleaseID, newerRelName, true)
 				if err == nil {
+					newerRel.EOLDate = mr.ReleaseEolDate
 					results = append(results, newerRel)
 				}
 			}
@@ -265,4 +281,98 @@ func (s *MariaDBSource) fetchSeriesRelease(ctx context.Context, client *http.Cli
 	}
 
 	return LiveRelease{}, fmt.Errorf("no matching winx64 zip found for mariadb series %s", series)
+}
+
+// RecommendedMariaDBSeries finds the release among the given MariaDB series that has the latest EOLDate.
+// If multiple series have the same EOLDate or invalid dates, ties are broken by version.
+func RecommendedMariaDBSeries(releases []LiveRelease) *LiveRelease {
+	if len(releases) == 0 {
+		return nil
+	}
+	var best *LiveRelease
+	var bestTime time.Time
+	var bestHasDate bool
+
+	for i := range releases {
+		rel := &releases[i]
+		t, err := time.Parse("2006-01-02", strings.TrimSpace(rel.EOLDate))
+		hasDate := (err == nil && !t.IsZero())
+
+		if best == nil {
+			best = rel
+			bestTime = t
+			bestHasDate = hasDate
+			continue
+		}
+
+		if hasDate && bestHasDate {
+			if t.After(bestTime) {
+				best = rel
+				bestTime = t
+			} else if t.Equal(bestTime) {
+				if IsVersionNewer(best.Version, rel.Version) {
+					best = rel
+					bestTime = t
+				}
+			}
+		} else if hasDate && !bestHasDate {
+			best = rel
+			bestTime = t
+			bestHasDate = true
+		} else if !hasDate && !bestHasDate {
+			if IsVersionNewer(best.Version, rel.Version) {
+				best = rel
+			}
+		}
+	}
+	return best
+}
+
+// RecommendedMariaDBRelease is an alias for RecommendedMariaDBSeries.
+func RecommendedMariaDBRelease(releases []LiveRelease) *LiveRelease {
+	return RecommendedMariaDBSeries(releases)
+}
+
+// RecommendedMariaDBUpdate finds the update among the given MariaDB updates that has the latest EOLDate.
+func RecommendedMariaDBUpdate(updates []RuntimeUpdateInfo) *RuntimeUpdateInfo {
+	if len(updates) == 0 {
+		return nil
+	}
+	var best *RuntimeUpdateInfo
+	var bestTime time.Time
+	var bestHasDate bool
+
+	for i := range updates {
+		u := &updates[i]
+		t, err := time.Parse("2006-01-02", strings.TrimSpace(u.EOLDate))
+		hasDate := (err == nil && !t.IsZero())
+
+		if best == nil {
+			best = u
+			bestTime = t
+			bestHasDate = hasDate
+			continue
+		}
+
+		if hasDate && bestHasDate {
+			if t.After(bestTime) {
+				best = u
+				bestTime = t
+			} else if t.Equal(bestTime) {
+				if IsVersionNewer(best.LatestVersion, u.LatestVersion) {
+					best = u
+					bestTime = t
+				}
+			}
+		} else if hasDate && !bestHasDate {
+			best = u
+			bestTime = t
+			bestHasDate = true
+		} else if !hasDate && !bestHasDate {
+			if IsVersionNewer(best.LatestVersion, u.LatestVersion) {
+				best = u
+			}
+		}
+	}
+	return best
 }

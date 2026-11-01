@@ -26,6 +26,7 @@ type LiveRelease struct {
 	MajorChange  bool   `json:"major_change"`
 	Source       string `json:"source"`
 	CompatNote   string `json:"compat_note,omitempty"`
+	EOLDate      string `json:"eol_date,omitempty"`
 }
 
 type ReleaseSource interface {
@@ -127,6 +128,7 @@ type RuntimeUpdateInfo struct {
 	CompatNote      string `json:"compat_note,omitempty"`
 	SourceStatus    string `json:"source_status"`          // "live" | "catalog_fallback"
 	SourceError     string `json:"source_error,omitempty"` // short, English, e.g. "github rate limit, resets 23:40" or "timeout"
+	EOLDate         string `json:"eol_date,omitempty"`
 }
 
 type CheckOptions struct {
@@ -565,6 +567,7 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 
 	// 1. Fetch live releases from the registry across all families
 	liveMap := make(map[string]LiveRelease)
+	var allLiveReleases []LiveRelease
 	var livePHPReleases []LiveRelease
 	familyErrors := make(map[string]error)
 
@@ -592,6 +595,7 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 			}
 			for _, rel := range releases {
 				liveMap[rel.Name] = rel
+				allLiveReleases = append(allLiveReleases, rel)
 				if family == "php" || strings.HasPrefix(rel.Name, "php-") {
 					livePHPReleases = append(livePHPReleases, rel)
 				}
@@ -609,6 +613,7 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 		} else {
 			for _, rel := range releases {
 				liveMap[rel.Name] = rel
+				allLiveReleases = append(allLiveReleases, rel)
 				livePHPReleases = append(livePHPReleases, rel)
 			}
 		}
@@ -661,6 +666,9 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 			info.LatestVersion = rt.Version
 			info.DownloadURL = rt.URL
 			info.SHA256 = rt.SHA256
+			if rt.EOLDate != "" {
+				info.EOLDate = rt.EOLDate
+			}
 		}
 
 		// Detect installed version
@@ -702,6 +710,9 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 			}
 			if liveRel.CompatNote != "" {
 				info.CompatNote = liveRel.CompatNote
+			}
+			if liveRel.EOLDate != "" {
+				info.EOLDate = liveRel.EOLDate
 			}
 		}
 
@@ -794,7 +805,7 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 	}
 
 	// 4. Any other non-PHP live releases not yet in results (e.g. newer MariaDB LTS series like mariadb-11.4)
-	for _, liveRel := range liveMap {
+	for _, liveRel := range allLiveReleases {
 		if processed[liveRel.Name] {
 			continue
 		}
@@ -809,6 +820,7 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 				IsNew:          true,
 				MajorChange:    liveRel.MajorChange,
 				CompatNote:     liveRel.CompatNote,
+				EOLDate:        liveRel.EOLDate,
 				SourceStatus:   "live",
 			})
 			processed[liveRel.Name] = true

@@ -87,6 +87,7 @@ var catalog = map[string]Runtime{
 		URL:     "https://archive.mariadb.org/mariadb-10.11.19/winx64-packages/mariadb-10.11.19-winx64.zip",
 		SHA256:  "398ea30e5036010bbebe01d2b1804280424dcc2626e36d8e95155c04d25a0490",
 		EOL:     false,
+		EOLDate: "2028-02-16",
 		PHPPort: 0,
 	},
 	"redis": {
