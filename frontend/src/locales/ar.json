@@ -319,5 +319,7 @@
   "diag_issue_proxy_port_inactive": "خادم التطبيق غير مشغل على المنفذ :{port}.",
   "diag_sug_start_app": "اضغط على زر «تشغيل التطبيق» في بطاقة المشروع لتشغيل خادم التطبيق الداخلي.",
   "diag_issue_node_modules_missing": "مجلد الحزم node_modules غير موجود.",
-  "diag_sug_npm_install": "قم بتشغيل أمر «npm install» أو بناء المشروع «npm run build»."
+  "diag_sug_npm_install": "قم بتشغيل أمر «npm install» أو بناء المشروع «npm run build».",
+  "project_type_label_static": "ثابت",
+  "project_type_label_non_web": "غير ويب / ملفات"
 }

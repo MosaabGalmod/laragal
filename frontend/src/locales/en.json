@@ -319,5 +319,7 @@
   "diag_issue_proxy_port_inactive": "Application server is not running on port :{port}.",
   "diag_sug_start_app": "Click 'Start App' on the project card to run the internal application server.",
   "diag_issue_node_modules_missing": "node_modules directory does not exist.",
-  "diag_sug_npm_install": "Run 'npm install' or build the project using 'npm run build'."
+  "diag_sug_npm_install": "Run 'npm install' or build the project using 'npm run build'.",
+  "project_type_label_static": "Static",
+  "project_type_label_non_web": "Non-Web"
 }

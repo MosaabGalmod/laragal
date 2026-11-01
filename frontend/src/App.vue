@@ -1309,6 +1309,7 @@ import {
 
 import ServiceCard from './components/ServiceCard.vue'
 import ProjectRow from './components/ProjectRow.vue'
+import { getProjectTypeLabel } from './utils/projectType'
 
 import arLocale from './locales/ar.json'
 import enLocale from './locales/en.json'
@@ -1421,6 +1422,12 @@ watch(isDark, (val) => {
 watch(currentLang, (lang) => {
   document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr'
   document.documentElement.lang = lang
+  if (sites.value && sites.value.length > 0) {
+    sites.value = sites.value.map(s => ({
+      ...s,
+      type_label: getProjectTypeLabel(s.project_type, s.type_label, t),
+    }))
+  }
 }, { immediate: true })
 
 function toggleTheme() {
@@ -1487,22 +1494,7 @@ interface SiteItem {
 function mapSiteItem(item: any): SiteItem {
   const isWeb = item.is_web !== undefined ? Boolean(item.is_web) : (item.IsWeb !== undefined ? Boolean(item.IsWeb) : true)
   const projectType = item.project_type || item.ProjectType || (isWeb ? 'php' : 'non_web')
-  let typeLabel = item.type_label || item.TypeLabel || ''
-  if (!typeLabel) {
-    if (projectType === 'laravel') typeLabel = 'Laravel'
-    else if (projectType === 'wordpress') typeLabel = 'WordPress'
-    else if (projectType === 'php') typeLabel = 'PHP'
-    else if (projectType === 'go') typeLabel = 'Go'
-    else if (projectType === 'rust') typeLabel = 'Rust'
-    else if (projectType === 'dotnet') typeLabel = '.NET / C#'
-    else if (projectType === 'python') typeLabel = 'Python'
-    else if (projectType === 'ruby') typeLabel = 'Ruby'
-    else if (projectType === 'java') typeLabel = 'Java'
-    else if (projectType === 'flutter') typeLabel = 'Flutter Web'
-    else if (projectType === 'static') typeLabel = t('type_static_badge')
-    else if (projectType === 'node') typeLabel = 'Node.js'
-    else typeLabel = t('non_web_badge')
-  }
+  const typeLabel = getProjectTypeLabel(projectType, item.type_label || item.TypeLabel, t)
   const rawPhp = item.php_version || item.PHPVersion || ''
   const isPhpType = projectType === 'laravel' || projectType === 'wordpress' || projectType === 'php'
   const phpVersion = rawPhp ? (rawPhp.startsWith('PHP') ? rawPhp : `PHP ${rawPhp}`) : (isWeb && isPhpType ? 'PHP 8.3' : '')
