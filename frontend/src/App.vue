@@ -1989,19 +1989,7 @@ interface RuntimeArtifact {
   php_port?: number
 }
 
-const runtimeCatalog = ref<RuntimeArtifact[]>([
-  { name: 'caddy', version: '2.11.7', eol: false, php_port: 0 },
-  { name: 'mailpit', version: '1.33.0', eol: false, php_port: 0 },
-  { name: 'php-8.5', version: '8.5.12-1', eol: false, php_port: 9085 },
-  { name: 'php-8.4', version: '8.4.27-1', eol: false, php_port: 9084 },
-  { name: 'php-8.3', version: '8.3.36-1', eol: false, php_port: 9083 },
-  { name: 'php-8.2', version: '8.2.35-1', eol: false, eol_date: '2026-12-31', php_port: 9082 },
-  { name: 'php-8.1', version: '8.1.34', eol: true, eol_date: '2025-12-31', php_port: 9081 },
-  { name: 'mysql', version: '10.11.19', eol: false, php_port: 0 },
-  { name: 'redis', version: '5.0.14.1', eol: true, eol_date: '2022-02-17', php_port: 0 },
-  { name: 'adminer', version: '4.8.1', eol: false, php_port: 0 },
-  { name: 'phpmyadmin', version: '5.2.3', eol: false, php_port: 0 },
-])
+const runtimeCatalog = ref<RuntimeArtifact[]>([])
 
 async function loadRuntimeCatalog() {
   const w = window as any
