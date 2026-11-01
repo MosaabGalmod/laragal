@@ -610,11 +610,32 @@
               v-model="newProject.php"
               class="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:outline-none"
             >
-              <option value="8.4">PHP 8.4 (الأحدث)</option>
-              <option value="8.3">PHP 8.3 (الموصى به لـ Laravel 11/12)</option>
-              <option value="8.2">PHP 8.2</option>
-              <option value="8.1">PHP 8.1</option>
+              <option
+                v-for="opt in phpSelectOptions"
+                :key="opt.version"
+                :value="opt.version"
+              >
+                {{ opt.label }}
+              </option>
             </select>
+            <div v-if="selectedNewProjectPhpMeta?.eol" class="mt-1.5 flex items-center gap-1.5">
+              <span
+                class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-900"
+                :title="t('runtime_eol_tooltip')"
+              >
+                <AlertTriangle class="w-2.5 h-2.5" /> {{ t('runtime_eol_badge') }}
+              </span>
+              <span class="text-[11px] text-rose-600 dark:text-rose-400">
+                {{ t('runtime_eol_tooltip') }}
+              </span>
+            </div>
+            <div v-else-if="selectedNewProjectPhpMeta?.eol_date" class="mt-1.5 flex items-center gap-1.5">
+              <span
+                class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-900"
+              >
+                {{ t('runtime_security_only', { date: selectedNewProjectPhpMeta.eol_date }) }}
+              </span>
+            </div>
           </div>
 
           <div class="pt-4 flex items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800">
@@ -718,23 +739,36 @@
             v-for="rt in availableRuntimes"
             :key="rt.name"
             class="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 space-y-2 transition-all"
-            :class="{ 'border-rose-300 dark:border-rose-900/60 bg-rose-50/20 dark:bg-rose-950/20': runtimeUpdates[rt.name]?.has_update && runtimeUpdates[rt.name]?.is_security_fix }"
+            :class="{ 'border-rose-300 dark:border-rose-900/60 bg-rose-50/20 dark:bg-rose-950/20': (runtimeUpdates[rt.name]?.has_update && runtimeUpdates[rt.name]?.is_security_fix) || getCatalogItem(rt.name)?.eol }"
           >
             <div class="flex items-center justify-between gap-2">
               <div class="space-y-0.5">
                 <div class="flex items-center gap-1.5 flex-wrap">
                   <h4 class="text-sm font-bold text-slate-800 dark:text-slate-200">{{ rt.label }}</h4>
                   <span
+                    v-if="getCatalogItem(rt.name)?.eol"
+                    class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-900"
+                    :title="t('runtime_eol_tooltip')"
+                  >
+                    <AlertTriangle class="w-2.5 h-2.5" /> {{ t('runtime_eol_badge') }}
+                  </span>
+                  <span
+                    v-else-if="getCatalogItem(rt.name)?.eol_date"
+                    class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-900"
+                  >
+                    {{ t('runtime_security_only', { date: getCatalogItem(rt.name)?.eol_date }) }}
+                  </span>
+                  <span
                     v-if="runtimeUpdates[rt.name]?.has_update && runtimeUpdates[rt.name]?.is_security_fix"
                     class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-900"
                   >
-                    <ShieldAlert class="w-2.5 h-2.5" /> ترقية أمنية v{{ runtimeUpdates[rt.name].latest_version }}
+                    <ShieldAlert class="w-2.5 h-2.5" /> ترقية أمنية <bdi dir="ltr">v{{ runtimeUpdates[rt.name].latest_version }}</bdi>
                   </span>
                   <span
                     v-else-if="runtimeUpdates[rt.name]?.has_update"
                     class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-900"
                   >
-                    <ArrowUpCircle class="w-2.5 h-2.5" /> تحديث متاح v{{ runtimeUpdates[rt.name].latest_version }}
+                    <ArrowUpCircle class="w-2.5 h-2.5" /> تحديث متاح <bdi dir="ltr">v{{ runtimeUpdates[rt.name].latest_version }}</bdi>
                   </span>
                 </div>
                 <p class="text-[11px] text-slate-400 font-mono">{{ rt.desc }}</p>
@@ -966,11 +1000,32 @@
               class="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">الافتراضي العام للبرنامج</option>
-              <option value="PHP 8.4">PHP 8.4</option>
-              <option value="PHP 8.3">PHP 8.3</option>
-              <option value="PHP 8.2">PHP 8.2</option>
-              <option value="PHP 8.1">PHP 8.1</option>
+              <option
+                v-for="opt in phpSelectOptionsPrefixed"
+                :key="opt.value"
+                :value="opt.value"
+              >
+                {{ opt.label }}
+              </option>
             </select>
+            <div v-if="selectedSettingsPhpMeta?.eol" class="mt-1.5 flex items-center gap-1.5">
+              <span
+                class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-900"
+                :title="t('runtime_eol_tooltip')"
+              >
+                <AlertTriangle class="w-2.5 h-2.5" /> {{ t('runtime_eol_badge') }}
+              </span>
+              <span class="text-[11px] text-rose-600 dark:text-rose-400">
+                {{ t('runtime_eol_tooltip') }}
+              </span>
+            </div>
+            <div v-else-if="selectedSettingsPhpMeta?.eol_date" class="mt-1.5 flex items-center gap-1.5">
+              <span
+                class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-900"
+              >
+                {{ t('runtime_security_only', { date: selectedSettingsPhpMeta.eol_date }) }}
+              </span>
+            </div>
           </div>
 
           <!-- Ignore toggle -->
@@ -1458,7 +1513,7 @@ function mapSiteItem(item: any): SiteItem {
     path: item.path || item.Path || '',
     root_path: item.root_path || item.RootPath || '',
     php_version: phpVersion,
-    php_port: item.php_port !== undefined ? item.php_port : (item.PHPPort !== undefined ? item.PHPPort : (isWeb && isPhpType ? 9083 : 0)),
+    php_port: item.php_port !== undefined ? item.php_port : (item.PHPPort !== undefined ? item.PHPPort : (isWeb && isPhpType ? getPHPPort(item.php_version) : 0)),
     proxy_port: item.proxy_port || item.ProxyPort || (projectType === 'go' ? 8080 : 0),
     project_type: projectType,
     type_label: typeLabel,
@@ -1559,7 +1614,7 @@ async function updateSitePHPVersion(site: SiteItem, event: Event) {
     try {
       const updated = await (window as any).go.main.App.SetProjectPHPVersion(targetPath, newVer)
       site.php_version = `PHP ${newVer}`
-      site.php_port = newVer === '8.5' ? 9085 : (newVer === '8.4' ? 9084 : (newVer === '8.3' ? 9083 : (newVer === '8.2' ? 9082 : 9081)))
+      site.php_port = getPHPPort(newVer)
       notification.value = `${t('php_version_changed')} ${site.domain} ➔ PHP ${newVer}`
       if (Array.isArray(updated)) {
         sites.value = updated.map(mapSiteItem)
@@ -1569,7 +1624,7 @@ async function updateSitePHPVersion(site: SiteItem, event: Event) {
     }
   } else {
     site.php_version = `PHP ${newVer}`
-    site.php_port = newVer === '8.5' ? 9085 : (newVer === '8.4' ? 9084 : (newVer === '8.3' ? 9083 : (newVer === '8.2' ? 9082 : 9081)))
+    site.php_port = getPHPPort(newVer)
     notification.value = `${t('php_version_changed')} ${site.domain} ➔ PHP ${newVer}`
   }
 }
@@ -1640,7 +1695,7 @@ async function runDiagnostics(site: SiteItem) {
       domain: site.domain,
       project_type: site.project_type || 'php',
       php_version: site.php_version || 'PHP 8.3',
-      php_port: site.php_port || 9083,
+      php_port: site.php_port || getPHPPort(site.php_version),
       proxy_port: site.proxy_port || 0,
       doc_root: site.root_path,
       doc_root_exists: true,
@@ -1872,6 +1927,7 @@ onMounted(async () => {
     }
   }
   Promise.all([
+    loadRuntimeCatalog(),
     loadRecentDirectories(),
     loadSites(),
     loadServices(),
@@ -1894,7 +1950,8 @@ const downloadProgress = ref<Record<string, number>>({})
 
 const availableRuntimes = ref([
   { name: 'caddy', label: 'Caddy Server v2.8', desc: 'خادم الويب الرئيسي وإدارة شهادات SSL التلقائية' },
-  { name: 'php-8.4', label: 'PHP 8.4 (NTS x64)', desc: 'أحدث إصدار رسمي لمحرك PHP' },
+  { name: 'php-8.5', label: 'PHP 8.5 (NTS x64)', desc: 'أحدث إصدار رسمي لمحرك PHP' },
+  { name: 'php-8.4', label: 'PHP 8.4 (NTS x64)', desc: 'إصدار رسمي مستقر لمحرك PHP' },
   { name: 'php-8.3', label: 'PHP 8.3 (NTS x64)', desc: 'إصدار مستقر موصى به لـ Laravel 11/12' },
   { name: 'php-8.2', label: 'PHP 8.2 (NTS x64)', desc: 'إصدار مستقر متوافق مع المشاريع السابقة' },
   { name: 'php-8.1', label: 'PHP 8.1 (NTS x64)', desc: 'إصدار متوافق مع مشاريع PHP 8.1 القديمة' },
@@ -1908,11 +1965,11 @@ const locales: Record<string, Record<string, string>> = {
   en: enLocale
 }
 
-function t(key: string, params?: Record<string, string | number>): string {
+function t(key: string, params?: Record<string, string | number | undefined>): string {
   let str = locales[currentLang.value]?.[key] || key
   if (params) {
     for (const [k, v] of Object.entries(params)) {
-      str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v))
+      str = str.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v ?? ''))
     }
   }
   return str
@@ -1921,6 +1978,148 @@ function t(key: string, params?: Record<string, string | number>): string {
 function toggleLang() {
   currentLang.value = currentLang.value === 'ar' ? 'en' : 'ar'
 }
+
+interface RuntimeArtifact {
+  name: string
+  version?: string
+  url?: string
+  sha256?: string
+  eol?: boolean
+  eol_date?: string
+  php_port?: number
+}
+
+const runtimeCatalog = ref<RuntimeArtifact[]>([
+  { name: 'caddy', version: '2.11.7', eol: false, php_port: 0 },
+  { name: 'mailpit', version: '1.33.0', eol: false, php_port: 0 },
+  { name: 'php-8.5', version: '8.5.12-1', eol: false, php_port: 9085 },
+  { name: 'php-8.4', version: '8.4.27-1', eol: false, php_port: 9084 },
+  { name: 'php-8.3', version: '8.3.36-1', eol: false, php_port: 9083 },
+  { name: 'php-8.2', version: '8.2.35-1', eol: false, eol_date: '2026-12-31', php_port: 9082 },
+  { name: 'php-8.1', version: '8.1.34', eol: true, eol_date: '2025-12-31', php_port: 9081 },
+  { name: 'mysql', version: '10.11.19', eol: false, php_port: 0 },
+  { name: 'redis', version: '5.0.14.1', eol: true, eol_date: '2022-02-17', php_port: 0 },
+  { name: 'adminer', version: '4.8.1', eol: false, php_port: 0 },
+  { name: 'phpmyadmin', version: '5.2.3', eol: false, php_port: 0 },
+])
+
+async function loadRuntimeCatalog() {
+  const w = window as any
+  if (w.go?.main?.App?.GetRuntimeCatalog) {
+    try {
+      const list = await w.go.main.App.GetRuntimeCatalog()
+      if (Array.isArray(list) && list.length > 0) {
+        runtimeCatalog.value = list
+      }
+    } catch (e) {
+      console.warn("Could not load runtime catalog:", e)
+    }
+  }
+}
+
+function getCatalogItem(name: string): RuntimeArtifact | undefined {
+  return runtimeCatalog.value.find(r => r.name === name || r.name === `php-${name}` || (name.startsWith('php-') && r.name === name))
+}
+
+function compareVersions(v1: string, v2: string): number {
+  const p1 = v1.split('.').map(n => parseInt(n, 10) || 0)
+  const p2 = v2.split('.').map(n => parseInt(n, 10) || 0)
+  for (let i = 0; i < Math.max(p1.length, p2.length); i++) {
+    const a = p1[i] || 0
+    const b = p2[i] || 0
+    if (a > b) return 1
+    if (a < b) return -1
+  }
+  return 0
+}
+
+const phpCatalog = computed(() => {
+  return runtimeCatalog.value.filter(r => r.name.startsWith('php-') && (r.php_port || 0) > 0)
+})
+
+const latestPhpVersion = computed(() => {
+  let highest = ''
+  for (const item of phpCatalog.value) {
+    const ver = item.name.replace(/^php-/, '')
+    if (!highest || compareVersions(ver, highest) > 0) {
+      highest = ver
+    }
+  }
+  return highest || '8.5'
+})
+
+function getPHPPort(version?: string): number {
+  if (!version) return 9083
+  const clean = extractPhpVersionNumber(version)
+  const exact = runtimeCatalog.value.find(r => r.name === `php-${clean}` || r.name === clean)
+  if (exact && exact.php_port) return exact.php_port
+  const parts = clean.split('.')
+  if (parts.length === 2) {
+    const maj = parseInt(parts[0], 10)
+    const min = parseInt(parts[1], 10)
+    if (!isNaN(maj) && !isNaN(min)) {
+      return 9000 + (maj * 10) + min
+    }
+  }
+  return 9083
+}
+
+const phpSelectOptions = computed(() => {
+  return phpCatalog.value.map(item => {
+    const ver = item.name.replace(/^php-/, '')
+    let suffix = ''
+    if (ver === latestPhpVersion.value) {
+      suffix = ` (${t('php_latest_label')})`
+    } else if (ver === '8.3') {
+      suffix = currentLang.value === 'ar' ? ' (الموصى به لـ Laravel 11/12)' : ' (Recommended for Laravel 11/12)'
+    } else if (item.eol) {
+      suffix = ` (${t('runtime_eol_badge')})`
+    } else if (item.eol_date) {
+      suffix = ` (${t('runtime_security_only', { date: item.eol_date })})`
+    }
+    return {
+      version: ver,
+      label: `PHP ${ver}${suffix}`,
+      eol: Boolean(item.eol),
+      eol_date: item.eol_date,
+      php_port: item.php_port,
+    }
+  })
+})
+
+const phpSelectOptionsPrefixed = computed(() => {
+  return phpCatalog.value.map(item => {
+    const ver = item.name.replace(/^php-/, '')
+    let suffix = ''
+    if (ver === latestPhpVersion.value) {
+      suffix = ` (${t('php_latest_label')})`
+    } else if (ver === '8.3') {
+      suffix = currentLang.value === 'ar' ? ' (الموصى به لـ Laravel 11/12)' : ' (Recommended for Laravel 11/12)'
+    } else if (item.eol) {
+      suffix = ` (${t('runtime_eol_badge')})`
+    } else if (item.eol_date) {
+      suffix = ` (${t('runtime_security_only', { date: item.eol_date })})`
+    }
+    return {
+      value: `PHP ${ver}`,
+      version: ver,
+      label: `PHP ${ver}${suffix}`,
+      eol: Boolean(item.eol),
+      eol_date: item.eol_date,
+      php_port: item.php_port,
+    }
+  })
+})
+
+const selectedNewProjectPhpMeta = computed(() => {
+  const ver = newProject.value.php
+  return phpCatalog.value.find(item => item.name === `php-${ver}` || item.name === ver)
+})
+
+const selectedSettingsPhpMeta = computed(() => {
+  const ver = extractPhpVersionNumber(settingsForm.value.php_version)
+  return phpCatalog.value.find(item => item.name === `php-${ver}` || item.name === ver)
+})
 
 interface ServiceItem {
   id: string
@@ -2240,7 +2439,7 @@ async function handleCreateProject() {
 
   const projectName = newProject.value.name.trim().toLowerCase()
   const domain = `${projectName}.test`
-  const port = newProject.value.php === '8.4' ? 9084 : (newProject.value.php === '8.3' ? 9083 : 9082)
+  const port = getPHPPort(newProject.value.php)
   const rootPath = `${projectsDirectory.value.replace(/\\/g, '/')}/${projectName}/public`
 
   if ((window as any).go?.main?.App?.CreateProject) {

@@ -219,5 +219,9 @@
   "clear_search_btn": "مسح البحث",
   "type_static": "HTML ثابت",
   "type_web": "موقع ويب",
-  "copy_path": "نسخ المسار"
+  "copy_path": "نسخ المسار",
+  "runtime_eol_badge": "انتهى الدعم",
+  "runtime_eol_tooltip": "هذا الإصدار لم يعد يتلقى تحديثات أمنية؛ يُنصح بالترقية.",
+  "runtime_security_only": "تحديثات أمنية فقط حتى {date}",
+  "php_latest_label": "الأحدث"
 }

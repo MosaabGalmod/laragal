@@ -219,5 +219,9 @@
   "clear_search_btn": "Clear search",
   "type_static": "Static HTML",
   "type_web": "Web",
-  "copy_path": "Copy path"
+  "copy_path": "Copy path",
+  "runtime_eol_badge": "End of life",
+  "runtime_eol_tooltip": "This version no longer receives security updates; upgrading is recommended.",
+  "runtime_security_only": "Security fixes only until {date}",
+  "php_latest_label": "latest"
 }

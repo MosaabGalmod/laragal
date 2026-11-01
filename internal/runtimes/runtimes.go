@@ -18,6 +18,9 @@ type Runtime struct {
 	PHPPort int    `json:"php_port,omitempty"`
 }
 
+// Artifact is an alias for Runtime representing catalog artifact metadata.
+type Artifact = Runtime
+
 // catalog defines the single canonical source of truth for all bundled runtimes in LaraGal.
 var catalog = map[string]Runtime{
 	"caddy": {

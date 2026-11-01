@@ -11,6 +11,7 @@ import (
 	"github.com/laragal/laragal/internal/config"
 	"github.com/laragal/laragal/internal/process"
 	"github.com/laragal/laragal/internal/services/adminer"
+	"github.com/laragal/laragal/internal/runtimes"
 	"github.com/laragal/laragal/internal/services/caddy"
 )
 
@@ -444,5 +445,61 @@ func TestOpenPhpMyAdmin_NotInstalled(t *testing.T) {
 	err := app.OpenPhpMyAdmin("")
 	if err == nil {
 		t.Fatalf("expected error when phpMyAdmin is not installed, got nil")
+	}
+}
+
+func TestGetRuntimeCatalog(t *testing.T) {
+	app := &App{}
+	catalog := app.GetRuntimeCatalog()
+	if len(catalog) == 0 {
+		t.Fatal("expected non-empty runtime catalog")
+	}
+
+	phpPorts := map[string]int{
+		"php-8.5": 9085,
+		"php-8.4": 9084,
+		"php-8.3": 9083,
+		"php-8.2": 9082,
+		"php-8.1": 9081,
+	}
+
+	foundPHP := make(map[string]runtimes.Artifact)
+	for _, item := range catalog {
+		if strings.HasPrefix(item.Name, "php-") {
+			foundPHP[item.Name] = item
+		}
+	}
+
+	for name, expectedPort := range phpPorts {
+		item, exists := foundPHP[name]
+		if !exists {
+			t.Errorf("expected catalog to contain %s", name)
+			continue
+		}
+		if item.PHPPort != expectedPort {
+			t.Errorf("expected %s port to be %d, got %d", name, expectedPort, item.PHPPort)
+		}
+	}
+
+	php81, ok := foundPHP["php-8.1"]
+	if !ok {
+		t.Fatal("php-8.1 not found in catalog")
+	}
+	if !php81.EOL {
+		t.Errorf("expected php-8.1 EOL to be true, got false")
+	}
+	if php81.EOLDate != "2025-12-31" {
+		t.Errorf("expected php-8.1 EOLDate to be 2025-12-31, got %s", php81.EOLDate)
+	}
+
+	php82, ok := foundPHP["php-8.2"]
+	if !ok {
+		t.Fatal("php-8.2 not found in catalog")
+	}
+	if php82.EOL {
+		t.Errorf("expected php-8.2 EOL to be false, got true")
+	}
+	if php82.EOLDate != "2026-12-31" {
+		t.Errorf("expected php-8.2 EOLDate to be 2026-12-31, got %s", php82.EOLDate)
 	}
 }

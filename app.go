@@ -20,6 +20,7 @@ import (
 	"github.com/laragal/laragal/internal/privilege"
 	"github.com/laragal/laragal/internal/process"
 	"github.com/laragal/laragal/internal/projects"
+	"github.com/laragal/laragal/internal/runtimes"
 	"github.com/laragal/laragal/internal/services/adminer"
 	"github.com/laragal/laragal/internal/services/caddy"
 	"github.com/laragal/laragal/internal/services/mysql"
@@ -322,8 +323,8 @@ func (a *App) ensurePHPServiceRunning(version string) error {
 	if a.supervisor == nil {
 		return nil
 	}
-	normVer := projects.NormalizePHPVersion(version)
-	port := projects.PHPPortForVersion(normVer)
+	normVer := runtimes.NormalizePHPVersion(version)
+	port := runtimes.PHPPortForVersion(normVer)
 	serviceName := fmt.Sprintf("php-%s", normVer)
 	if a.isUserStopped(serviceName) {
 		return nil
@@ -383,12 +384,13 @@ func (a *App) StartServices() {
 		"PHP_FCGI_MAX_REQUESTS=10000",
 	}
 
-	// 1. Start PHP FastCGI 8.4 and 8.3
-	if php84 := a.findPHPExecutableForVersion("8.4"); php84 != "" {
-		_ = a.supervisor.StartServiceWithEnv("php-8.4", php84, []string{"-b", "127.0.0.1:9084"}, phpEnv, 9084)
-	}
-	if php83 := a.findPHPExecutableForVersion("8.3"); php83 != "" {
-		_ = a.supervisor.StartServiceWithEnv("php-8.3", php83, []string{"-b", "127.0.0.1:9083"}, phpEnv, 9083)
+	// 1. Start PHP FastCGI services from runtime catalog
+	for _, ver := range []string{"8.4", "8.3"} {
+		rtName := fmt.Sprintf("php-%s", ver)
+		port := runtimes.PHPPortForVersion(ver)
+		if phpExe := a.findPHPExecutableForVersion(ver); phpExe != "" {
+			_ = a.supervisor.StartServiceWithEnv(rtName, phpExe, []string{"-b", fmt.Sprintf("127.0.0.1:%d", port)}, phpEnv, port)
+		}
 	}
 
 	// 2. Start Caddy on 443
@@ -432,7 +434,7 @@ func (a *App) ToggleService(name string) (bool, error) {
 	isPHP := strings.HasPrefix(name, "php-")
 	if isPHP {
 		ver := strings.TrimPrefix(name, "php-")
-		port = projects.PHPPortForVersion(ver)
+		port = runtimes.PHPPortForVersion(ver)
 	} else {
 		switch name {
 		case "caddy":
@@ -574,7 +576,7 @@ func (a *App) GetServices() []process.ServiceStatus {
 		var port int
 		if strings.HasPrefix(name, "php-") {
 			ver := strings.TrimPrefix(name, "php-")
-			port = projects.PHPPortForVersion(ver)
+			port = runtimes.PHPPortForVersion(ver)
 		} else {
 			switch name {
 			case "caddy":
@@ -763,6 +765,11 @@ func (a *App) DownloadBinary(name string) (string, error) {
 	}
 
 	return fmt.Sprintf("تم تنزيل وتثبيت %s بنجاح في %s", name, destDir), nil
+}
+
+// GetRuntimeCatalog returns all runtime artifacts from the catalog.
+func (a *App) GetRuntimeCatalog() []runtimes.Artifact {
+	return runtimes.All()
 }
 
 // CheckRuntimeUpdates inspects available version upgrades and security releases for managed runtimes
@@ -1348,7 +1355,7 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 	pType := "php"
 	domain := pName + a.cfg.DomainSuffix
 	docRoot := cleanPath
-	phpPort := 9083
+	phpPort := runtimes.PHPPortForVersion(a.cfg.DefaultPHP)
 	phpVer := a.cfg.DefaultPHP
 	proxyPort := 0
 
@@ -1588,8 +1595,8 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 						proxyPort = override.ProxyPort
 					}
 					if override.PHPVersion != "" {
-						phpVer = projects.NormalizePHPVersion(override.PHPVersion)
-						phpPort = projects.PHPPortForVersion(phpVer)
+						phpVer = runtimes.NormalizePHPVersion(override.PHPVersion)
+						phpPort = runtimes.PHPPortForVersion(phpVer)
 					}
 				}
 			}
@@ -1597,14 +1604,14 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 
 		// 2. Standalone ProjectPHP overrides fallback
 		if overrideVer, exists := a.cfg.ProjectPHP[cleanKey]; exists && overrideVer != "" {
-			phpVer = projects.NormalizePHPVersion(overrideVer)
-			phpPort = projects.PHPPortForVersion(phpVer)
+			phpVer = runtimes.NormalizePHPVersion(overrideVer)
+			phpPort = runtimes.PHPPortForVersion(phpVer)
 		} else if overrideVer, exists := a.cfg.ProjectPHP[projectName]; exists && overrideVer != "" {
-			phpVer = projects.NormalizePHPVersion(overrideVer)
-			phpPort = projects.PHPPortForVersion(phpVer)
+			phpVer = runtimes.NormalizePHPVersion(overrideVer)
+			phpPort = runtimes.PHPPortForVersion(phpVer)
 		} else if overrideVer, exists := a.cfg.ProjectPHP[detected.Domain]; exists && overrideVer != "" {
-			phpVer = projects.NormalizePHPVersion(overrideVer)
-			phpPort = projects.PHPPortForVersion(phpVer)
+			phpVer = runtimes.NormalizePHPVersion(overrideVer)
+			phpPort = runtimes.PHPPortForVersion(phpVer)
 		}
 
 		scannedSites = append(scannedSites, caddy.SiteDef{
@@ -1634,8 +1641,8 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 			s := &sites[i]
 			if s.IsWeb && s.PHPPort > 0 && s.PHPVersion != "" {
 				if a.findPHPExecutableForVersion(s.PHPVersion) == "" {
-					s.PHPVersion = projects.NormalizePHPVersion(a.cfg.DefaultPHP)
-					s.PHPPort = projects.PHPPortForVersion(s.PHPVersion)
+					s.PHPVersion = runtimes.NormalizePHPVersion(a.cfg.DefaultPHP)
+					s.PHPPort = runtimes.PHPPortForVersion(s.PHPVersion)
 				}
 				_ = a.ensurePHPServiceRunning(s.PHPVersion)
 			}
@@ -1766,10 +1773,11 @@ func (a *App) SyncHosts() (string, error) {
 // getActivePHPPort returns the port of the currently running PHP FastCGI instance, or default port
 func (a *App) getActivePHPPort() int {
 	if a.supervisor != nil {
-		for _, v := range []string{"8.4", "8.3", "8.2", "8.1"} {
-			svcName := "php-" + v
-			if st, ok := a.supervisor.GetServiceStatus(svcName); ok && st.Running {
-				return projects.PHPPortForVersion(v)
+		for _, rt := range runtimes.All() {
+			if strings.HasPrefix(rt.Name, "php-") && rt.PHPPort > 0 {
+				if st, ok := a.supervisor.GetServiceStatus(rt.Name); ok && st.Running {
+					return rt.PHPPort
+				}
 			}
 		}
 	}
@@ -1777,7 +1785,7 @@ func (a *App) getActivePHPPort() int {
 	if a.cfg != nil && a.cfg.DefaultPHP != "" {
 		defVer = a.cfg.DefaultPHP
 	}
-	return projects.PHPPortForVersion(defVer)
+	return runtimes.PHPPortForVersion(defVer)
 }
 
 // EnsureAdminerInstalled verifies that data/adminer/index.php is present or writes embedded release
