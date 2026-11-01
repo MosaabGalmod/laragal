@@ -13,127 +13,66 @@ import (
 )
 
 func TestParsePHPReleasesJSON(t *testing.T) {
-	sampleJSON := `{
-		"8.4": {
-			"8.4.5": {
-				"version": "8.4.5",
-				"security": "yes",
-				"nts": {
-					"vs17": {
-						"x64": {
-							"zip": {
-								"url": "https://windows.php.net/downloads/releases/php-8.4.5-nts-Win32-vs17-x64.zip"
-							}
-						}
-					}
-				}
-			}
-		},
-		"8.3": {
-			"8.3.17": {
-				"version": "8.3.17",
-				"security": "no"
-			}
-		}
-	}`
+	data, err := os.ReadFile(filepath.Join("testdata", "releases.json"))
+	if err != nil {
+		t.Fatalf("failed to read testdata/releases.json: %v", err)
+	}
 
-	releases, err := updater.ParsePHPReleasesJSON([]byte(sampleJSON))
+	releases, err := updater.ParsePHPReleasesJSON(data)
 	if err != nil {
 		t.Fatalf("ParsePHPReleasesJSON failed: %v", err)
 	}
 
-	if ver, ok := releases["8.4"]; !ok || ver.Version != "8.4.5" {
-		t.Errorf("expected 8.4.5, got %v", ver)
-	}
-	if !releases["8.4"].IsSecurity {
-		t.Errorf("expected 8.4.5 to be marked as security release")
-	}
-	if releases["8.4"].ZipURL != "https://windows.php.net/downloads/releases/php-8.4.5-nts-Win32-vs17-x64.zip" {
-		t.Errorf("expected valid zip url, got: %s", releases["8.4"].ZipURL)
-	}
-
-	if ver, ok := releases["8.3"]; !ok || ver.Version != "8.3.17" {
-		t.Errorf("expected 8.3.17, got %v", ver)
-	}
-	if releases["8.3"].IsSecurity {
-		t.Errorf("expected 8.3.17 to not be marked as security release")
-	}
-}
-
-func TestParsePHPReleasesJSON_SelectsNTSx64BuildExplicitly(t *testing.T) {
-	complexJSON := `{
-		"8.4": {
-			"8.4.6": {
-				"version": "8.4.6",
-				"security": "yes",
-				"ts-vs17-x64": {
-					"zip": {
-						"url": "https://windows.php.net/downloads/releases/php-8.4.6-Win32-vs17-x64.zip",
-						"sha256": "1111111111111111111111111111111111111111111111111111111111111111"
-					}
-				},
-				"nts-vs17-x86": {
-					"zip": {
-						"url": "https://windows.php.net/downloads/releases/php-8.4.6-nts-Win32-vs17-x86.zip",
-						"sha256": "2222222222222222222222222222222222222222222222222222222222222222"
-					}
-				},
-				"debug_pack": {
-					"zip": {
-						"url": "https://windows.php.net/downloads/releases/php-debug-pack-8.4.6-nts-Win32-vs17-x64.zip",
-						"sha256": "3333333333333333333333333333333333333333333333333333333333333333"
-					}
-				},
-				"nts-vs17-x64": {
-					"zip": {
-						"url": "https://windows.php.net/downloads/releases/php-8.4.6-nts-Win32-vs17-x64.zip",
-						"sha256": "4444444444444444444444444444444444444444444444444444444444444444"
-					}
-				}
-			}
-		}
-	}`
-
-	releases, err := updater.ParsePHPReleasesJSON([]byte(complexJSON))
-	if err != nil {
-		t.Fatalf("ParsePHPReleasesJSON failed: %v", err)
-	}
-
-	meta, ok := releases["8.4"]
+	meta84, ok := releases["8.4"]
 	if !ok {
 		t.Fatalf("expected 8.4 in releases")
 	}
-
-	expectedURL := "https://windows.php.net/downloads/releases/php-8.4.6-nts-Win32-vs17-x64.zip"
-	if meta.ZipURL != expectedURL {
-		t.Errorf("expected NTS x64 zip URL %q, got %q", expectedURL, meta.ZipURL)
+	if meta84.Version != "8.4.27-1" {
+		t.Errorf("expected 8.4.27-1, got %s", meta84.Version)
+	}
+	const expected84URL = "https://windows.php.net/downloads/releases/php-8.4.27-1-nts-Win32-vs17-x64.zip"
+	if meta84.ZipURL != expected84URL {
+		t.Errorf("expected %s, got %s", expected84URL, meta84.ZipURL)
+	}
+	const expected84SHA = "dbae154a0a89791f36c3d48e68bae797878333e7d6cb5721e74617de59b63ab7"
+	if meta84.SHA256 != expected84SHA {
+		t.Errorf("expected %s, got %s", expected84SHA, meta84.SHA256)
+	}
+	if meta84.IsSecurity {
+		t.Errorf("expected IsSecurity to be false")
 	}
 
-	expectedSHA := "4444444444444444444444444444444444444444444444444444444444444444"
-	if meta.SHA256 != expectedSHA {
-		t.Errorf("expected SHA-256 %q, got %q", expectedSHA, meta.SHA256)
+	// 8.1 uses nts-vs16-x64
+	meta81, ok := releases["8.1"]
+	if !ok {
+		t.Fatalf("expected 8.1 in releases")
+	}
+	if meta81.Version != "8.1.34" {
+		t.Errorf("expected 8.1.34, got %s", meta81.Version)
+	}
+	const expected81URL = "https://windows.php.net/downloads/releases/php-8.1.34-nts-Win32-vs16-x64.zip"
+	if meta81.ZipURL != expected81URL {
+		t.Errorf("expected %s, got %s", expected81URL, meta81.ZipURL)
+	}
+	const expected81SHA = "9cfe246cb144076c16f5913a3ef88a474c3dd7e60f0f0c8bb95faf68674016cc"
+	if meta81.SHA256 != expected81SHA {
+		t.Errorf("expected %s, got %s", expected81SHA, meta81.SHA256)
 	}
 }
 
 func TestCheckUpdates_WithMockServer(t *testing.T) {
-	mockJSON := `{
-		"8.4": {
-			"8.4.5": {
-				"version": "8.4.5",
-				"security": "yes",
-				"announcement": "Security fix for CVE-2025-XXXX"
-			}
-		}
-	}`
+	data, err := os.ReadFile(filepath.Join("testdata", "releases.json"))
+	if err != nil {
+		t.Fatalf("failed to read testdata/releases.json: %v", err)
+	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(mockJSON))
+		_, _ = w.Write(data)
 	}))
 	defer server.Close()
 
 	tempBin := t.TempDir()
-	// Create simulated php-8.4 folder
 	phpDir := filepath.Join(tempBin, "php-8.4")
 	_ = os.MkdirAll(phpDir, 0755)
 
@@ -142,7 +81,7 @@ func TestCheckUpdates_WithMockServer(t *testing.T) {
 		HTTPTimeout:    2 * time.Second,
 		BaseBinDir:     tempBin,
 		InstalledVersions: map[string]string{
-			"php-8.4": "8.4.4", // Current installed is older
+			"php-8.4": "8.4.26", // Current installed is older than 8.4.27-1
 			"caddy":   "2.8.4",
 		},
 	}
@@ -164,13 +103,14 @@ func TestCheckUpdates_WithMockServer(t *testing.T) {
 		t.Fatalf("expected update entry for php-8.4")
 	}
 	if !phpUpdate.HasUpdate {
-		t.Errorf("expected HasUpdate to be true for php-8.4 (8.4.4 vs 8.4.5)")
+		t.Errorf("expected HasUpdate to be true for php-8.4 (8.4.26 vs 8.4.27-1)")
 	}
-	if !phpUpdate.IsSecurityFix {
-		t.Errorf("expected IsSecurityFix to be true")
+	if phpUpdate.LatestVersion != "8.4.27-1" {
+		t.Errorf("expected latest version 8.4.27-1, got %s", phpUpdate.LatestVersion)
 	}
-	if phpUpdate.LatestVersion != "8.4.5" {
-		t.Errorf("expected latest version 8.4.5, got %s", phpUpdate.LatestVersion)
+	const expected84SHA = "dbae154a0a89791f36c3d48e68bae797878333e7d6cb5721e74617de59b63ab7"
+	if phpUpdate.SHA256 != expected84SHA {
+		t.Errorf("expected SHA256 %s, got %s", expected84SHA, phpUpdate.SHA256)
 	}
 }
 

@@ -41,169 +41,86 @@ type PHPVersionMeta struct {
 	SHA256     string
 }
 
-func extractZipAndSHA(node interface{}) (string, string) {
-	m, ok := node.(map[string]interface{})
-	if !ok {
-		return "", ""
-	}
+const defaultPHPReleasesBaseURL = "https://windows.php.net/downloads/releases/"
 
-	var urlStr, shaStr string
-
-	if zipNode, hasZip := m["zip"]; hasZip {
-		if zipMap, ok := zipNode.(map[string]interface{}); ok {
-			if u, ok := zipMap["url"].(string); ok {
-				urlStr = u
-			}
-			if s, ok := zipMap["sha256"].(string); ok {
-				shaStr = s
-			}
-		}
-	}
-
-	if urlStr == "" {
-		if u, ok := m["url"].(string); ok && strings.HasSuffix(strings.ToLower(u), ".zip") {
-			urlStr = u
-		}
-	}
-
-	if shaStr == "" {
-		if s, ok := m["sha256"].(string); ok {
-			shaStr = s
-		}
-	}
-
-	return urlStr, strings.ToLower(strings.TrimSpace(shaStr))
-}
-
-func normalizePHPURL(u string) string {
-	if u == "" {
-		return ""
-	}
-	if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
-		return u
-	}
-	if strings.HasPrefix(u, "/") {
-		return "https://windows.php.net" + u
-	}
-	return "https://windows.php.net/downloads/releases/" + u
-}
-
-// extractNTSx64Build selects the 64-bit Non-Thread Safe (NTS) zip build explicitly,
-// prioritizing modern vs17/vs16 toolchains and rejecting TS, debug packs, and x86 builds.
-func extractNTSx64Build(vMap map[string]interface{}) (string, string) {
-	// 1. Explicit flat keys with compiler prioritization (e.g. "nts-vs17-x64")
-	flatKeys := []string{"nts-vs17-x64", "nts-vs16-x64", "nts-vs15-x64", "nts-x64"}
-	for _, k := range flatKeys {
-		if child, ok := vMap[k]; ok {
-			if u, s := extractZipAndSHA(child); u != "" {
-				return normalizePHPURL(u), s
-			}
-		}
-	}
-
-	// 2. Nested under "nts": e.g. vMap["nts"]["vs17"]["x64"]["zip"]
-	if ntsNode, ok := vMap["nts"].(map[string]interface{}); ok {
-		compKeys := []string{"vs17", "vs16", "vs15"}
-		for _, comp := range compKeys {
-			if compNode, ok := ntsNode[comp].(map[string]interface{}); ok {
-				if x64Node, ok := compNode["x64"]; ok {
-					if u, s := extractZipAndSHA(x64Node); u != "" {
-						return normalizePHPURL(u), s
-					}
-				}
-			}
-		}
-		if x64Node, ok := ntsNode["x64"]; ok {
-			if u, s := extractZipAndSHA(x64Node); u != "" {
-				return normalizePHPURL(u), s
-			}
-		}
-		for _, compVal := range ntsNode {
-			if compNode, ok := compVal.(map[string]interface{}); ok {
-				if x64Node, ok := compNode["x64"]; ok {
-					if u, s := extractZipAndSHA(x64Node); u != "" {
-						return normalizePHPURL(u), s
-					}
-				}
-			}
-		}
-	}
-
-	// 3. Nested under compiler key first: e.g. vMap["vs17"]["nts"]["x64"]
-	for _, comp := range []string{"vs17", "vs16", "vs15"} {
-		if compNode, ok := vMap[comp].(map[string]interface{}); ok {
-			if ntsNode, ok := compNode["nts"].(map[string]interface{}); ok {
-				if x64Node, ok := ntsNode["x64"]; ok {
-					if u, s := extractZipAndSHA(x64Node); u != "" {
-						return normalizePHPURL(u), s
-					}
-				}
-			}
-		}
-	}
-
-	// 4. Any key matching nts and x64 and not debug or ts
-	for k, v := range vMap {
-		kLower := strings.ToLower(k)
-		if strings.Contains(kLower, "nts") && strings.Contains(kLower, "x64") && !strings.Contains(kLower, "debug") && !strings.HasPrefix(kLower, "ts") {
-			if u, s := extractZipAndSHA(v); u != "" {
-				return normalizePHPURL(u), s
-			}
-		}
-	}
-
-	return "", ""
-}
-
-// ParsePHPReleasesJSON parses windows.php.net releases.json feed
-func ParsePHPReleasesJSON(data []byte) (map[string]PHPVersionMeta, error) {
+// ParsePHPReleasesJSON parses windows.php.net releases.json feed according to the real schema.
+// Schema: {"8.4": {"version": "8.4.27-1", "nts-vs17-x64": {"zip": {"path": "...", "sha256": "..."}}, ...}}
+func ParsePHPReleasesJSON(data []byte, customBaseURL ...string) (map[string]PHPVersionMeta, error) {
 	var raw map[string]map[string]interface{}
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, err
 	}
 
+	baseURL := defaultPHPReleasesBaseURL
+	if len(customBaseURL) > 0 && customBaseURL[0] != "" {
+		baseURL = customBaseURL[0]
+		if !strings.HasSuffix(baseURL, "/") {
+			baseURL += "/"
+		}
+	}
+
 	result := make(map[string]PHPVersionMeta)
 
-	for minor, versions := range raw {
-		var latestSemver string
-		var meta PHPVersionMeta
-
-		for verKey, vData := range versions {
-			vMap, ok := vData.(map[string]interface{})
-			if !ok {
-				continue
-			}
-
-			verStr := verKey
-			if v, ok := vMap["version"].(string); ok && v != "" {
-				verStr = v
-			}
-
-			if latestSemver == "" || IsVersionNewer(latestSemver, verStr) {
-				latestSemver = verStr
-				isSec := false
-				if secVal, ok := vMap["security"]; ok {
-					switch s := secVal.(type) {
-					case bool:
-						isSec = s
-					case string:
-						isSec = strings.ToLower(s) == "yes" || strings.ToLower(s) == "true"
-					}
-				}
-
-				zipURL, sha := extractNTSx64Build(vMap)
-
-				meta = PHPVersionMeta{
-					Version:    verStr,
-					IsSecurity: isSec,
-					ZipURL:     zipURL,
-					SHA256:     sha,
-				}
-			}
+	for minor, minorData := range raw {
+		verVal, ok := minorData["version"]
+		if !ok {
+			continue
+		}
+		verStr, ok := verVal.(string)
+		if !ok || strings.TrimSpace(verStr) == "" {
+			continue
 		}
 
-		if latestSemver != "" {
-			result[minor] = meta
+		// Pick "nts-vs17-x64" else "nts-vs16-x64"; skip minors with no nts-x64 build
+		var buildNode interface{}
+		if nts17, exists := minorData["nts-vs17-x64"]; exists {
+			buildNode = nts17
+		} else if nts16, exists := minorData["nts-vs16-x64"]; exists {
+			buildNode = nts16
+		} else {
+			continue
+		}
+
+		buildMap, ok := buildNode.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		zipNode, ok := buildMap["zip"]
+		if !ok {
+			continue
+		}
+		zipMap, ok := zipNode.(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		pathVal, ok := zipMap["path"]
+		if !ok {
+			continue
+		}
+		pathStr, ok := pathVal.(string)
+		if !ok || strings.TrimSpace(pathStr) == "" {
+			continue
+		}
+
+		shaVal, _ := zipMap["sha256"].(string)
+
+		var zipURL string
+		cleanPath := strings.TrimSpace(pathStr)
+		if strings.HasPrefix(cleanPath, "http://") || strings.HasPrefix(cleanPath, "https://") {
+			zipURL = cleanPath
+		} else if strings.HasPrefix(cleanPath, "/") {
+			zipURL = "https://windows.php.net" + cleanPath
+		} else {
+			zipURL = baseURL + cleanPath
+		}
+
+		result[minor] = PHPVersionMeta{
+			Version:    verStr,
+			IsSecurity: false,
+			ZipURL:     zipURL,
+			SHA256:     strings.ToLower(strings.TrimSpace(shaVal)),
 		}
 	}
 
@@ -241,7 +158,15 @@ func FetchPHPReleases(ctx context.Context, releasesURL string, timeout time.Dura
 		return nil, err
 	}
 
-	return ParsePHPReleasesJSON(body)
+	var customBase string
+	if strings.Contains(releasesURL, "127.0.0.1") || strings.Contains(releasesURL, "localhost") {
+		idx := strings.LastIndex(releasesURL, "/")
+		if idx != -1 {
+			customBase = releasesURL[:idx] + "/downloads/releases/"
+		}
+	}
+
+	return ParsePHPReleasesJSON(body, customBase)
 }
 
 // GetDownloadURL returns the configured download URL for a runtime from the catalog.

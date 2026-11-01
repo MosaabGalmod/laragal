@@ -532,28 +532,27 @@ func createTestZip(t *testing.T, innerPath string, content []byte) ([]byte, stri
 }
 
 func TestUpgradeRuntime_PicksFeedVersionAndNTSZip(t *testing.T) {
-	feedBinContent := []byte("PHP 8.4.99 binary from live releases feed")
+	feedBinContent := []byte("PHP 8.4.27-1 binary from live releases feed")
 	feedZipBytes, feedZipHash := createTestZip(t, "php.exe", feedBinContent)
+
+	rawFeed, err := os.ReadFile(filepath.Join("internal", "updater", "testdata", "releases.json"))
+	if err != nil {
+		t.Fatalf("failed to read testdata/releases.json: %v", err)
+	}
+	// Inject the test zip's hash into the real 8.4 release entry
+	feedJSON := strings.Replace(
+		string(rawFeed),
+		"dbae154a0a89791f36c3d48e68bae797878333e7d6cb5721e74617de59b63ab7",
+		feedZipHash,
+		1,
+	)
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/releases.json":
-			feedJSON := fmt.Sprintf(`{
-				"8.4": {
-					"8.4.99": {
-						"version": "8.4.99",
-						"nts-vs17-x64": {
-							"zip": {
-								"url": "http://%s/downloads/feed-php-8.4.99.zip",
-								"sha256": "%s"
-							}
-						}
-					}
-				}
-			}`, r.Host, feedZipHash)
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(feedJSON))
-		case "/downloads/feed-php-8.4.99.zip":
+		case "/downloads/releases/php-8.4.27-1-nts-Win32-vs17-x64.zip":
 			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(feedZipBytes)))
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(feedZipBytes)
@@ -596,27 +595,17 @@ func TestUpgradeRuntime_HashMismatchLeavesBinUntouched(t *testing.T) {
 	tamperedContent := []byte("Tampered or corrupted payload")
 	tamperedZipBytes, _ := createTestZip(t, "php.exe", tamperedContent)
 
-	wrongHash := "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	rawFeed, err := os.ReadFile(filepath.Join("internal", "updater", "testdata", "releases.json"))
+	if err != nil {
+		t.Fatalf("failed to read testdata/releases.json: %v", err)
+	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/releases.json":
-			feedJSON := fmt.Sprintf(`{
-				"8.4": {
-					"8.4.99": {
-						"version": "8.4.99",
-						"nts-vs17-x64": {
-							"zip": {
-								"url": "http://%s/downloads/tampered.zip",
-								"sha256": "%s"
-							}
-						}
-					}
-				}
-			}`, r.Host, wrongHash)
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(feedJSON))
-		case "/downloads/tampered.zip":
+			_, _ = w.Write(rawFeed) // Serves real hash, but server returns tamperedZipBytes
+		case "/downloads/releases/php-8.4.27-1-nts-Win32-vs17-x64.zip":
 			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(tamperedZipBytes)))
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(tamperedZipBytes)
@@ -646,7 +635,7 @@ func TestUpgradeRuntime_HashMismatchLeavesBinUntouched(t *testing.T) {
 		tempDir:        tmpDir,
 	}
 
-	_, err := app.UpgradeRuntime("php-8.4")
+	_, err = app.UpgradeRuntime("php-8.4")
 	if err == nil {
 		t.Fatalf("expected hash mismatch error, got nil")
 	}

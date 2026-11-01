@@ -45,10 +45,15 @@ func ExtractVersion(output string) string {
 	return ""
 }
 
-func parseVersionComponents(v string) []int {
+func parseVersionComponents(v string) ([]int, int) {
 	clean := CleanVersionString(v)
+	build := 0
 	if idx := strings.Index(clean, "-"); idx != -1 {
+		suffix := clean[idx+1:]
 		clean = clean[:idx]
+		if b, err := strconv.Atoi(suffix); err == nil {
+			build = b
+		}
 	}
 	parts := strings.Split(clean, ".")
 	var res []int
@@ -57,10 +62,11 @@ func parseVersionComponents(v string) []int {
 			res = append(res, num)
 		}
 	}
-	return res
+	return res, build
 }
 
-// IsVersionNewer compares two version strings and returns true if latest is strictly greater than current
+// IsVersionNewer compares two version strings and returns true if latest is strictly greater than current.
+// Handles build suffixes such as "-1" correctly ("8.4.27" < "8.4.27-1" < "8.4.28").
 func IsVersionNewer(current string, latest string) bool {
 	cleanLatest := strings.TrimSpace(latest)
 	if cleanLatest == "" {
@@ -71,8 +77,8 @@ func IsVersionNewer(current string, latest string) bool {
 		return true
 	}
 
-	curParts := parseVersionComponents(cleanCurrent)
-	latParts := parseVersionComponents(cleanLatest)
+	curParts, curBuild := parseVersionComponents(cleanCurrent)
+	latParts, latBuild := parseVersionComponents(cleanLatest)
 
 	maxLen := len(curParts)
 	if len(latParts) > maxLen {
@@ -97,5 +103,5 @@ func IsVersionNewer(current string, latest string) bool {
 		}
 	}
 
-	return false
+	return latBuild > curBuild
 }
