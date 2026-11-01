@@ -345,5 +345,7 @@
   "preview_blocked_csp": "The <bdi dir=\"ltr\">Content-Security-Policy</bdi> header directive <bdi dir=\"ltr\">frame-ancestors</bdi> prohibits framing this project. This is intentional security behavior of the project itself. Open it in your browser to preview.",
   "preview_unreachable": "Cannot reach the project server right now. Verify that the application server is running and local certificates are active.",
   "preview_open_in_browser": "Open in System Browser",
-  "preview_load_timeout": "The preview took too long to load without responding. The project may require user action or block embedding; you can open it directly in the browser."
+  "preview_load_timeout": "The preview took too long to load without responding. The project may require user action or block embedding; you can open it directly in the browser.",
+  "runtime_installed": "Installed",
+  "runtime_reinstall": "Reinstall"
 }

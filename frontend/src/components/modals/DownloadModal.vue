@@ -29,7 +29,7 @@
             :disabled="isCheckingUpdates"
             class="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
             :title="t('check_updates_title')"
-            @click="checkUpdatesNow"
+            @click="() => checkUpdatesNow()"
           >
             <RefreshCw
               class="w-3 h-3 text-blue-500"
@@ -98,31 +98,54 @@
                 {{ t(rt.desc_key) }}
               </p>
             </div>
-            <button
-              type="button"
-              :disabled="downloadingRuntime === rt.name"
-              class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer flex-shrink-0 disabled:opacity-50"
-              :class="
-                runtimeUpdates[rt.name]?.has_update
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs'
-                  : 'bg-blue-600 hover:bg-blue-700 text-white'
-              "
-              @click="triggerDownloadRuntime(rt.name)"
-            >
-              <Download
-                class="w-3.5 h-3.5"
-                :class="downloadingRuntime === rt.name ? 'animate-bounce' : ''"
-              />
-              <span>
-                {{
-                  downloadingRuntime === rt.name
-                    ? `${downloadProgress[rt.name] || 0}%`
-                    : runtimeUpdates[rt.name]?.has_update
-                      ? t('upgrade_one_click')
-                      : t('download_now')
-                }}
-              </span>
-            </button>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <template v-if="downloadingRuntime === rt.name">
+                <button
+                  type="button"
+                  disabled
+                  class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 opacity-50 bg-blue-600 text-white cursor-not-allowed"
+                >
+                  <Download class="w-3.5 h-3.5 animate-bounce" />
+                  <span>{{ downloadProgress[rt.name] || 0 }}%</span>
+                </button>
+              </template>
+              <template v-else-if="runtimeUpdates[rt.name]?.has_update">
+                <button
+                  type="button"
+                  class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
+                  @click="triggerDownloadRuntime(rt.name)"
+                >
+                  <Download class="w-3.5 h-3.5" />
+                  <span>{{ t('upgrade_one_click') }}</span>
+                </button>
+              </template>
+              <template v-else-if="runtimeUpdates[rt.name]?.current_version">
+                <span
+                  class="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700 select-none"
+                >
+                  <Check class="w-3.5 h-3.5 text-emerald-500" />
+                  <span>{{ t('runtime_installed') }}</span>
+                  <bdi dir="ltr">v{{ runtimeUpdates[rt.name].current_version }}</bdi>
+                </span>
+                <button
+                  type="button"
+                  class="text-[11px] font-medium text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 underline underline-offset-2 cursor-pointer transition-colors"
+                  @click="triggerDownloadRuntime(rt.name)"
+                >
+                  {{ t('runtime_reinstall') }}
+                </button>
+              </template>
+              <template v-else>
+                <button
+                  type="button"
+                  class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white"
+                  @click="triggerDownloadRuntime(rt.name)"
+                >
+                  <Download class="w-3.5 h-3.5" />
+                  <span>{{ t('download_now') }}</span>
+                </button>
+              </template>
+            </div>
           </div>
           <div
             v-if="downloadingRuntime === rt.name"
@@ -159,6 +182,7 @@ import {
   AlertTriangle,
   ShieldAlert,
   ArrowUpCircle,
+  Check,
 } from 'lucide-vue-next'
 import { useI18n } from '../../composables/useI18n'
 import { useRuntimeCatalog } from '../../composables/useRuntimeCatalog'

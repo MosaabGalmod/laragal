@@ -217,6 +217,9 @@ func detectSingleRootDir(files []*zip.File) string {
 			return ""
 		}
 	}
+	if prefix == "bin" || prefix == "lib" || prefix == "ext" || prefix == "share" || prefix == "etc" {
+		return ""
+	}
 	return prefix
 }
 

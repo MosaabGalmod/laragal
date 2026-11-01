@@ -34,7 +34,7 @@ const downloadProgress = ref<Record<string, number>>({})
 const downloadingRuntime = ref('')
 
 const availableRuntimes = ref<RuntimeDefinition[]>([
-  { name: 'caddy', label: 'Caddy Server v2.8', desc_key: 'service_caddy_desc' },
+  { name: 'caddy', label: 'Caddy Server', desc_key: 'service_caddy_desc' },
   { name: 'php-8.5', label: 'PHP 8.5 (NTS x64)', desc_key: 'service_php85_desc' },
   { name: 'php-8.4', label: 'PHP 8.4 (NTS x64)', desc_key: 'service_php84_desc' },
   { name: 'php-8.3', label: 'PHP 8.3 (NTS x64)', desc_key: 'service_php83_desc' },
@@ -42,7 +42,7 @@ const availableRuntimes = ref<RuntimeDefinition[]>([
   { name: 'php-8.1', label: 'PHP 8.1 (NTS x64)', desc_key: 'service_php81_desc' },
   { name: 'mysql', label: 'MariaDB / MySQL Server', desc_key: 'service_mysql_desc' },
   { name: 'redis', label: 'Redis Server (Windows)', desc_key: 'service_redis_desc' },
-  { name: 'mailpit', label: 'Mailpit Server v1.21', desc_key: 'service_mailpit_desc' },
+  { name: 'mailpit', label: 'Mailpit Server', desc_key: 'service_mailpit_desc' },
 ])
 
 export function compareVersions(v1: string, v2: string): number {
@@ -177,7 +177,8 @@ export function useRuntimeCatalog() {
     })
   })
 
-  async function checkUpdatesNow() {
+  async function checkUpdatesNow(options?: { silent?: boolean }) {
+    const silent = Boolean(options?.silent)
     isCheckingUpdates.value = true
     const w = window as any
     if (w.go?.main?.App?.CheckRuntimeUpdates) {
@@ -193,10 +194,12 @@ export function useRuntimeCatalog() {
             }
           }
           runtimeUpdates.value = map
-          if (count > 0) {
-            showToast(t('updates_found_count', { count }))
-          } else {
-            showToast(t('all_runtimes_up_to_date'))
+          if (!silent) {
+            if (count > 0) {
+              showToast(t('updates_found_count', { count }))
+            } else {
+              showToast(t('all_runtimes_up_to_date'))
+            }
           }
         }
       } catch (err: any) {
@@ -217,11 +220,7 @@ export function useRuntimeCatalog() {
         const msg = await w.go.main.App.UpgradeRuntime(name)
         downloadingRuntime.value = ''
         downloadProgress.value[name] = 100
-        if (runtimeUpdates.value[name]) {
-          runtimeUpdates.value[name].has_update = false
-          runtimeUpdates.value[name].current_version =
-            runtimeUpdates.value[name].latest_version
-        }
+        await checkUpdatesNow({ silent: true })
         showToast(
           renderUIMessage(msg) || t('runtime_upgrade_success', { name }),
         )
@@ -241,6 +240,7 @@ export function useRuntimeCatalog() {
         const msg = await w.go.main.App.DownloadBinary(name)
         downloadingRuntime.value = ''
         downloadProgress.value[name] = 100
+        await checkUpdatesNow({ silent: true })
         showToast(
           renderUIMessage(msg) || t('runtime_install_success', { name }),
         )

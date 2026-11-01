@@ -3,16 +3,136 @@ package php
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
+var phpVersionRegex = regexp.MustCompile(`(?i)PHP\s+(\d+\.\d+)`)
+var dirVersionRegex = regexp.MustCompile(`(?:php-?|^)(\d+\.\d+)`)
+var opcacheZendExtRegex = regexp.MustCompile(`(?i)^\s*(;?)\s*(zend_extension\s*=\s*"?([a-zA-Z0-9_-]*opcache[a-zA-Z0-9_.-]*)"?)`)
+
+// DetectPHPVersion attempts to detect the PHP version from the directory path or binary.
+func DetectPHPVersion(phpDir string) string {
+	base := filepath.Base(phpDir)
+	if m := dirVersionRegex.FindStringSubmatch(base); len(m) > 1 {
+		return m[1]
+	}
+	if m := dirVersionRegex.FindStringSubmatch(phpDir); len(m) > 1 {
+		return m[1]
+	}
+	for _, exeName := range []string{"php.exe", "php-cgi.exe"} {
+		exePath := filepath.Join(phpDir, exeName)
+		if _, err := os.Stat(exePath); err == nil {
+			cmd := exec.Command(exePath, "-v")
+			if out, err := cmd.CombinedOutput(); err == nil {
+				if m := phpVersionRegex.FindStringSubmatch(string(out)); len(m) > 1 {
+					return m[1]
+				}
+			}
+		}
+	}
+	return ""
+}
+
+// IsPHP85OrHigher returns true if the detected or supplied version is >= 8.5
+func IsPHP85OrHigher(ver string) bool {
+	clean := strings.TrimSpace(ver)
+	clean = strings.TrimPrefix(clean, "php-")
+	clean = strings.TrimPrefix(clean, "PHP-")
+	clean = strings.TrimPrefix(clean, "v")
+	clean = strings.TrimPrefix(clean, "V")
+	if m := dirVersionRegex.FindStringSubmatch(clean); len(m) > 1 {
+		clean = m[1]
+	}
+
+	parts := strings.Split(clean, ".")
+	if len(parts) == 0 {
+		return false
+	}
+	major, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return false
+	}
+	minor := 0
+	if len(parts) > 1 {
+		minor, _ = strconv.Atoi(parts[1])
+	}
+	return major > 8 || (major == 8 && minor >= 5)
+}
+
+func processOPcacheConfig(content string, is85 bool) string {
+	lines := strings.Split(content, "\n")
+	foundZendExt := false
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		m := opcacheZendExtRegex.FindStringSubmatch(trimmed)
+		if len(m) > 0 {
+			foundZendExt = true
+			isCommented := m[1] == ";"
+			extDirective := m[2]
+			if is85 {
+				if !isCommented {
+					lines[i] = ";" + line
+				}
+			} else {
+				if isCommented {
+					lines[i] = extDirective
+				}
+			}
+		}
+	}
+
+	result := strings.Join(lines, "\n")
+
+	if !foundZendExt {
+		if is85 {
+			if strings.Contains(result, "[opcache]") {
+				result = strings.Replace(result, "[opcache]", ";zend_extension=opcache\n[opcache]", 1)
+			}
+		} else {
+			if strings.Contains(result, "[opcache]") {
+				result = strings.Replace(result, "[opcache]", "zend_extension=opcache\n[opcache]", 1)
+			} else {
+				result += "\nzend_extension=opcache\n"
+			}
+		}
+	}
+
+	if !strings.Contains(result, "[opcache]") {
+		opcacheBlock := `
+[opcache]
+opcache.enable = 1
+opcache.enable_cli = 1
+opcache.memory_consumption = 128
+opcache.interned_strings_buffer = 8
+opcache.max_accelerated_files = 10000
+`
+		result += opcacheBlock
+	}
+
+	return result
+}
+
 // EnsurePHPIni generates a production/development php.ini with essential web extensions enabled
 // and updates existing php.ini to ensure required extensions (e.g. mysqli, pdo_mysql) are active.
-func EnsurePHPIni(phpDir string) error {
+// For PHP >= 8.5, OPcache is compiled into core, so zend_extension=opcache is commented out or skipped
+// while [opcache] configuration settings are retained.
+func EnsurePHPIni(phpDir string, versionHint ...string) error {
 	iniPath := filepath.Join(phpDir, "php.ini")
 	devPath := filepath.Join(phpDir, "php.ini-development")
 	prodPath := filepath.Join(phpDir, "php.ini-production")
+
+	version := ""
+	if len(versionHint) > 0 && strings.TrimSpace(versionHint[0]) != "" {
+		version = strings.TrimSpace(versionHint[0])
+	} else {
+		version = DetectPHPVersion(phpDir)
+	}
+	is85 := IsPHP85OrHigher(version)
 
 	var content string
 	if data, err := os.ReadFile(iniPath); err == nil {
@@ -23,7 +143,11 @@ func EnsurePHPIni(phpDir string) error {
 		content = string(data)
 	} else {
 		// Minimal fallback php.ini
-		content = `[PHP]
+		opcacheExtLine := "zend_extension=opcache"
+		if is85 {
+			opcacheExtLine = ";zend_extension=opcache"
+		}
+		content = fmt.Sprintf(`[PHP]
 engine = On
 short_open_tag = Off
 precision = 14
@@ -49,7 +173,15 @@ extension=pdo_mysql
 extension=mysqli
 extension=zip
 extension=gd
-`
+
+%s
+[opcache]
+opcache.enable = 1
+opcache.enable_cli = 1
+opcache.memory_consumption = 128
+opcache.interned_strings_buffer = 8
+opcache.max_accelerated_files = 10000
+`, opcacheExtLine)
 		return os.WriteFile(iniPath, []byte(content), 0644)
 	}
 
@@ -110,6 +242,9 @@ extension=gd
 			content += "\n" + active + "\n"
 		}
 	}
+
+	// Handle OPcache for PHP >= 8.5 vs < 8.5
+	content = processOPcacheConfig(content, is85)
 
 	// Ensure deprecation notices are suppressed to keep phpMyAdmin and frameworks clean
 	if strings.Contains(content, "error_reporting = E_ALL") && !strings.Contains(content, "~E_DEPRECATED") {

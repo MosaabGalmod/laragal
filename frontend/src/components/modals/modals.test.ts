@@ -120,4 +120,46 @@ describe('Modal smoke tests', () => {
     const title = t('design_tools_title')
     expect(wrapper.text()).toContain(title)
   })
+
+  it('DownloadModal displays installed state and reinstall action for up-to-date runtime', async () => {
+    ;(window as any).go.main.App.CheckRuntimeUpdates = async () => [
+      {
+        name: 'php-8.5',
+        current_version: '8.5.12',
+        latest_version: '8.5.12',
+        has_update: false,
+        is_security_fix: false,
+        download_url: '',
+      },
+      {
+        name: 'caddy',
+        current_version: '',
+        latest_version: '2.8.4',
+        has_update: false,
+        is_security_fix: false,
+        download_url: '',
+      },
+    ]
+
+    const wrapper = mount(DownloadModal, {
+      props: {
+        modelValue: true,
+      },
+    })
+
+    // Trigger update check
+    const { useRuntimeCatalog } = await import('../../composables/useRuntimeCatalog')
+    const { checkUpdatesNow } = useRuntimeCatalog()
+    await checkUpdatesNow({ silent: true })
+    await wrapper.vm.$nextTick()
+
+    // Up to date runtime should display installed badge and reinstall button
+    expect(wrapper.text()).toContain(t('runtime_installed'))
+    expect(wrapper.text()).toContain('v8.5.12')
+    expect(wrapper.text()).toContain(t('runtime_reinstall'))
+
+    // Not-installed runtime should show download now button
+    expect(wrapper.text()).toContain(t('download_now'))
+  })
 })
+

@@ -916,15 +916,11 @@ func (a *App) downloadAndInstallArtifact(name string, url string, expectedSHA st
 		return UIMessage{}, err
 	}
 
-	if err := downloader.ExtractZip(zipPath, destDir); err != nil {
+	if err := downloader.InstallArtifactZip(name, zipPath, destDir); err != nil {
 		_ = os.Remove(zipPath)
 		return UIMessage{}, err
 	}
 	_ = os.Remove(zipPath)
-
-	if strings.HasPrefix(strings.ToLower(name), "php") {
-		_ = php.EnsurePHPIni(destDir)
-	}
 
 	if a.ctx != nil {
 		runtime.EventsEmit(a.ctx, "download-progress", map[string]interface{}{
