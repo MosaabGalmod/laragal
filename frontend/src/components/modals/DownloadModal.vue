@@ -99,9 +99,22 @@
                   <ArrowUpCircle class="w-2.5 h-2.5" /> {{ t('runtime_update_available') }}
                   <bdi dir="ltr">v{{ runtimeUpdates[rt.name].latest_version }}</bdi>
                 </span>
+                <span
+                  v-if="runtimeUpdates[rt.name]?.major_change"
+                  class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-200 border border-amber-300 dark:border-amber-800"
+                >
+                  <AlertTriangle class="w-2.5 h-2.5" /> {{ t('runtime_major_change') }}
+                </span>
               </div>
               <p class="text-[11px] text-slate-400 font-mono">
                 {{ t(rt.desc_key) }}
+              </p>
+              <p
+                v-if="runtimeUpdates[rt.name]?.compat_note"
+                class="text-[11px] text-amber-700 dark:text-amber-400 font-medium flex items-center gap-1 mt-1"
+              >
+                <AlertTriangle class="w-3 h-3 flex-shrink-0" />
+                <span>{{ runtimeUpdates[rt.name].compat_note }}</span>
               </p>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
@@ -119,7 +132,7 @@
                 <button
                   type="button"
                   class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs"
-                  @click="triggerDownloadRuntime(rt.name)"
+                  @click="handleRuntimeAction(rt)"
                 >
                   <Download class="w-3.5 h-3.5" />
                   <span>{{ t('upgrade_one_click') }}</span>
@@ -136,7 +149,7 @@
                 <button
                   type="button"
                   class="text-[11px] font-medium text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 underline underline-offset-2 cursor-pointer transition-colors"
-                  @click="triggerDownloadRuntime(rt.name)"
+                  @click="handleRuntimeAction(rt)"
                 >
                   {{ t('runtime_reinstall') }}
                 </button>
@@ -145,7 +158,7 @@
                 <button
                   type="button"
                   class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer bg-blue-600 hover:bg-blue-700 text-white"
-                  @click="triggerDownloadRuntime(rt.name)"
+                  @click="handleRuntimeAction(rt)"
                 >
                   <Download class="w-3.5 h-3.5" />
                   <span>{{ t('download_now') }}</span>
@@ -177,11 +190,69 @@
         </button>
       </div>
     </div>
+
+    <!-- ================= MAJOR CHANGE CONFIRMATION MODAL ================= -->
+    <div
+      v-if="confirmMajorChange"
+      class="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="major-change-modal-title"
+      tabindex="-1"
+    >
+      <div
+        class="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 space-y-4 animate-scale-in"
+      >
+        <div class="flex items-center gap-2">
+          <AlertTriangle class="w-5 h-5 text-amber-500 flex-shrink-0" />
+          <h3 id="major-change-modal-title" class="font-bold text-base text-slate-900 dark:text-white">
+            {{ t('runtime_major_change_confirm_title') }}
+          </h3>
+        </div>
+        <p class="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+          {{ t('runtime_major_change_warning') }}
+        </p>
+        <p
+          v-if="isMySQLFamily(confirmMajorChange.name)"
+          class="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 p-2.5 rounded-lg border border-amber-200 dark:border-amber-900/50 leading-relaxed"
+        >
+          {{ t('runtime_major_change_mysql_extra') }}
+        </p>
+        <p
+          v-if="confirmMajorChange.name === 'adminer'"
+          class="text-xs text-amber-800 dark:text-amber-200 bg-amber-50 dark:bg-amber-950/40 p-2.5 rounded-lg border border-amber-200 dark:border-amber-900/50 leading-relaxed"
+        >
+          {{ t('runtime_major_change_adminer_extra') }}
+        </p>
+        <p
+          v-if="runtimeUpdates[confirmMajorChange.name]?.compat_note"
+          class="text-xs text-amber-700 dark:text-amber-300 font-mono"
+        >
+          {{ runtimeUpdates[confirmMajorChange.name].compat_note }}
+        </p>
+        <div class="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            class="px-3.5 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 cursor-pointer"
+            @click="confirmMajorChange = null"
+          >
+            {{ t('cancel_btn') }}
+          </button>
+          <button
+            type="button"
+            class="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-amber-600 hover:bg-amber-700 text-white cursor-pointer"
+            @click="executeMajorChangeUpgrade"
+          >
+            {{ t('confirm_btn') }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import {
   Download,
   RefreshCw,
@@ -218,13 +289,45 @@ const {
   triggerDownloadRuntime,
 } = useRuntimeCatalog()
 
+const confirmMajorChange = ref<{ name: string; label: string } | null>(null)
+
+function isMySQLFamily(name: string): boolean {
+  const n = name.toLowerCase()
+  return n === 'mysql' || n.startsWith('mariadb') || n.startsWith('mysql')
+}
+
+function handleRuntimeAction(rt: { name: string; label: string }) {
+  const update = runtimeUpdates.value[rt.name]
+  if (update?.major_change) {
+    confirmMajorChange.value = {
+      name: rt.name,
+      label: rt.label,
+    }
+    return
+  }
+  triggerDownloadRuntime(rt.name)
+}
+
+async function executeMajorChangeUpgrade() {
+  if (!confirmMajorChange.value) return
+  const target = confirmMajorChange.value.name
+  confirmMajorChange.value = null
+  await triggerDownloadRuntime(target, true)
+}
+
 function closeModal() {
   emit('update:modelValue', false)
 }
 
 function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.modelValue) {
-    closeModal()
+  if (e.key === 'Escape') {
+    if (confirmMajorChange.value) {
+      confirmMajorChange.value = null
+      return
+    }
+    if (props.modelValue) {
+      closeModal()
+    }
   }
 }
 

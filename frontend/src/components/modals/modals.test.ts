@@ -190,5 +190,70 @@ describe('Modal smoke tests', () => {
     expect(wrapper.text()).toContain(t('runtime_new_from_feed'))
     expect(wrapper.text()).toContain('PHP 8.6')
   })
+
+  it('major-change entry shows amber badge, opens confirm modal and calls UpgradeRuntimeConfirmed only after confirm', async () => {
+    let confirmedCalledWith = ''
+    let unconfirmedCalledWith = ''
+    ;(window as any).go.main.App.UpgradeRuntime = async (name: string) => {
+      unconfirmedCalledWith = name
+      return { key: 'ok' }
+    }
+    ;(window as any).go.main.App.UpgradeRuntimeConfirmed = async (name: string) => {
+      confirmedCalledWith = name
+      return { key: 'ok' }
+    }
+
+    ;(window as any).go.main.App.CheckRuntimeUpdates = async () => [
+      {
+        name: 'mysql',
+        current_version: '10.11.11',
+        latest_version: '11.4.5',
+        has_update: true,
+        is_security_fix: false,
+        major_change: true,
+        download_url: 'https://downloads.mariadb.org/rest-api/mariadb/11.4.5/mariadb-11.4.5-winx64.zip',
+        compat_note: '',
+      },
+    ]
+
+    const wrapper = mount(DownloadModal, {
+      props: {
+        modelValue: true,
+      },
+    })
+
+    const { useRuntimeCatalog } = await import('../../composables/useRuntimeCatalog')
+    const { checkUpdatesNow } = useRuntimeCatalog()
+    await checkUpdatesNow({ silent: true })
+    await wrapper.vm.$nextTick()
+
+    // 1. Must show amber badge t('runtime_major_change')
+    expect(wrapper.text()).toContain(t('runtime_major_change'))
+
+    // 2. Click the upgrade button
+    const upgradeBtn = wrapper.findAll('button').find((b) => b.text().includes(t('upgrade_one_click')))
+    expect(upgradeBtn).toBeDefined()
+    await upgradeBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    // 3. Confirmation modal must open
+    expect(wrapper.text()).toContain(t('runtime_major_change_confirm_title'))
+    expect(wrapper.text()).toContain(t('runtime_major_change_warning'))
+    expect(wrapper.text()).toContain(t('runtime_major_change_mysql_extra'))
+
+    // Neither confirmed nor unconfirmed upgrade should have been called yet
+    expect(confirmedCalledWith).toBe('')
+    expect(unconfirmedCalledWith).toBe('')
+
+    // 4. Click confirm button inside the modal
+    const confirmBtn = wrapper.findAll('button').find((b) => b.text().trim() === t('confirm_btn'))
+    expect(confirmBtn).toBeDefined()
+    await confirmBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    // 5. UpgradeRuntimeConfirmed must have been called with 'mysql'
+    expect(confirmedCalledWith).toBe('mysql')
+    expect(unconfirmedCalledWith).toBe('')
+  })
 })
 

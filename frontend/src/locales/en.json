@@ -348,5 +348,10 @@
   "preview_load_timeout": "The preview took too long to load without responding. The project may require user action or block embedding; you can open it directly in the browser.",
   "runtime_installed": "Installed",
   "runtime_reinstall": "Reinstall",
-  "runtime_new_from_feed": "New release from official source"
+  "runtime_new_from_feed": "New release from official source",
+  "runtime_major_change": "Major Upgrade",
+  "runtime_major_change_confirm_title": "Confirm Major Runtime Upgrade",
+  "runtime_major_change_warning": "This is an upgrade to a new major version which may alter configuration or data formats. Creating a backup first is strongly recommended.",
+  "runtime_major_change_mysql_extra": "MariaDB database warning: Backing up your databases is strongly recommended before proceeding. After upgrade, LaraGal will automatically run the mariadb-upgrade tool on next start and write logs to data/logs.",
+  "runtime_major_change_adminer_extra": "Adminer notice: Automatic local authentication may cease working after upgrading to a new major release."
 }

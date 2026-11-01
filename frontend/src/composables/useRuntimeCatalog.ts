@@ -20,6 +20,8 @@ export interface RuntimeUpdateInfo {
   is_security_fix: boolean
   download_url: string
   is_new?: boolean
+  major_change?: boolean
+  compat_note?: string
 }
 
 export interface RuntimeDefinition {
@@ -198,10 +200,17 @@ export function useRuntimeCatalog() {
 
               // Feed-only entries: add to available runtimes dynamically
               if (item.is_new && !availableRuntimes.value.some((r) => r.name === item.name)) {
-                const ver = item.name.replace(/^php-/, '')
+                let label = item.name
+                if (item.name.startsWith('php-')) {
+                  const ver = item.name.replace(/^php-/, '')
+                  label = `PHP ${ver} (NTS x64)`
+                } else if (item.name.startsWith('mariadb-') || item.name.startsWith('mysql-')) {
+                  const ver = item.name.replace(/^(mariadb|mysql)-/, '')
+                  label = `MariaDB ${ver} (LTS)`
+                }
                 availableRuntimes.value.push({
                   name: item.name,
-                  label: `PHP ${ver} (NTS x64)`,
+                  label,
                   desc_key: 'runtime_new_from_feed',
                   is_feed_only: true,
                 })
@@ -224,12 +233,33 @@ export function useRuntimeCatalog() {
     isCheckingUpdates.value = false
   }
 
-  async function triggerDownloadRuntime(name: string) {
+  async function triggerDownloadRuntime(name: string, confirmed: boolean = false) {
     downloadingRuntime.value = name
     downloadProgress.value[name] = 0
     showToast(t('runtime_download_starting', { name }))
 
     const w = window as any
+    if (confirmed && w.go?.main?.App?.UpgradeRuntimeConfirmed) {
+      try {
+        const msg = await w.go.main.App.UpgradeRuntimeConfirmed(name)
+        downloadingRuntime.value = ''
+        downloadProgress.value[name] = 100
+        await loadRuntimeCatalog()
+        await checkUpdatesNow({ silent: true })
+        showToast(
+          renderUIMessage(msg) || t('runtime_upgrade_success', { name }),
+        )
+        return
+      } catch (err: any) {
+        console.warn('Upgrade confirmed err:', err)
+        downloadingRuntime.value = ''
+        showToast(
+          t('runtime_upgrade_failed', { name, error: err?.message || err }),
+        )
+        return
+      }
+    }
+
     if (w.go?.main?.App?.UpgradeRuntime) {
       try {
         const msg = await w.go.main.App.UpgradeRuntime(name)
