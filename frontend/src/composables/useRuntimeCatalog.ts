@@ -22,6 +22,8 @@ export interface RuntimeUpdateInfo {
   is_new?: boolean
   major_change?: boolean
   compat_note?: string
+  source_status?: 'live' | 'catalog_fallback'
+  source_error?: string
 }
 
 export interface RuntimeDefinition {

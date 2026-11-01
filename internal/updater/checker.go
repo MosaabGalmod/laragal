@@ -125,12 +125,16 @@ type RuntimeUpdateInfo struct {
 	IsNew           bool   `json:"is_new,omitempty"`
 	MajorChange     bool   `json:"major_change,omitempty"`
 	CompatNote      string `json:"compat_note,omitempty"`
+	SourceStatus    string `json:"source_status"`          // "live" | "catalog_fallback"
+	SourceError     string `json:"source_error,omitempty"` // short, English, e.g. "github rate limit, resets 23:40" or "timeout"
 }
 
 type CheckOptions struct {
 	PHPReleasesURL    string
 	HTTPTimeout       time.Duration
 	BaseBinDir        string
+	DataDir           string            // Optional data directory (if empty, derived from BaseBinDir sibling "data")
+	LogDir            string            // Optional logs directory (if empty, derived from DataDir/logs)
 	InstalledVersions map[string]string // Optional manual/mocked overrides for testing
 	Registry          Registry          // Optional custom registry overrides
 }
@@ -288,8 +292,51 @@ func GetDownloadURL(name string) string {
 	return ""
 }
 
+var (
+	adminerVersionVarRegex = regexp.MustCompile(`(?i)\$VERSION\s*=\s*["']([^"']+)["']`)
+	adminerDocRegex        = regexp.MustCompile(`(?i)@version\s+([0-9]+(?:\.[0-9]+)+)`)
+	adminerIaRegex         = regexp.MustCompile(`\$ia\s*=\s*["']([0-9]+(?:\.[0-9]+)+)["']`)
+	adminerHeaderRegex     = regexp.MustCompile(`(?i)Adminer\s+([0-9]+(?:\.[0-9]+)+)`)
+	pmaVersionConstRegex   = regexp.MustCompile(`(?i)(?:const\s+VERSION|\$VERSION|VERSION)\s*=\s*["']([^"']+)["']`)
+)
+
+func extractAdminerVersion(content string) string {
+	if m := adminerVersionVarRegex.FindStringSubmatch(content); len(m) > 1 {
+		return strings.TrimSpace(m[1])
+	}
+	if m := adminerDocRegex.FindStringSubmatch(content); len(m) > 1 {
+		return strings.TrimSpace(m[1])
+	}
+	if m := adminerIaRegex.FindStringSubmatch(content); len(m) > 1 {
+		return strings.TrimSpace(m[1])
+	}
+	if m := adminerHeaderRegex.FindStringSubmatch(content); len(m) > 1 {
+		return strings.TrimSpace(m[1])
+	}
+	return ""
+}
+
+func deriveDataDir(binDir, customDataDir string) string {
+	if customDataDir != "" {
+		return customDataDir
+	}
+	if binDir != "" {
+		parent := filepath.Dir(binDir)
+		if parent != "." && parent != "" {
+			return filepath.Join(parent, "data")
+		}
+	}
+	return "data"
+}
+
 // DetectInstalledBinaryVersion reads local executable outputs across bin, data, WinGet and PATH
-func DetectInstalledBinaryVersion(binDir string, name string) string {
+func DetectInstalledBinaryVersion(binDir string, name string, optionalDataDir ...string) string {
+	customDataDir := ""
+	if len(optionalDataDir) > 0 {
+		customDataDir = optionalDataDir[0]
+	}
+	dataDir := deriveDataDir(binDir, customDataDir)
+
 	switch {
 	case name == "caddy":
 		exe := filepath.Join(binDir, "caddy", "caddy.exe")
@@ -314,30 +361,55 @@ func DetectInstalledBinaryVersion(binDir string, name string) string {
 			return ExtractVersion(string(out))
 		}
 	case name == "adminer":
-		for _, f := range []string{filepath.Join("data", "adminer", "adminer-core.php"), filepath.Join("data", "adminer", "index.php")} {
-			if data, err := os.ReadFile(f); err == nil {
+		candidateDirs := []string{filepath.Join(dataDir, "adminer")}
+		if dataDir != "data" {
+			candidateDirs = append(candidateDirs, filepath.Join("data", "adminer"))
+		}
+		for _, dir := range candidateDirs {
+			for _, f := range []string{"adminer-core.php", "index.php", "adminer.php"} {
+				if data, err := os.ReadFile(filepath.Join(dir, f)); err == nil {
+					if v := extractAdminerVersion(string(data)); v != "" {
+						return v
+					}
+				}
+			}
+		}
+		return ""
+	case name == "phpmyadmin":
+		candidateDirs := []string{filepath.Join(dataDir, "phpmyadmin")}
+		if dataDir != "data" {
+			candidateDirs = append(candidateDirs, filepath.Join("data", "phpmyadmin"))
+		}
+		for _, pmaDir := range candidateDirs {
+			if entries, err := os.ReadDir(pmaDir); err == nil {
+				for _, e := range entries {
+					if strings.HasPrefix(e.Name(), "RELEASE-DATE-") {
+						v := strings.TrimPrefix(e.Name(), "RELEASE-DATE-")
+						if v != "" {
+							return v
+						}
+					}
+				}
+			}
+			for _, relFile := range []string{
+				filepath.Join("libraries", "classes", "Version.php"),
+				filepath.Join("libraries", "Version.php"),
+			} {
+				vf := filepath.Join(pmaDir, relFile)
+				if data, err := os.ReadFile(vf); err == nil {
+					if m := pmaVersionConstRegex.FindStringSubmatch(string(data)); len(m) > 1 {
+						return strings.TrimSpace(m[1])
+					}
+				}
+			}
+			relDate := filepath.Join(pmaDir, "RELEASE-DATE")
+			if data, err := os.ReadFile(relDate); err == nil {
 				if v := ExtractVersion(string(data)); v != "" {
 					return v
 				}
 			}
 		}
-		idx := filepath.Join("data", "adminer", "index.php")
-		if _, err := os.Stat(idx); err == nil {
-			return "4.8.1"
-		}
-	case name == "phpmyadmin":
-		pmaDir := filepath.Join("data", "phpmyadmin")
-		if entries, err := os.ReadDir(pmaDir); err == nil {
-			for _, e := range entries {
-				if strings.HasPrefix(e.Name(), "RELEASE-DATE-") {
-					return strings.TrimPrefix(e.Name(), "RELEASE-DATE-")
-				}
-			}
-		}
-		idx := filepath.Join(pmaDir, "index.php")
-		if _, err := os.Stat(idx); err == nil {
-			return "5.2.3"
-		}
+		return ""
 	case strings.HasPrefix(name, "php-"):
 		ver := strings.TrimPrefix(name, "php-")
 		exe := filepath.Join(binDir, name, "php.exe")
@@ -418,6 +490,54 @@ func HighestCatalogPHPMajorMinor() string {
 	return highest
 }
 
+func familyForRuntime(name string) string {
+	if strings.HasPrefix(name, "php-") || name == "php" {
+		return "php"
+	}
+	if strings.HasPrefix(name, "mariadb-") || strings.HasPrefix(name, "mysql-") || name == "mysql" {
+		return "mysql"
+	}
+	return name
+}
+
+func cleanSourceError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := err.Error()
+	low := strings.ToLower(msg)
+	if strings.Contains(low, "deadline exceeded") || strings.Contains(low, "timeout") {
+		return "timeout"
+	}
+	return msg
+}
+
+func logSourceFailure(logDir, family string, err error) {
+	if logDir == "" || err == nil {
+		return
+	}
+	_ = os.MkdirAll(logDir, 0755)
+	logPath := filepath.Join(logDir, "updater.log")
+
+	// Rotate by truncating when >= 1 MB
+	const maxLogSize = 1024 * 1024
+	if fi, sErr := os.Stat(logPath); sErr == nil {
+		if fi.Size() >= maxLogSize {
+			_ = os.Truncate(logPath, 0)
+		}
+	}
+
+	f, oErr := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if oErr != nil {
+		return
+	}
+	defer f.Close()
+
+	timestamp := time.Now().Format("2006-01-02 15:04:05")
+	line := fmt.Sprintf("%s [%s] source error: %s\n", timestamp, family, err.Error())
+	_, _ = f.WriteString(line)
+}
+
 // CheckUpdates inspects available releases and compares them with current local installations.
 // Uses the registry to enrich catalog runtimes and discover new PHP minors in the feed.
 func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
@@ -426,9 +546,16 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 		reg = DefaultRegistry
 	}
 
+	dataDir := deriveDataDir(opts.BaseBinDir, opts.DataDir)
+	logDir := opts.LogDir
+	if logDir == "" {
+		logDir = filepath.Join(dataDir, "logs")
+	}
+
 	// 1. Fetch live releases from the registry across all families
 	liveMap := make(map[string]LiveRelease)
 	var livePHPReleases []LiveRelease
+	familyErrors := make(map[string]error)
 
 	if reg != nil {
 		for family, src := range reg {
@@ -443,7 +570,8 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 			}
 			releases, err := src.Latest(ctx, family)
 			if err != nil {
-				// rate limit or network error -> fall back to catalog
+				familyErrors[family] = err
+				logSourceFailure(logDir, family, err)
 				continue
 			}
 			for _, rel := range releases {
@@ -458,7 +586,11 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 			BaseURL:     opts.PHPReleasesURL,
 			HTTPTimeout: opts.HTTPTimeout,
 		}
-		if releases, err := phpSrc.Latest(ctx, "php"); err == nil {
+		releases, err := phpSrc.Latest(ctx, "php")
+		if err != nil {
+			familyErrors["php"] = err
+			logSourceFailure(logDir, "php", err)
+		} else {
 			for _, rel := range releases {
 				liveMap[rel.Name] = rel
 				livePHPReleases = append(livePHPReleases, rel)
@@ -523,9 +655,20 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 			}
 		}
 		if curVer == "" && opts.BaseBinDir != "" {
-			curVer = DetectInstalledBinaryVersion(opts.BaseBinDir, name)
+			curVer = DetectInstalledBinaryVersion(opts.BaseBinDir, name, opts.DataDir)
 		}
 		info.CurrentVersion = curVer
+
+		// Determine source status and error
+		fam := familyForRuntime(name)
+		if _, ok := liveMap[name]; ok {
+			info.SourceStatus = "live"
+		} else {
+			info.SourceStatus = "catalog_fallback"
+			if err, hasErr := familyErrors[fam]; hasErr && err != nil {
+				info.SourceError = cleanSourceError(err)
+			}
+		}
 
 		// If live release available in feed, enrich
 		if liveRel, ok := liveMap[name]; ok {
@@ -611,7 +754,7 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 			}
 		}
 		if curVer == "" && opts.BaseBinDir != "" {
-			curVer = DetectInstalledBinaryVersion(opts.BaseBinDir, liveRel.Name)
+			curVer = DetectInstalledBinaryVersion(opts.BaseBinDir, liveRel.Name, opts.DataDir)
 		}
 
 		hasUpdate := false
@@ -629,6 +772,7 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 			IsNew:          true,
 			MajorChange:    liveRel.MajorChange,
 			CompatNote:     liveRel.CompatNote,
+			SourceStatus:   "live",
 		})
 		processed[liveRel.Name] = true
 	}
@@ -649,6 +793,7 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 				IsNew:          true,
 				MajorChange:    liveRel.MajorChange,
 				CompatNote:     liveRel.CompatNote,
+				SourceStatus:   "live",
 			})
 			processed[liveRel.Name] = true
 		}

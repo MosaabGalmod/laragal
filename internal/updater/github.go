@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -91,6 +92,13 @@ func (s *GitHubSource) Latest(ctx context.Context, name string) ([]LiveRelease, 
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusTooManyRequests {
+		resetHeader := resp.Header.Get("X-RateLimit-Reset")
+		if resetHeader != "" {
+			if sec, err := strconv.ParseInt(resetHeader, 10, 64); err == nil {
+				resetTime := time.Unix(sec, 0).Local()
+				return nil, fmt.Errorf("github rate limit, resets %s", resetTime.Format("15:04"))
+			}
+		}
 		return nil, fmt.Errorf("github api rate limit exceeded (HTTP %d): %s", resp.StatusCode, resp.Status)
 	}
 	if resp.StatusCode != http.StatusOK {

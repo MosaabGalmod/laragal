@@ -116,6 +116,14 @@
                 <AlertTriangle class="w-3 h-3 flex-shrink-0" />
                 <span>{{ runtimeUpdates[rt.name].compat_note }}</span>
               </p>
+              <p
+                v-if="runtimeUpdates[rt.name]?.source_status === 'catalog_fallback'"
+                class="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-1 mt-1"
+                :title="runtimeUpdates[rt.name]?.source_error || undefined"
+              >
+                <Info class="w-3 h-3 flex-shrink-0 text-slate-400 dark:text-slate-500" />
+                <span>{{ t('runtime_source_unavailable') }}</span>
+              </p>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
               <template v-if="downloadingRuntime === rt.name">
@@ -261,6 +269,7 @@ import {
   ArrowUpCircle,
   Check,
   Globe,
+  Info,
 } from 'lucide-vue-next'
 import { useI18n } from '../../composables/useI18n'
 import { useRuntimeCatalog } from '../../composables/useRuntimeCatalog'

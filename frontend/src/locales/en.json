@@ -353,5 +353,6 @@
   "runtime_major_change_confirm_title": "Confirm Major Runtime Upgrade",
   "runtime_major_change_warning": "This is an upgrade to a new major version which may alter configuration or data formats. Creating a backup first is strongly recommended.",
   "runtime_major_change_mysql_extra": "MariaDB database warning: Backing up your databases is strongly recommended before proceeding. After upgrade, LaraGal will automatically run the mariadb-upgrade tool on next start and write logs to data/logs.",
-  "runtime_major_change_adminer_extra": "Adminer notice: Automatic local authentication may cease working after upgrading to a new major release."
+  "runtime_major_change_adminer_extra": "Adminer notice: Automatic local authentication may cease working after upgrading to a new major release.",
+  "runtime_source_unavailable": "Couldn't reach the official source; showing the bundled version. Check again later."
 }

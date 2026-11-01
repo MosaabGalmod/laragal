@@ -255,5 +255,55 @@ describe('Modal smoke tests', () => {
     expect(confirmedCalledWith).toBe('mysql')
     expect(unconfirmedCalledWith).toBe('')
   })
+
+  it('DownloadModal renders catalog_fallback note and tooltip reason when source_status is catalog_fallback', async () => {
+    ;(window as any).go.main.App.CheckRuntimeUpdates = async () => [
+      {
+        name: 'redis',
+        current_version: '5.0.14.1',
+        latest_version: '5.0.14.1',
+        has_update: false,
+        is_security_fix: false,
+        download_url: 'https://example.com/redis.zip',
+        source_status: 'catalog_fallback',
+        source_error: 'github rate limit, resets 23:40',
+      },
+    ]
+
+    const wrapper = mount(DownloadModal, {
+      props: {
+        modelValue: true,
+      },
+    })
+
+    const { useRuntimeCatalog } = await import('../../composables/useRuntimeCatalog')
+    const { checkUpdatesNow } = useRuntimeCatalog()
+    await checkUpdatesNow({ silent: true })
+    await wrapper.vm.$nextTick()
+
+    // Must render the fallback note
+    expect(wrapper.text()).toContain(t('runtime_source_unavailable'))
+
+    // Must have the error in title attribute tooltip
+    const fallbackEl = wrapper.find('[title="github rate limit, resets 23:40"]')
+    expect(fallbackEl.exists()).toBe(true)
+    expect(fallbackEl.text()).toContain(t('runtime_source_unavailable'))
+
+    // When source_status is live, fallback note must NOT render
+    ;(window as any).go.main.App.CheckRuntimeUpdates = async () => [
+      {
+        name: 'redis',
+        current_version: '5.0.14.1',
+        latest_version: '8.10.3',
+        has_update: true,
+        is_security_fix: false,
+        download_url: 'https://example.com/redis.zip',
+        source_status: 'live',
+      },
+    ]
+    await checkUpdatesNow({ silent: true })
+    await wrapper.vm.$nextTick()
+    expect(wrapper.text()).not.toContain(t('runtime_source_unavailable'))
+  })
 })
 

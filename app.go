@@ -1258,19 +1258,7 @@ func (a *App) resolveArtifact(name string) (string, string, string, error) {
 }
 
 func (a *App) detectInstalledVersion(name string) string {
-	if strings.ToLower(name) == "adminer" && a.dataDir != "" {
-		for _, f := range []string{
-			filepath.Join(a.dataDir, "adminer", "adminer-core.php"),
-			filepath.Join(a.dataDir, "adminer", "index.php"),
-		} {
-			if data, err := os.ReadFile(f); err == nil {
-				if v := updater.ExtractVersion(string(data)); v != "" {
-					return v
-				}
-			}
-		}
-	}
-	return updater.DetectInstalledBinaryVersion(a.getBaseBinDir(), name)
+	return updater.DetectInstalledBinaryVersion(a.getBaseBinDir(), name, a.getDataDir())
 }
 
 func (a *App) DownloadBinary(name string) (UIMessage, error) {
@@ -1333,6 +1321,8 @@ func (a *App) CheckRuntimeUpdates() []updater.RuntimeUpdateInfo {
 	opts := updater.CheckOptions{
 		PHPReleasesURL: a.phpReleasesURL,
 		BaseBinDir:     a.getBaseBinDir(),
+		DataDir:        a.getDataDir(),
+		LogDir:         filepath.Join(a.getDataDir(), "logs"),
 		Registry:       a.getRegistry(),
 	}
 	return updater.CheckUpdates(ctx, opts)

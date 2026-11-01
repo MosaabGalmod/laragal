@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -178,6 +179,64 @@ func TestGitHubSource_RateLimitError(t *testing.T) {
 			t.Errorf("expected error for HTTP %d, got nil", code)
 		}
 		server.Close()
+	}
+}
+
+func TestGitHubSource_RateLimit_ResetHeader_AndNoFailureCaching(t *testing.T) {
+	resetEpoch := time.Now().Add(15 * time.Minute).Unix()
+	expectedResetTime := time.Unix(resetEpoch, 0).Local().Format("15:04")
+
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", resetEpoch))
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message": "API rate limit exceeded"}`))
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{
+			"tag_name": "v8.10.3",
+			"assets": [
+				{
+					"name": "Redis-8.10.3-Windows-x64-msys2.zip",
+					"browser_download_url": "https://example.com/redis.zip",
+					"digest": "sha256:abcd"
+				}
+			]
+		}`))
+	}))
+	defer server.Close()
+
+	src := updater.NewGitHubSource("redis-windows/redis-windows", regexp.MustCompile(`^Redis-.*-Windows-x64-msys2\.zip$`), "redis")
+	src.BaseURL = server.URL
+	src.CacheTTL = 1 * time.Hour // caching is enabled for successes
+
+	// Call 1: fails with 403 rate limit
+	_, err := src.Latest(context.Background(), "redis")
+	if err == nil {
+		t.Fatalf("expected error on rate limit, got nil")
+	}
+	errStr := err.Error()
+	if !strings.Contains(strings.ToLower(errStr), "rate limit") {
+		t.Errorf("expected error to mention rate limit, got: %s", errStr)
+	}
+	if !strings.Contains(errStr, expectedResetTime) {
+		t.Errorf("expected error to contain reset time %s, got: %s", expectedResetTime, errStr)
+	}
+
+	// Call 2: immediately retried on next call (failure was NOT cached for 1 hour)
+	releases, err := src.Latest(context.Background(), "redis")
+	if err != nil {
+		t.Fatalf("call 2 failed: %v", err)
+	}
+	if calls != 2 {
+		t.Errorf("expected 2 network calls (retry not blocked by cache), got %d", calls)
+	}
+	if len(releases) != 1 || releases[0].Version != "8.10.3" {
+		t.Errorf("expected live release 8.10.3, got %+v", releases)
 	}
 }
 
