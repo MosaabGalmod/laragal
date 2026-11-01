@@ -11,6 +11,12 @@ export interface SiteItem {
   is_web?: boolean
 }
 
+export interface FrameCheckResult {
+  frameable: boolean
+  reason: 'x_frame_options' | 'csp_frame_ancestors' | 'unreachable' | ''
+  status: number
+}
+
 export interface ServiceItem {
   id: string
   name_key: string

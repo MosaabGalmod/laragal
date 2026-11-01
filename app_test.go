@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/pem"
 	"fmt"
 	"net"
 	"net/http"
@@ -824,4 +825,175 @@ func TestNoArabicInBackendGoFiles(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestCheckFrameable(t *testing.T) {
+	tests := []struct {
+		name          string
+		headerKey     string
+		headerVal     string
+		statusCode    int
+		methodAllowed string
+		wantFrameable bool
+		wantReason    string
+	}{
+		{
+			name:          "DENY header",
+			headerKey:     "X-Frame-Options",
+			headerVal:     "DENY",
+			statusCode:    http.StatusOK,
+			wantFrameable: false,
+			wantReason:    "x_frame_options",
+		},
+		{
+			name:          "SAMEORIGIN header",
+			headerKey:     "X-Frame-Options",
+			headerVal:     "SAMEORIGIN",
+			statusCode:    http.StatusOK,
+			wantFrameable: false,
+			wantReason:    "x_frame_options",
+		},
+		{
+			name:          "CSP frame-ancestors self",
+			headerKey:     "Content-Security-Policy",
+			headerVal:     "default-src 'self'; frame-ancestors 'self'",
+			statusCode:    http.StatusOK,
+			wantFrameable: false,
+			wantReason:    "csp_frame_ancestors",
+		},
+		{
+			name:          "CSP frame-ancestors wildcard",
+			headerKey:     "Content-Security-Policy",
+			headerVal:     "default-src 'self'; frame-ancestors *",
+			statusCode:    http.StatusOK,
+			wantFrameable: true,
+			wantReason:    "",
+		},
+		{
+			name:          "no framing headers",
+			headerKey:     "",
+			headerVal:     "",
+			statusCode:    http.StatusOK,
+			wantFrameable: true,
+			wantReason:    "",
+		},
+		{
+			name:          "HEAD 405 fallback to GET with no headers",
+			headerKey:     "",
+			headerVal:     "",
+			statusCode:    http.StatusOK,
+			methodAllowed: "GET_ONLY",
+			wantFrameable: true,
+			wantReason:    "",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if tc.methodAllowed == "GET_ONLY" && r.Method == http.MethodHead {
+					w.WriteHeader(http.StatusMethodNotAllowed)
+					return
+				}
+				if tc.headerKey != "" {
+					w.Header().Set(tc.headerKey, tc.headerVal)
+				}
+				w.WriteHeader(tc.statusCode)
+			}))
+			defer ts.Close()
+
+			domain := strings.TrimPrefix(ts.URL, "https://")
+
+			app := &App{
+				sites: []caddy.SiteDef{
+					{Domain: domain},
+				},
+				checkClient: ts.Client(),
+			}
+
+			res, err := app.CheckFrameable(domain)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			if res.Frameable != tc.wantFrameable {
+				t.Errorf("expected frameable=%v, got %v", tc.wantFrameable, res.Frameable)
+			}
+			if res.Reason != tc.wantReason {
+				t.Errorf("expected reason=%q, got %q", tc.wantReason, res.Reason)
+			}
+			if res.Status != tc.statusCode {
+				t.Errorf("expected status=%d, got %d", tc.statusCode, res.Status)
+			}
+		})
+	}
+
+	t.Run("unknown domain returns error", func(t *testing.T) {
+		app := &App{
+			sites: []caddy.SiteDef{
+				{Domain: "known.test"},
+			},
+		}
+		_, err := app.CheckFrameable("unknown.test")
+		if err == nil {
+			t.Fatal("expected error for unknown domain, got nil")
+		}
+	})
+
+	t.Run("unreachable host returns unreachable reason", func(t *testing.T) {
+		// Pick an address that is not listening
+		app := &App{
+			sites: []caddy.SiteDef{
+				{Domain: "127.0.0.1:59999"},
+			},
+		}
+		res, err := app.CheckFrameable("127.0.0.1:59999")
+		if err != nil {
+			t.Fatalf("expected nil error for unreachable host, got %v", err)
+		}
+		if res.Frameable {
+			t.Errorf("expected frameable=false for unreachable, got true")
+		}
+		if res.Reason != "unreachable" {
+			t.Errorf("expected reason=unreachable, got %q", res.Reason)
+		}
+	})
+
+	t.Run("TLS cert loaded from disk root cert path without checkClient", func(t *testing.T) {
+		ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Frame-Options", "DENY")
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer ts.Close()
+
+		domain := strings.TrimPrefix(ts.URL, "https://")
+
+		// Export ts.Certificate() to a temp PEM file
+		certPEM := pem.EncodeToMemory(&pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: ts.Certificate().Raw,
+		})
+		tempCertFile := filepath.Join(t.TempDir(), "root.crt")
+		if err := os.WriteFile(tempCertFile, certPEM, 0644); err != nil {
+			t.Fatalf("failed to write temp cert: %v", err)
+		}
+
+		app := &App{
+			sites: []caddy.SiteDef{
+				{Domain: domain},
+			},
+			caddyRootCertPath: tempCertFile,
+		}
+
+		res, err := app.CheckFrameable(domain)
+		if err != nil {
+			t.Fatalf("unexpected error when loading cert from root.crt: %v", err)
+		}
+		if res.Frameable {
+			t.Errorf("expected frameable=false, got true")
+		}
+		if res.Reason != "x_frame_options" {
+			t.Errorf("expected reason=x_frame_options, got %q", res.Reason)
+		}
+	})
 }

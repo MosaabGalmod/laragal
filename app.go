@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -37,18 +39,26 @@ type UIMessage struct {
 	Params map[string]string `json:"params,omitempty"`
 }
 
+type FrameCheck struct {
+	Frameable bool   `json:"frameable"`
+	Reason    string `json:"reason"`
+	Status    int    `json:"status"`
+}
+
 type App struct {
-	ctx            context.Context
-	cfg            *config.AppConfig
-	supervisor     *process.Supervisor
-	sites          []caddy.SiteDef
-	sitesMu        sync.RWMutex
-	cfgPath        string
-	userStopped    map[string]bool
-	userStoppedMu  sync.RWMutex
-	phpReleasesURL string
-	baseBinDir     string
-	tempDir        string
+	ctx               context.Context
+	cfg               *config.AppConfig
+	supervisor        *process.Supervisor
+	sites             []caddy.SiteDef
+	sitesMu           sync.RWMutex
+	cfgPath           string
+	userStopped       map[string]bool
+	userStoppedMu     sync.RWMutex
+	phpReleasesURL    string
+	baseBinDir        string
+	tempDir           string
+	checkClient       *http.Client
+	caddyRootCertPath string
 }
 
 func (a *App) getBaseBinDir() string {
@@ -721,6 +731,143 @@ func (a *App) InstallSSLTrust() (UIMessage, error) {
 	}
 
 	return UIMessage{Key: "ssl_install_success"}, nil
+}
+
+func (a *App) CheckFrameable(domain string) (FrameCheck, error) {
+	cleanDomain := strings.TrimSpace(domain)
+	if cleanDomain == "" {
+		return FrameCheck{}, fmt.Errorf("domain cannot be empty")
+	}
+
+	// 1. Only allow domains that belong to the current LaraGal site list
+	sites := a.GetSites()
+	matched := false
+	for _, s := range sites {
+		if strings.EqualFold(strings.TrimSpace(s.Domain), cleanDomain) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return FrameCheck{}, fmt.Errorf("domain %q is not in the known sites list", cleanDomain)
+	}
+
+	// 2. Setup TLS transport with Caddy local root cert
+	var clientTransport http.RoundTripper
+	if a.checkClient != nil && a.checkClient.Transport != nil {
+		clientTransport = a.checkClient.Transport
+	} else {
+		rootCAs, err := x509.SystemCertPool()
+		if err != nil || rootCAs == nil {
+			rootCAs = x509.NewCertPool()
+		}
+		certPath := a.caddyRootCertPath
+		if certPath == "" {
+			certPath = a.findCaddyRootCert()
+		}
+		if certPath != "" {
+			if pemData, err := os.ReadFile(certPath); err == nil {
+				rootCAs.AppendCertsFromPEM(pemData)
+			}
+		}
+		clientTransport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: rootCAs,
+			},
+		}
+	}
+
+	client := &http.Client{
+		Transport: clientTransport,
+		Timeout:   5 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			if !strings.EqualFold(req.URL.Host, via[0].URL.Host) {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
+	}
+
+	targetURL := fmt.Sprintf("https://%s/", strings.Trim(cleanDomain, "/"))
+
+	// 3. Perform HEAD request with 5s timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	headReq, err := http.NewRequestWithContext(ctx, http.MethodHead, targetURL, nil)
+	if err != nil {
+		return FrameCheck{Frameable: false, Reason: "unreachable", Status: 0}, nil
+	}
+
+	resp, err := client.Do(headReq)
+	if err != nil {
+		return FrameCheck{Frameable: false, Reason: "unreachable", Status: 0}, nil
+	}
+	defer func() {
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+	}()
+
+	// 4. Fall back to GET if HEAD not allowed (405 or 501)
+	if resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusNotImplemented {
+		getReq, getErr := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+		if getErr == nil {
+			if getResp, doErr := client.Do(getReq); doErr == nil {
+				_ = resp.Body.Close()
+				resp = getResp
+			}
+		}
+	}
+
+	// 5. Check X-Frame-Options
+	// Treat X-Frame-Options DENY or SAMEORIGIN as not frameable (the preview origin differs).
+	for _, val := range resp.Header.Values("X-Frame-Options") {
+		for _, part := range strings.Split(val, ",") {
+			clean := strings.ToUpper(strings.TrimSpace(part))
+			if clean == "DENY" || clean == "SAMEORIGIN" {
+				return FrameCheck{
+					Frameable: false,
+					Reason:    "x_frame_options",
+					Status:    resp.StatusCode,
+				}, nil
+			}
+		}
+	}
+
+	// 6. Parse CSP frame-ancestors: not frameable unless it contains `*`.
+	for _, csp := range resp.Header.Values("Content-Security-Policy") {
+		directives := strings.Split(csp, ";")
+		for _, directive := range directives {
+			tokens := strings.Fields(directive)
+			if len(tokens) > 0 && strings.EqualFold(tokens[0], "frame-ancestors") {
+				hasWildcard := false
+				for _, src := range tokens[1:] {
+					if src == "*" {
+						hasWildcard = true
+						break
+					}
+				}
+				if !hasWildcard {
+					return FrameCheck{
+						Frameable: false,
+						Reason:    "csp_frame_ancestors",
+						Status:    resp.StatusCode,
+					}, nil
+				}
+			}
+		}
+	}
+
+	// 7. No framing restrictions found -> frameable
+	return FrameCheck{
+		Frameable: true,
+		Reason:    "",
+		Status:    resp.StatusCode,
+	}, nil
 }
 
 func (a *App) downloadAndInstallArtifact(name string, url string, expectedSHA string) (UIMessage, error) {
