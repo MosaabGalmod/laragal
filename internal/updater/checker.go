@@ -156,7 +156,7 @@ func DetectInstalledBinaryVersion(binDir string, name string) string {
 	case name == "phpmyadmin":
 		idx := filepath.Join("data", "phpmyadmin", "index.php")
 		if _, err := os.Stat(idx); err == nil {
-			return "5.2.2"
+			return "5.2.3"
 		}
 	case strings.HasPrefix(name, "php-"):
 		ver := strings.TrimPrefix(name, "php-")

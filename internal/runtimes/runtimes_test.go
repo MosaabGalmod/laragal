@@ -191,4 +191,15 @@ func TestEOLFlags(t *testing.T) {
 			t.Errorf("%s must not be EOL", v)
 		}
 	}
+
+	redis, ok := runtimes.Get("redis")
+	if !ok {
+		t.Fatal("redis not found in catalog")
+	}
+	if !redis.EOL {
+		t.Errorf("redis must have EOL=true, got false")
+	}
+	if redis.EOLDate != "2022-02-17" {
+		t.Errorf("redis EOLDate expected 2022-02-17, got %s", redis.EOLDate)
+	}
 }
