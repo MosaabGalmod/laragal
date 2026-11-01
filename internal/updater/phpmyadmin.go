@@ -283,8 +283,8 @@ func CheckPHPCompatibility(activePHP string, constraint string) bool {
 // CompareVersionParts compares two version strings numerically part-by-part.
 // Returns -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2.
 func CompareVersionParts(v1, v2 string) int {
-	p1, b1 := parseVersionComponents(v1)
-	p2, b2 := parseVersionComponents(v2)
+	p1, b1, _ := parseVersionComponents(v1)
+	p2, b2, _ := parseVersionComponents(v2)
 
 	maxLen := len(p1)
 	if len(p2) > maxLen {

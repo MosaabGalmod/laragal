@@ -232,3 +232,57 @@ func TestPHPSource_Latest(t *testing.T) {
 		t.Errorf("expected php-8.4 in live releases")
 	}
 }
+
+func TestCheckUpdates_PHPBuildSuffix_InstalledWithoutSuffix_NoUpdate(t *testing.T) {
+	feedJSON := `{
+  "8.5": {
+    "version": "8.5.12-1",
+    "nts-vs17-x64": {
+      "zip": {
+        "path": "php-8.5.12-1-nts-Win32-vs17-x64.zip",
+        "sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      }
+    }
+  }
+}`
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(feedJSON))
+	}))
+	defer server.Close()
+
+	tempBin := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(tempBin, "php-8.5"), 0755)
+
+	opts := updater.CheckOptions{
+		PHPReleasesURL: server.URL,
+		HTTPTimeout:    2 * time.Second,
+		BaseBinDir:     tempBin,
+		InstalledVersions: map[string]string{
+			"php-8.5": "8.5.12",
+		},
+	}
+
+	updates := updater.CheckUpdates(context.Background(), opts)
+	var phpUpdate *updater.RuntimeUpdateInfo
+	for i := range updates {
+		if updates[i].Name == "php-8.5" {
+			phpUpdate = &updates[i]
+			break
+		}
+	}
+
+	if phpUpdate == nil {
+		t.Fatalf("expected update entry for php-8.5")
+	}
+	if phpUpdate.CurrentVersion != "8.5.12" {
+		t.Errorf("expected CurrentVersion 8.5.12, got %s", phpUpdate.CurrentVersion)
+	}
+	if phpUpdate.LatestVersion != "8.5.12-1" {
+		t.Errorf("expected LatestVersion 8.5.12-1, got %s", phpUpdate.LatestVersion)
+	}
+	if phpUpdate.HasUpdate {
+		t.Errorf("expected HasUpdate to be false when installed version 8.5.12 has no suffix and feed version is 8.5.12-1, got true")
+	}
+}

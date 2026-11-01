@@ -3,6 +3,7 @@ package downloader_test
 import (
 	"archive/zip"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -474,5 +475,79 @@ func TestInstallArtifactZip_DeferredCleanup_NeverDeletesDataInStaging(t *testing
 
 	if !foundStagingWithData {
 		t.Error("CRITICAL: staging directory containing data was deleted by deferred cleanup!")
+	}
+}
+
+func TestInstallArtifactZip_PHP_ExtensionDirConfiguredAfterSwap_NoStagingPath(t *testing.T) {
+	tempBase := t.TempDir()
+	destDir := filepath.Join(tempBase, "bin", "php-8.5")
+
+	zipPath := filepath.Join(tempBase, "fake-php-8.5.zip")
+	createTestZip(t, zipPath, map[string]string{
+		"php.exe":             "fake-php-8.5",
+		"php-cgi.exe":         "fake-php-cgi-8.5",
+		"ext/php_curl.dll":    "fake-curl",
+		"php.ini-development": "[PHP]\n;extension_dir = \"./\"\n;extension_dir = \"ext\"\nextension=curl\n",
+	})
+
+	// 1. Fresh installation
+	if err := downloader.InstallArtifactZip("php-8.5", zipPath, destDir); err != nil {
+		t.Fatalf("InstallArtifactZip failed: %v", err)
+	}
+
+	iniData, err := os.ReadFile(filepath.Join(destDir, "php.ini"))
+	if err != nil {
+		t.Fatalf("failed to read installed php.ini: %v", err)
+	}
+	iniContent := string(iniData)
+
+	if strings.Contains(iniContent, ".staging-") {
+		t.Errorf("php.ini must not contain staging folder references, got:\n%s", iniContent)
+	}
+
+	expectedExt := filepath.ToSlash(filepath.Join(destDir, "ext"))
+	expectedLine := fmt.Sprintf("extension_dir = \"%s\"", expectedExt)
+
+	extLines := 0
+	for _, line := range strings.Split(iniContent, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "extension_dir =") {
+			extLines++
+			if trimmed != expectedLine {
+				t.Errorf("expected extension_dir line %q, got %q", expectedLine, trimmed)
+			}
+		}
+	}
+	if extLines != 1 {
+		t.Errorf("expected exactly 1 extension_dir line, found %d", extLines)
+	}
+
+	// 2. Upgrade installation on top of existing
+	if err := downloader.InstallArtifactZip("php-8.5", zipPath, destDir); err != nil {
+		t.Fatalf("InstallArtifactZip upgrade failed: %v", err)
+	}
+
+	upgradedData, err := os.ReadFile(filepath.Join(destDir, "php.ini"))
+	if err != nil {
+		t.Fatalf("failed to read upgraded php.ini: %v", err)
+	}
+	upgradedContent := string(upgradedData)
+
+	if strings.Contains(upgradedContent, ".staging-") {
+		t.Errorf("upgraded php.ini must not contain staging folder references, got:\n%s", upgradedContent)
+	}
+
+	extLines = 0
+	for _, line := range strings.Split(upgradedContent, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "extension_dir =") {
+			extLines++
+			if trimmed != expectedLine {
+				t.Errorf("expected extension_dir line %q after upgrade, got %q", expectedLine, trimmed)
+			}
+		}
+	}
+	if extLines != 1 {
+		t.Errorf("expected exactly 1 extension_dir line after upgrade, found %d", extLines)
 	}
 }

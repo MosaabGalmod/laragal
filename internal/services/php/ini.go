@@ -13,6 +13,7 @@ import (
 var phpVersionRegex = regexp.MustCompile(`(?i)PHP\s+(\d+\.\d+)`)
 var dirVersionRegex = regexp.MustCompile(`(?:php-?|^)(\d+\.\d+)`)
 var opcacheZendExtRegex = regexp.MustCompile(`(?i)^\s*(;?)\s*(zend_extension\s*=\s*"?([a-zA-Z0-9_-]*opcache[a-zA-Z0-9_.-]*)"?)`)
+var extDirLineRegex = regexp.MustCompile(`(?i)^\s*(;?)\s*extension_dir\s*=\s*"?([^"\r\n]*)"?\s*$`)
 
 // DetectPHPVersion attempts to detect the PHP version from the directory path or binary.
 func DetectPHPVersion(phpDir string) string {
@@ -117,6 +118,70 @@ opcache.max_accelerated_files = 10000
 	return result
 }
 
+func processExtensionDir(content string, phpDir string) string {
+	absDir, err := filepath.Abs(phpDir)
+	if err != nil {
+		absDir = phpDir
+	}
+	expectedExt := filepath.ToSlash(filepath.Join(absDir, "ext"))
+
+	lines := strings.Split(content, "\n")
+
+	// 1. Scan uncommented lines for an existing valid custom extension_dir.
+	// If found (and it's not a temporary staging/backup path, is absolute, and exists on disk), preserve it.
+	var validCustomExt string
+	for _, line := range lines {
+		trimmed := strings.TrimRight(line, "\r")
+		m := extDirLineRegex.FindStringSubmatch(trimmed)
+		if len(m) > 0 {
+			isCommented := m[1] == ";"
+			val := strings.TrimSpace(m[2])
+			if !isCommented && val != "" {
+				// Must not be a temporary staging or backup path
+				if strings.Contains(val, ".staging-") || strings.Contains(val, ".old-") {
+					continue
+				}
+				// Relative paths like "ext" or "./" are not reliable for php-cgi started from other dirs
+				if !filepath.IsAbs(val) {
+					continue
+				}
+				// Must exist on disk as a directory
+				if info, statErr := os.Stat(val); statErr == nil && info.IsDir() {
+					validCustomExt = filepath.ToSlash(val)
+					break
+				}
+			}
+		}
+	}
+
+	targetExt := expectedExt
+	if validCustomExt != "" {
+		targetExt = validCustomExt
+	}
+
+	// 2. Replace all existing extension_dir lines (commented or not) with exactly one line.
+	var newLines []string
+	foundFirst := false
+	for _, line := range lines {
+		trimmed := strings.TrimRight(line, "\r")
+		if extDirLineRegex.MatchString(trimmed) {
+			if !foundFirst {
+				newLines = append(newLines, fmt.Sprintf("extension_dir = \"%s\"", targetExt))
+				foundFirst = true
+			}
+			// Subsequent occurrences are dropped
+		} else {
+			newLines = append(newLines, line)
+		}
+	}
+
+	if !foundFirst {
+		newLines = append(newLines, fmt.Sprintf("extension_dir = \"%s\"", targetExt))
+	}
+
+	return strings.Join(newLines, "\n")
+}
+
 // EnsurePHPIni generates a production/development php.ini with essential web extensions enabled
 // and updates existing php.ini to ensure required extensions (e.g. mysqli, pdo_mysql) are active.
 // For PHP >= 8.5, OPcache is compiled into core, so zend_extension=opcache is commented out or skipped
@@ -125,6 +190,12 @@ func EnsurePHPIni(phpDir string, versionHint ...string) error {
 	iniPath := filepath.Join(phpDir, "php.ini")
 	devPath := filepath.Join(phpDir, "php.ini-development")
 	prodPath := filepath.Join(phpDir, "php.ini-production")
+
+	absDir, err := filepath.Abs(phpDir)
+	if err != nil {
+		absDir = phpDir
+	}
+	expectedExt := filepath.ToSlash(filepath.Join(absDir, "ext"))
 
 	version := ""
 	if len(versionHint) > 0 && strings.TrimSpace(versionHint[0]) != "" {
@@ -164,7 +235,7 @@ post_max_size = 100M
 upload_max_filesize = 100M
 default_socket_timeout = 60
 
-extension_dir = "ext"
+extension_dir = "%s"
 extension=curl
 extension=fileinfo
 extension=mbstring
@@ -181,7 +252,7 @@ opcache.enable_cli = 1
 opcache.memory_consumption = 128
 opcache.interned_strings_buffer = 8
 opcache.max_accelerated_files = 10000
-`, opcacheExtLine)
+`, expectedExt, opcacheExtLine)
 		return os.WriteFile(iniPath, []byte(content), 0644)
 	}
 
@@ -199,27 +270,8 @@ opcache.max_accelerated_files = 10000
 		"zip",
 	}
 
-	// Ensure extension_dir uses clean path (preferring absolute if ext directory exists)
-	extPath := "ext"
-	if absExt, err := filepath.Abs(filepath.Join(phpDir, "ext")); err == nil {
-		if info, statErr := os.Stat(absExt); statErr == nil && info.IsDir() {
-			extPath = filepath.ToSlash(absExt)
-		}
-	}
-
-	if strings.Contains(content, "extension_dir =") {
-		// Update existing extension_dir
-		lines := strings.Split(content, "\n")
-		for i, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if strings.HasPrefix(trimmed, "extension_dir =") || strings.HasPrefix(trimmed, ";extension_dir =") {
-				lines[i] = fmt.Sprintf("extension_dir = \"%s\"", extPath)
-			}
-		}
-		content = strings.Join(lines, "\n")
-	} else {
-		content += fmt.Sprintf("\nextension_dir = \"%s\"\n", extPath)
-	}
+	// Ensure extension_dir is configured, deduplicated, and self-healed
+	content = processExtensionDir(content, phpDir)
 
 	// Ensure all required extensions are uncommented
 	for _, ext := range extensions {

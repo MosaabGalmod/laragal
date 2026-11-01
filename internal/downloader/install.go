@@ -159,11 +159,11 @@ func InstallArtifactZipWithRename(name string, zipPath string, destDir string, r
 
 	if !destExists {
 		// New installation
-		if strings.HasPrefix(safeName, "php") && safeName != "phpmyadmin" {
-			_ = php.EnsurePHPIni(stagingDir, name)
-		}
 		if err := rename(stagingDir, destDir); err != nil {
 			return fmt.Errorf("failed to move staging directory into place: %w", err)
+		}
+		if strings.HasPrefix(safeName, "php") && safeName != "phpmyadmin" {
+			_ = php.EnsurePHPIni(destDir, name)
 		}
 		success = true
 		return nil
@@ -178,7 +178,6 @@ func InstallArtifactZipWithRename(name string, zipPath string, destDir string, r
 		if fileExists(oldIni) {
 			_ = copyFile(oldIni, filepath.Join(stagingDir, "php.ini"))
 		}
-		_ = php.EnsurePHPIni(stagingDir, name)
 	}
 
 	// B. Preserve MariaDB / MySQL config and data directory
@@ -277,6 +276,11 @@ func InstallArtifactZipWithRename(name string, zipPath string, destDir string, r
 	// 5. Delete backup folder
 	if strings.HasPrefix(filepath.Base(oldDir), ".old-") {
 		_ = os.RemoveAll(oldDir)
+	}
+
+	// 6. Post-install / upgrade PHP configuration against the final folder
+	if strings.HasPrefix(safeName, "php") && safeName != "phpmyadmin" {
+		_ = php.EnsurePHPIni(destDir, name)
 	}
 
 	success = true

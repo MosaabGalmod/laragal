@@ -508,6 +508,8 @@ func (a *App) ensurePHPServiceRunning(version string) error {
 		return fmt.Errorf("PHP executable for %s not found", normVer)
 	}
 
+	_ = php.EnsurePHPIni(filepath.Dir(phpExe), normVer)
+
 	phpEnv := []string{
 		"PHP_FCGI_CHILDREN=8",
 		"PHP_FCGI_MAX_REQUESTS=10000",
@@ -567,6 +569,7 @@ func (a *App) StartServices() {
 		rtName := fmt.Sprintf("php-%s", ver)
 		port := runtimes.PHPPortForVersion(ver)
 		if phpExe := a.findPHPExecutableForVersion(ver); phpExe != "" {
+			_ = php.EnsurePHPIni(filepath.Dir(phpExe), ver)
 			_ = a.supervisor.StartServiceWithEnv(rtName, phpExe, []string{"-b", fmt.Sprintf("127.0.0.1:%d", port)}, phpEnv, port)
 		}
 	}
@@ -660,6 +663,7 @@ func (a *App) ToggleService(name string) (bool, error) {
 		if phpExe == "" {
 			return false, fmt.Errorf("PHP executable for %s not found; download it from runtimes", ver)
 		}
+		_ = php.EnsurePHPIni(filepath.Dir(phpExe), ver)
 		phpEnv := []string{
 			"PHP_FCGI_CHILDREN=8",
 			"PHP_FCGI_MAX_REQUESTS=10000",

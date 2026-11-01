@@ -1,6 +1,7 @@
 package php_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -35,8 +36,9 @@ memory_limit = 128M
 	}
 
 	content := string(data)
-	if !strings.Contains(content, "extension_dir = \"ext\"") {
-		t.Errorf("expected extension_dir to be enabled")
+	expectedExt := filepath.ToSlash(filepath.Join(tempDir, "ext"))
+	if !strings.Contains(content, fmt.Sprintf("extension_dir = \"%s\"", expectedExt)) {
+		t.Errorf("expected extension_dir to be %q, got:\n%s", expectedExt, content)
 	}
 	if !strings.Contains(content, "extension=curl") {
 		t.Errorf("expected extension=curl to be enabled")
@@ -320,5 +322,97 @@ opcache.enable = 1
 	}
 	if !strings.Contains(content, ";zend_extension=opcache") {
 		t.Errorf("expected ;zend_extension=opcache to be commented out in PHP 9.0")
+	}
+}
+
+func TestEnsurePHPIni_HealsStaleStagingExtensionDirs(t *testing.T) {
+	tempDir := t.TempDir()
+
+	staleIni := `[PHP]
+extension_dir = "D:/projects/laragal/bin/.staging-php-8.5-12345/ext"
+extension_dir = "D:/projects/laragal/bin/.staging-php-8.5-67890/ext"
+extension_dir = "D:/projects/laragal/bin/.staging-php-8.5-abcde/ext"
+extension=curl
+`
+	iniPath := filepath.Join(tempDir, "php.ini")
+	if err := os.WriteFile(iniPath, []byte(staleIni), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := php.EnsurePHPIni(tempDir, "8.5"); err != nil {
+		t.Fatalf("EnsurePHPIni failed: %v", err)
+	}
+
+	data, err := os.ReadFile(iniPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+
+	if strings.Contains(content, ".staging-") {
+		t.Errorf("expected all .staging- references to be healed, got:\n%s", content)
+	}
+
+	expectedExt := filepath.ToSlash(filepath.Join(tempDir, "ext"))
+	expectedLine := fmt.Sprintf("extension_dir = \"%s\"", expectedExt)
+
+	extCount := 0
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "extension_dir =") || strings.HasPrefix(trimmed, ";extension_dir =") {
+			extCount++
+			if trimmed != expectedLine {
+				t.Errorf("expected healed line %q, got %q", expectedLine, trimmed)
+			}
+		}
+	}
+
+	if extCount != 1 {
+		t.Errorf("expected exactly 1 extension_dir line after healing, got %d", extCount)
+	}
+}
+
+func TestEnsurePHPIni_PreservesValidCustomExtensionDir(t *testing.T) {
+	tempDir := t.TempDir()
+
+	customExtDir := t.TempDir() // Real existing directory on disk
+	customExtSlash := filepath.ToSlash(customExtDir)
+
+	iniWithCustom := fmt.Sprintf(`[PHP]
+;extension_dir = "ext"
+extension_dir = "%s"
+extension=curl
+`, customExtSlash)
+
+	iniPath := filepath.Join(tempDir, "php.ini")
+	if err := os.WriteFile(iniPath, []byte(iniWithCustom), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := php.EnsurePHPIni(tempDir, "8.5"); err != nil {
+		t.Fatalf("EnsurePHPIni failed: %v", err)
+	}
+
+	data, err := os.ReadFile(iniPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+
+	expectedLine := fmt.Sprintf("extension_dir = \"%s\"", customExtSlash)
+
+	extCount := 0
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "extension_dir =") || strings.HasPrefix(trimmed, ";extension_dir =") {
+			extCount++
+			if trimmed != expectedLine {
+				t.Errorf("expected valid custom extension_dir line %q to be preserved, got %q", expectedLine, trimmed)
+			}
+		}
+	}
+
+	if extCount != 1 {
+		t.Errorf("expected exactly 1 extension_dir line, got %d", extCount)
 	}
 }
