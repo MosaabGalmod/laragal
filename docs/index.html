@@ -54,6 +54,17 @@
         "downloadUrl": "https://github.com/MosaabGalmod/laragal/releases/latest",
         "installUrl": "https://github.com/MosaabGalmod/laragal/releases/latest",
         "screenshot": "https://mosaabgalmod.github.io/laragal/assets/og-ar.png",
+        "featureList": [
+          "Caddy with automatic local HTTPS for .test domains",
+          "Concurrent PHP FastCGI versions (8.1 to 8.5) with official upstream releases",
+          "MariaDB 11.4 LTS and Redis caching",
+          "phpMyAdmin and Adminer with automatic local login",
+          "Mailpit local SMTP and webmail",
+          "Responsive viewport simulator with frame-ancestors checking",
+          "WCAG 2.x AA/AAA contrast checker and design resources",
+          "Atomic runtime updates with SHA-256 checksum verification",
+          "Localhost binding on 127.0.0.1 and ::1"
+        ],
         "license": "https://github.com/MosaabGalmod/laragal/blob/main/LICENSE",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
         "codeRepository": "https://github.com/MosaabGalmod/laragal"
@@ -108,6 +119,8 @@
       <nav class="nav" aria-label="أقسام الصفحة">
         <a href="#services">الخدمات</a>
         <a href="#projects">أنواع المشاريع</a>
+        <a href="#design-tools">أدوات التصميم</a>
+        <a href="#updates">التحديثات</a>
         <a href="#start">البدء</a>
         <a href="#security">الأمان</a>
         <a href="#faq">الأسئلة الشائعة</a>
@@ -130,6 +143,8 @@
           <nav class="menu-panel" aria-label="أقسام الصفحة">
             <a href="#services">الخدمات</a>
             <a href="#projects">أنواع المشاريع</a>
+            <a href="#design-tools">أدوات التصميم</a>
+            <a href="#updates">التحديثات</a>
             <a href="#start">البدء</a>
             <a href="#security">الأمان</a>
             <a href="#faq">الأسئلة الشائعة</a>
@@ -180,7 +195,7 @@
           </article>
           <article class="service">
             <h3><span dir="ltr">PHP 8.1–8.5</span><span class="mono"><span dir="ltr">:9081–9085</span></span></h3>
-            <p>كل إصدار على منفذ <span dir="ltr">FastCGI</span> خاص به مع <span dir="ltr">OPcache</span>، فيعمل مشروع على <span dir="ltr">8.3</span> وآخر على <span dir="ltr">8.5</span> في الوقت نفسه. تغيير الإصدار من قائمة المشروع.</p>
+            <p>يعمل كل إصدار على منفذ <span dir="ltr">FastCGI</span> مستقل مع <span dir="ltr">OPcache</span>. إصدار <span dir="ltr">8.1</span> منتهي الدعم <span dir="ltr">(EOL)</span>، وتظهر الإصدارات الجديدة تلقائيًا من المصدر الرسمي. تغيير الإصدار من صف المشروع.</p>
           </article>
           <article class="service">
             <h3><span>MariaDB</span><span class="mono"><span dir="ltr">:3306</span></span></h3>
@@ -196,7 +211,7 @@
           </article>
           <article class="service">
             <h3><span>Redis</span><span class="mono"><span dir="ltr">:6379</span></span></h3>
-            <p>للتخزين المؤقت والطوابير والجلسات. متوقف افتراضيًا، ويُشغَّل بنقرة عند حاجة المشروع إليه.</p>
+            <p>للتخزين المؤقت والطوابير والجلسات، ومتوقف افتراضيًا. البناء المدمج منتهي الدعم <span dir="ltr">(EOL)</span>، ويمكن تثبيت بناء مدعوم ومُحدَّث بعد التأكيد.</p>
           </article>
         </div>
       </div>
@@ -226,6 +241,71 @@
               <tr><td>Flutter Web</td><td><span class="sig"><code>build/web/index.html</code></span></td><td>ملفات ثابتة</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="design-tools" aria-labelledby="design-tools-title">
+      <div class="wrap">
+        <h2 id="design-tools-title">أدوات التصميم</h2>
+        <p class="section-intro">لوحات مساعدة مدمجة لفحص تجاوب المواقع وقياس إمكانية الوصول دون الحاجة إلى أدوات خارجية.</p>
+
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3>محاكي الشاشات المتجاوبة</h3>
+            <p>معاينة فورية للمشاريع على مقاسات العرض الأساسية: الهاتف (<span dir="ltr">375px</span>)، والحاسوب اللوحي (<span dir="ltr">768px</span>)، والعرض الكامل للشاشة.</p>
+            <p>يفحص المحاكي ترويسات التأطير <span dir="ltr"><code>X-Frame-Options</code></span> وسياسة أمان المحتوى <span dir="ltr"><code>CSP frame-ancestors</code></span>؛ وحين يحظر المشروع التضمين داخل الإطارات يوضح سبب ذلك ويتيح فتحه مباشرة في المتصفح.</p>
+          </article>
+
+          <article class="feature-card">
+            <h3>فاحص تباين الألوان</h3>
+            <p>حساب لحظي لنسبة التباين اللوني بين المقدمة والخلفية ومطابقتها لمعايير الوصول إلى محتوى الويب <span dir="ltr">(WCAG 2.x)</span>.</p>
+            <p>يوضح الفاحص مدى استيفاء معايير <span dir="ltr">AA</span> و<span dir="ltr">AAA</span> للنصوص العادية والكبيرة لضمان وضوح القراءة لجميع المستخدمين.</p>
+          </article>
+
+          <article class="feature-card">
+            <h3>مصادر ومراجع التصميم</h3>
+            <p>دليل روابط سريعة ومنتقاة لأدوات اختيار الخطوط ومطابقتها، ومنصات تنسيق باليتات الألوان المتناسقة.</p>
+            <p>يتضمن مراجع معتمدة لقواعد تجربة المستخدم وإرشادات إمكانية الوصول لتبسيط بناء واجهات متقنة.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="updates" aria-labelledby="updates-title">
+      <div class="wrap">
+        <h2 id="updates-title">التحديثات</h2>
+        <p class="section-intro">تستعلم بيئات التشغيل مصادرها الرسمية مباشرة، ولا يجري تنزيل أي حزمة دون التحقق الصارم من بصمتها الرقمية <span dir="ltr">(Checksum)</span>.</p>
+
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3>مصادر الإصدارات الرسمية</h3>
+            <p>تفحص الخدمات قنوات النشر الرسمية عبر الإنترنت وتعتمد بصمة <span dir="ltr">SHA-256</span> المنشورة مع كل إصدار:</p>
+            <ul>
+              <li>حزم <span dir="ltr">PHP</span>: يستعلم ملف <span dir="ltr"><code>releases.json</code></span> على موقع <span dir="ltr">windows.php.net</span>، وتظهر الإصدارات الفرعية الأحدث مثل <span dir="ltr">8.6</span> تلقائيًا فور صدورها.</li>
+              <li>خدمات <span dir="ltr">Caddy</span> و<span dir="ltr">Mailpit</span> و<span dir="ltr">Adminer</span> و<span dir="ltr">Redis</span>: تُفحص عبر واجهة <span dir="ltr">GitHub Releases</span> مع التحقق من بصمة <span dir="ltr">(digest)</span> الخاصة بكل ملف.</li>
+              <li>خادم <span dir="ltr">MariaDB</span>: يستعلم واجهة <span dir="ltr">REST API</span> الرسمية، وتُثبت التحديثات التصحيحية في السلسلة الحالية مباشرة، بينما تتطلب السلاسل المستقرة طويلة الدعم <span dir="ltr">(LTS)</span> تأكيدًا مسبقًا ويتبعها تشغيل أداة <span dir="ltr"><code>mariadb-upgrade</code></span>.</li>
+              <li>أداة <span dir="ltr">phpMyAdmin</span>: تُفحص عبر موقع <span dir="ltr">phpmyadmin.net</span> مع بصمة <span dir="ltr">SHA-256</span>، مع إظهار ملاحظة توافق إن كان إصدار <span dir="ltr">PHP</span> المشغِّل خارج نطاق الدعم الرسمي.</li>
+            </ul>
+          </article>
+
+          <article class="feature-card">
+            <h3>بوابات التأكيد للتغييرات الكبرى</h3>
+            <p>تتطلب التغييرات في الإصدار الرئيسي أو الانتقال لمزود مختلف موافقة صريحة في نافذة حوارية قبل البدء.</p>
+            <p>يشمل ذلك ترقية <span dir="ltr">Adminer</span> من <span dir="ltr">4.8.1</span> إلى <span dir="ltr">6.x</span>، أو ترقية <span dir="ltr">Redis</span> إلى إصدار مدعوم مثل <span dir="ltr">redis-windows 8.x</span>، أو الترقية لسلسلة <span dir="ltr">MariaDB LTS</span> أحدث.</p>
+          </article>
+
+          <article class="feature-card">
+            <h3>تثبيت ذري وأمان البيانات</h3>
+            <p>تجري عمليات التثبيت بصورة ذرية؛ إذ تُفك الحزم داخل مجلد مرحلي مؤقت <span dir="ltr">(staging)</span> مع الحفاظ على ملفات الإعداد القائمة مثل <span dir="ltr"><code>php.ini</code></span> و<span dir="ltr"><code>my.ini</code></span> و<span dir="ltr"><code>redis.conf</code></span>.</p>
+            <p>تسترجع العملية المجلد القديم تلقائيًا عند أي تعثر في التثبيت، ولا تُحذف ملفات قواعد البيانات أبدًا أثناء عمليات التنظيف أو التحديث.</p>
+          </article>
+
+          <article class="feature-card">
+            <h3>تحديثات برنامج <span dir="ltr">LaraGal</span></h3>
+            <p>لا يحتوي <span dir="ltr">LaraGal</span> على ميزة التحديث التلقائي الصامت في الخلفية أو إشعارات مزعجة.</p>
+            <p>تُنشر الإصدارات الجديدة عبر صفحة الإصدارات في <span dir="ltr">GitHub Releases</span>، ويجري التحديث يدويًا باستبدال الملف التنفيذي للبرنامج.</p>
+          </article>
         </div>
       </div>
     </section>
@@ -270,15 +350,15 @@
           </div>
           <div>
             <dt>الخدمات مقيّدة بالجهاز</dt>
-            <dd>PHP وMariaDB وMailpit تستمع على <span dir="ltr">127.0.0.1</span> فقط. خادم Caddy يستمع على المنفذ <span dir="ltr">443</span>، فاحجبه في جدار الحماية إن كنت على شبكة عامة.</dd>
+            <dd>تستمع مواقع خادم <span dir="ltr">Caddy</span> وأداتي <span dir="ltr">phpMyAdmin</span> و<span dir="ltr">Adminer</span> وخدمات <span dir="ltr">PHP</span> و<span dir="ltr">MariaDB</span> و<span dir="ltr">Mailpit</span> على <span dir="ltr">127.0.0.1</span> و<span dir="ltr">::1</span> فقط، ولا يمكن الوصول إليها من الشبكة المحلية.</dd>
           </div>
           <div>
-            <dt>اتصالات الشبكة</dt>
-            <dd>يتصل البرنامج بالإنترنت فقط لفحص التحديثات من <span dir="ltr">windows.php.net</span> و<span dir="ltr">GitHub</span>، ولتنزيل الحزم حين تطلب ذلك.</dd>
+            <dt>اتصالات الشبكة والتحقق بالبصمات</dt>
+            <dd>يتصل البرنامج بالإنترنت فقط لفحص التحديثات من المصادر الرسمية وتنزيل الحزم بطلبك. يجري التحقق الإلزامي من بصمة التجزئة <span dir="ltr">(SHA-256 Checksum)</span> لكل تنزيل لكشف أي تلف أو تلاعب أثناء النقل.</dd>
           </div>
           <div>
-            <dt>كلمة مرور قاعدة البيانات</dt>
-            <dd>المستخدم <span dir="ltr">root</span> بلا كلمة مرور، وهذا مقبول لأنها لا تقبل اتصالات من خارج الجهاز. لا تستخدم هذا الإعداد على خادم إنتاج.</dd>
+            <dt>كلمة مرور قاعدة البيانات وأدوات الإدارة</dt>
+            <dd>المستخدم <span dir="ltr">root</span> بلا كلمة مرور، وتسجّل أداتا <span dir="ltr">phpMyAdmin</span> و<span dir="ltr">Adminer</span> الدخول به تلقائيًا لتسهيل التطوير المحلي. هذا مقبول لأن الخدمات لا تقبل اتصالات من خارج الجهاز؛ ولا تستخدم هذا الإعداد على خادم إنتاج.</dd>
           </div>
           <div>
             <dt>ملفاتك</dt>

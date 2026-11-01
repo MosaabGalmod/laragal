@@ -100,8 +100,8 @@ bdi { unicode-bidi: isolate; }
 .brand { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; color: var(--text); text-decoration: none; font-weight: 700; font-size: 18px; }
 .brand img { width: 28px; height: 28px; border-radius: 6px; }
 .brand .ver { font-family: var(--font-mono); font-size: 12px; font-weight: 600; color: var(--text-3); border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; }
-.nav { display: none; gap: 4px; margin-inline-start: 16px; }
-.nav a { color: var(--text-2); text-decoration: none; font-size: 14px; padding: 8px 10px; border-radius: 6px; }
+.nav { display: none; gap: 4px; margin-inline-start: 12px; }
+.nav a { color: var(--text-2); text-decoration: none; font-size: 14px; padding: 6px 8px; border-radius: 6px; min-height: 44px; display: inline-flex; align-items: center; }
 .nav a:hover { color: var(--text); background: var(--surface); }
 .header-actions { display: flex; align-items: center; gap: 8px; margin-inline-start: auto; }
 
@@ -147,7 +147,7 @@ bdi { unicode-bidi: isolate; }
   border-radius: var(--radius);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
-.menu-panel a { color: var(--text); text-decoration: none; padding: 12px; border-radius: 6px; }
+.menu-panel a { color: var(--text); text-decoration: none; padding: 12px; border-radius: 6px; min-height: 44px; display: flex; align-items: center; }
 .menu-panel a:hover { background: var(--surface); }
 
 /* Buttons */
@@ -247,6 +247,40 @@ pre {
   color: var(--text);
 }
 
+/* Feature cards (Design tools & Updates) */
+.feature-grid {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+}
+.feature-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  padding: 24px;
+}
+.feature-card h3 {
+  font-size: 18px;
+  margin: 0 0 10px;
+}
+.feature-card p {
+  margin: 0;
+  color: var(--text-2);
+  font-size: 15px;
+}
+.feature-card p + p {
+  margin-block-start: 10px;
+}
+.feature-card ul {
+  margin: 12px 0 0;
+  padding-inline-start: 20px;
+  color: var(--text-2);
+  font-size: 15px;
+}
+.feature-card li + li {
+  margin-block-start: 8px;
+}
+
 /* Download band */
 .download { display: grid; gap: 16px; align-items: center; }
 .download .meta { color: var(--text-3); font-size: 14px; margin: 8px 0 0; }
@@ -261,11 +295,13 @@ pre {
   .hide-sm { display: inline-flex; }
 }
 @media (min-width: 900px) {
-  .nav { display: flex; }
-  .menu { display: none; }
   section { padding-block: 80px; }
   .hero { padding-block: 72px 0; }
   .download { grid-template-columns: 1fr auto; }
+}
+@media (min-width: 1024px) {
+  .nav { display: flex; }
+  .menu { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
