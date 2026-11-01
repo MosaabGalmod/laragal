@@ -7,9 +7,9 @@
     >
       <!-- Brand Block -->
       <div class="flex items-center gap-3 wails-no-drag shrink-0">
-        <img src="/logo.png" alt="LaraGal" class="w-8 h-8 rounded-lg shadow-xs ring-1 ring-blue-500/20 object-contain shrink-0" />
+        <img src="/logo.png" :alt="t('app_name')" class="w-8 h-8 rounded-lg shadow-xs ring-1 ring-blue-500/20 object-contain shrink-0" />
         <div class="flex items-center gap-2">
-          <span class="text-lg font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
+          <span class="text-lg font-black tracking-tight text-slate-900 dark:text-white">{{ t('app_name') }}</span>
           <span dir="ltr" class="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
             {{ appVersion }}
           </span>
@@ -517,8 +517,8 @@
         </div>
 
         <div class="flex items-center gap-3 font-mono text-[11px]">
-          <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">TLD: *.test</span>
-          <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">SSL: Auto-TLS</span>
+          <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">{{ t('footer_tld') }}</span>
+          <span class="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700">{{ t('footer_ssl') }}</span>
           <button
             @click="promptQuitApp"
             class="inline-flex items-center gap-1 px-2 py-0.5 rounded font-sans font-bold text-slate-500 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 transition-colors"
@@ -527,7 +527,7 @@
             <Power class="w-3 h-3 text-rose-500" />
             <span>{{ t('quit_app_btn') }}</span>
           </button>
-          <span class="text-slate-400 dark:text-slate-500 font-bold">LaraGal v1.1.0</span>
+          <span class="text-slate-400 dark:text-slate-500 font-bold">{{ t('app_name') }} {{ appVersion }}</span>
         </div>
       </div>
     </footer>
@@ -556,7 +556,7 @@
               @blur="validateProjectName"
               :aria-invalid="!!projectError"
               aria-describedby="projectNameError"
-              placeholder="my-laravel-app"
+              :placeholder="t('project_name_placeholder')"
               class="w-full px-3.5 py-2.5 rounded-lg border text-sm text-slate-900 dark:text-white transition-colors focus:outline-none"
               :class="projectError ? 'border-rose-500 bg-rose-50/40 dark:bg-rose-950/20 focus:ring-2 focus:ring-rose-500' : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 focus:ring-2 focus:ring-blue-500'"
             />
@@ -566,7 +566,7 @@
               <span>{{ projectError }}</span>
             </p>
             <p v-else class="text-[11px] text-slate-400 mt-1 font-mono">
-              الرابط التلقائي: https://{{ newProject.name ? newProject.name.toLowerCase() : 'name' }}.test
+              <span>{{ t('auto_url_hint') }}</span> <bdi dir="ltr">https://{{ newProject.name ? newProject.name.toLowerCase() : 'name' }}.test</bdi>
             </p>
           </div>
 
@@ -725,10 +725,10 @@
               @click="checkUpdatesNow"
               :disabled="isCheckingUpdates"
               class="px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors flex items-center gap-1.5 cursor-pointer"
-              title="فحص التحديثات الرسمية والأمنية"
+              :title="t('check_updates_title')"
             >
               <RefreshCw class="w-3 h-3 text-blue-500" :class="{ 'animate-spin': isCheckingUpdates }" />
-              <span>{{ isCheckingUpdates ? 'جاري الفحص...' : 'فحص التحديثات' }}</span>
+              <span>{{ isCheckingUpdates ? t('checking_updates') : t('check_updates_btn') }}</span>
             </button>
             <button @click="showDownloadModal = false" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold text-lg leading-none cursor-pointer">&times;</button>
           </div>
@@ -762,16 +762,16 @@
                     v-if="runtimeUpdates[rt.name]?.has_update && runtimeUpdates[rt.name]?.is_security_fix"
                     class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-200 dark:border-rose-900"
                   >
-                    <ShieldAlert class="w-2.5 h-2.5" /> ترقية أمنية <bdi dir="ltr">v{{ runtimeUpdates[rt.name].latest_version }}</bdi>
+                    <ShieldAlert class="w-2.5 h-2.5" /> {{ t('runtime_security_upgrade') }} <bdi dir="ltr">v{{ runtimeUpdates[rt.name].latest_version }}</bdi>
                   </span>
                   <span
                     v-else-if="runtimeUpdates[rt.name]?.has_update"
                     class="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-bold bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-200 dark:border-amber-900"
                   >
-                    <ArrowUpCircle class="w-2.5 h-2.5" /> تحديث متاح <bdi dir="ltr">v{{ runtimeUpdates[rt.name].latest_version }}</bdi>
+                    <ArrowUpCircle class="w-2.5 h-2.5" /> {{ t('runtime_update_available') }} <bdi dir="ltr">v{{ runtimeUpdates[rt.name].latest_version }}</bdi>
                   </span>
                 </div>
-                <p class="text-[11px] text-slate-400 font-mono">{{ rt.desc }}</p>
+                <p class="text-[11px] text-slate-400 font-mono">{{ t(rt.desc_key) }}</p>
               </div>
               <button
                 @click="triggerDownloadRuntime(rt.name)"
@@ -781,7 +781,7 @@
               >
                 <Download class="w-3.5 h-3.5" :class="downloadingRuntime === rt.name ? 'animate-bounce' : ''" />
                 <span>
-                  {{ downloadingRuntime === rt.name ? `${downloadProgress[rt.name] || 0}%` : (runtimeUpdates[rt.name]?.has_update ? 'ترقية بنقرة واحدة' : t('download_now')) }}
+                  {{ downloadingRuntime === rt.name ? `${downloadProgress[rt.name] || 0}%` : (runtimeUpdates[rt.name]?.has_update ? t('upgrade_one_click') : t('download_now')) }}
                 </span>
               </button>
             </div>
@@ -832,7 +832,7 @@
                 type="text"
                 dir="ltr"
                 class="flex-1 px-3.5 py-2 rounded-xl text-xs font-mono border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="D:\projects"
+                :placeholder="t('dir_path_placeholder')"
               />
               <button
                 type="button"
@@ -917,18 +917,18 @@
               v-model="settingsForm.type"
               class="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">كشف تلقائي (Auto-Detect)</option>
-              <option value="laravel">Laravel (PHP FastCGI)</option>
-              <option value="wordpress">WordPress (PHP FastCGI)</option>
-              <option value="php">PHP عادي / Custom</option>
-              <option value="node">Node.js (Next, Nuxt, Vite, Express)</option>
-              <option value="go">Go Application (Proxy)</option>
-              <option value="rust">Rust Application (Proxy)</option>
-              <option value="dotnet">.NET / C# Application (Proxy)</option>
-              <option value="python">Python (FastAPI, Flask, Django)</option>
-              <option value="flutter">Flutter Web</option>
-              <option value="static">صفحات ثابتة (HTML / CSS / JS)</option>
-              <option value="non_web">غير ويب / مجلد محلي فقط</option>
+              <option value="">{{ t('project_type_auto') }}</option>
+              <option value="laravel">{{ t('project_type_laravel') }}</option>
+              <option value="wordpress">{{ t('project_type_wordpress') }}</option>
+              <option value="php">{{ t('project_type_php') }}</option>
+              <option value="node">{{ t('project_type_node') }}</option>
+              <option value="go">{{ t('project_type_go') }}</option>
+              <option value="rust">{{ t('project_type_rust') }}</option>
+              <option value="dotnet">{{ t('project_type_dotnet') }}</option>
+              <option value="python">{{ t('project_type_python') }}</option>
+              <option value="flutter">{{ t('project_type_flutter') }}</option>
+              <option value="static">{{ t('project_type_static') }}</option>
+              <option value="non_web">{{ t('project_type_non_web') }}</option>
             </select>
           </div>
 
@@ -939,7 +939,7 @@
                 {{ t('setting_docroot') }}
               </label>
               <div class="flex items-center gap-1">
-                <span class="text-[10px] text-slate-400">سريع:</span>
+                <span class="text-[10px] text-slate-400">{{ t('quick_label') }}</span>
                 <button
                   type="button"
                   @click="settingsForm.doc_root = 'public'"
@@ -959,7 +959,7 @@
                   @click="settingsForm.doc_root = ''"
                   class="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-100 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-blue-900/40 text-slate-600 dark:text-slate-300 cursor-pointer"
                 >
-                  الجذر (.)
+                  {{ t('root_dot') }}
                 </button>
               </div>
             </div>
@@ -968,7 +968,7 @@
               type="text"
               dir="ltr"
               class="w-full px-3 py-2 rounded-xl text-xs font-mono border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="مثال: public أو dist أو اتركه فارغاً"
+              :placeholder="t('setting_docroot_placeholder')"
             />
             <p class="text-[10px] text-slate-400 mt-1">
               {{ t('setting_docroot_hint') }}
@@ -985,21 +985,21 @@
               type="number"
               dir="ltr"
               class="w-full px-3 py-2 rounded-xl text-xs font-mono border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="0 (افتراضي للتطبيقات الخلفية، مثل: 8080 أو 3000)"
+              :placeholder="t('setting_proxy_port_placeholder')"
             />
           </div>
 
           <!-- PHP Version Selector (if PHP type) -->
           <div v-if="settingsForm.type === 'laravel' || settingsForm.type === 'wordpress' || settingsForm.type === 'php' || (!settingsForm.type && isPhpProject(selectedSiteForConfig))">
             <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              إصدار PHP المخصص
+              {{ t('custom_php_version') }}
             </label>
             <select
               v-model="settingsForm.php_version"
               dir="ltr"
               class="w-full px-3 py-2 rounded-xl text-xs border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="">الافتراضي العام للبرنامج</option>
+              <option value="">{{ t('php_default_global') }}</option>
               <option
                 v-for="opt in phpSelectOptionsPrefixed"
                 :key="opt.value"
@@ -1036,7 +1036,7 @@
                 v-model="settingsForm.is_ignored"
                 class="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
               />
-              <span class="text-xs text-slate-600 dark:text-slate-400">إخفاء هذا المجلد من قائمة المشاريع كلياً</span>
+              <span class="text-xs text-slate-600 dark:text-slate-400">{{ t('hide_folder_from_list') }}</span>
             </label>
           </div>
 
@@ -1086,16 +1086,16 @@
             @click="runDiagnostics(selectedSiteForDiag)"
             :disabled="isDiagnosing"
             class="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 hover:bg-slate-50 flex items-center gap-1.5 cursor-pointer"
-            :title="'إعادة الفحص'"
+            :title="t('recheck_btn')"
           >
             <RefreshCw class="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" :class="{ 'animate-spin': isDiagnosing }" />
-            <span>إعادة الفحص</span>
+            <span>{{ t('recheck_btn') }}</span>
           </button>
         </div>
 
         <div v-if="isDiagnosing" class="py-12 text-center">
           <RefreshCw class="w-8 h-8 text-blue-600 animate-spin mx-auto mb-2" />
-          <p class="text-xs text-slate-500">جاري فحص ملفات ومنافذ المشروع...</p>
+          <p class="text-xs text-slate-500">{{ t('diag_scanning_msg') }}</p>
         </div>
 
         <div v-else-if="diagResult" class="space-y-4">
@@ -1116,7 +1116,7 @@
                 {{ diagResult.status === 'healthy' ? t('diag_status_healthy') : (diagResult.status === 'warning' ? t('diag_status_warning') : t('diag_status_error')) }}
               </span>
               <span class="text-[11px] opacity-80">
-                النوع: {{ diagResult.project_type }} • {{ diagResult.php_version || 'FastCGI/Proxy' }}
+                <span>{{ t('type_prefix') }}</span> {{ diagResult.project_type }} • {{ diagResult.php_version || 'FastCGI/Proxy' }}
               </span>
             </div>
           </div>
@@ -1143,7 +1143,7 @@
                 <span class="font-semibold text-slate-800 dark:text-slate-200">{{ t('diag_index_check') }}</span>
               </div>
               <span dir="ltr" class="font-mono text-[11px]" :class="diagResult.has_index_file ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'">
-                {{ diagResult.index_file || 'مفقود' }}
+                {{ diagResult.index_file || t('missing_label') }}
               </span>
             </div>
 
@@ -1155,7 +1155,7 @@
                 <span class="font-semibold text-slate-800 dark:text-slate-200">{{ t('diag_env_check') }}</span>
               </div>
               <div class="flex items-center gap-2">
-                <span v-if="diagResult.has_env_file" class="text-emerald-600 dark:text-emerald-400 font-bold">موجود</span>
+                <span v-if="diagResult.has_env_file" class="text-emerald-600 dark:text-emerald-400 font-bold">{{ t('present_label') }}</span>
                 <button
                   v-else
                   type="button"
@@ -1163,7 +1163,7 @@
                   :disabled="isFixingEnv"
                   class="px-2 py-1 rounded bg-amber-100 hover:bg-amber-200 text-amber-800 dark:bg-amber-950 dark:hover:bg-amber-900 dark:text-amber-200 font-bold text-[11px] transition-colors cursor-pointer"
                 >
-                  <span v-if="isFixingEnv">جاري الإنشاء...</span>
+                  <span v-if="isFixingEnv">{{ t('creating_env') }}</span>
                   <span v-else>{{ t('fix_env_btn') }}</span>
                 </button>
               </div>
@@ -1177,7 +1177,7 @@
                 <span class="font-semibold text-slate-800 dark:text-slate-200">{{ t('diag_deps_check') }}</span>
               </div>
               <span class="font-mono text-[11px]" :class="(diagResult.has_vendor_dir || diagResult.has_node_modules) ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'">
-                {{ (diagResult.has_vendor_dir ? 'vendor/ مثبت' : (diagResult.has_node_modules ? 'node_modules مثبت' : 'غير مثبتة')) }}
+                {{ (diagResult.has_vendor_dir ? t('vendor_installed') : (diagResult.has_node_modules ? t('node_modules_installed') : t('not_installed_deps'))) }}
               </span>
             </div>
 
@@ -1190,7 +1190,7 @@
               </div>
               <span dir="ltr" class="font-mono text-[11px]" :class="diagResult.is_port_active ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'">
                 {{ diagResult.php_port > 0 ? `PHP FastCGI :${diagResult.php_port}` : `Proxy :${diagResult.proxy_port}` }}
-                ({{ diagResult.is_port_active ? 'متصل ومتاح' : 'غير متصل' }})
+                ({{ diagResult.is_port_active ? t('port_connected') : t('port_disconnected') }})
               </span>
             </div>
           </div>
@@ -1203,7 +1203,7 @@
                 <span class="text-xs font-bold text-indigo-900 dark:text-indigo-200">{{ t('db_discovery_title') }}</span>
               </div>
               <span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300">
-                {{ discoveredDatabases.length }} مُكتشف
+                {{ discoveredDatabases.length }} {{ t('discovered_badge') }}
               </span>
             </div>
 
@@ -1222,7 +1222,7 @@
                   <div class="flex items-center gap-1.5">
                     <span class="font-mono text-xs font-bold text-slate-800 dark:text-slate-100">{{ dbItem.file_name || dbItem.target_db }}</span>
                     <span class="text-[10px] px-1.5 py-0.5 rounded font-mono uppercase" :class="dbItem.type === 'schema_file' ? 'bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300' : 'bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300'">
-                      {{ dbItem.type === 'schema_file' ? 'مخطط SQL' : 'مجلد بيانات سابق' }}
+                      {{ dbItem.type === 'schema_file' ? t('db_schema_file') : t('db_legacy_dir') }}
                     </span>
                   </div>
                   <span class="text-[11px] text-slate-500 block mt-0.5">{{ dbItem.description }}</span>
@@ -1235,7 +1235,7 @@
                 >
                   <RefreshCw v-if="isImportingDB" class="w-3.5 h-3.5 animate-spin" />
                   <Database v-else class="w-3.5 h-3.5" />
-                  <span>{{ isImportingDB ? 'جاري الاستيراد...' : t('db_import_btn') }}</span>
+                  <span>{{ isImportingDB ? t('db_importing') : t('db_import_btn') }}</span>
                 </button>
               </div>
 
@@ -1251,7 +1251,7 @@
                     {{ tbl }}
                   </span>
                   <span v-if="dbItem.found_tables.length > 6" class="text-[10px] text-slate-400 self-center">
-                    +{{ dbItem.found_tables.length - 6 }} أخرى
+                    +{{ dbItem.found_tables.length - 6 }} {{ t('other_count') }}
                   </span>
                 </div>
               </div>
@@ -1281,7 +1281,7 @@
             class="px-3.5 py-2 text-xs font-semibold rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer"
           >
             <Settings class="w-3.5 h-3.5" />
-            <span>تعديل إعدادات المشروع</span>
+            <span>{{ t('edit_project_settings_btn') }}</span>
           </button>
           <button
             type="button"
@@ -1386,19 +1386,19 @@ async function toggleProjectApp(site: SiteItem) {
       await (window as any).go.main.App.StopProjectApp(pName)
     }
     runningProjects.value[site.domain] = false
-    notification.value = `تم إيقاف تطبيق ${pName}.`
+    notification.value = t('notif_app_stopped', { name: pName })
   } else {
-    notification.value = `جاري تشغيل تطبيق ${pName}...`
+    notification.value = t('notif_app_starting', { name: pName })
     if ((window as any).go?.main?.App?.StartProjectApp) {
       try {
         const ok = await (window as any).go.main.App.StartProjectApp(site.path || site.root_path, site.proxy_port || 8080)
         if (ok) {
           runningProjects.value[site.domain] = true
-          notification.value = `تم تشغيل خادم تطبيق ${pName} بنجاح على المنفذ :${site.proxy_port || 8080}.`
+          notification.value = t('notif_app_started', { name: pName, port: site.proxy_port || 8080 })
           return
         }
       } catch (err: any) {
-        notification.value = `تعذر تشغيل تطبيق ${pName}: ${err?.message || err}`
+        notification.value = t('notif_app_start_failed', { name: pName, error: err?.message || err })
         return
       }
     }
@@ -1499,9 +1499,9 @@ function mapSiteItem(item: any): SiteItem {
     else if (projectType === 'ruby') typeLabel = 'Ruby'
     else if (projectType === 'java') typeLabel = 'Java'
     else if (projectType === 'flutter') typeLabel = 'Flutter Web'
-    else if (projectType === 'static') typeLabel = 'HTML / ثابت'
+    else if (projectType === 'static') typeLabel = t('type_static_badge')
     else if (projectType === 'node') typeLabel = 'Node.js'
-    else typeLabel = 'غير ويب / ملفات'
+    else typeLabel = t('non_web_badge')
   }
   const rawPhp = item.php_version || item.PHPVersion || ''
   const isPhpType = projectType === 'laravel' || projectType === 'wordpress' || projectType === 'php'
@@ -1663,7 +1663,7 @@ async function applyProjectSettings() {
       }
       notification.value = t('settings_saved')
     } catch (e: any) {
-      notification.value = `خطأ أثناء حفظ الإعدادات: ${e?.message || e}`
+      notification.value = t('error_saving_settings', { error: e?.message || e })
     }
   } else {
     notification.value = t('settings_saved')
@@ -1732,7 +1732,7 @@ async function triggerFixEnv() {
         notification.value = t('env_fix_failed')
       }
     } catch (e: any) {
-      notification.value = `تعذر إنشاء .env: ${e?.message || e}`
+      notification.value = t('error_fixing_env', { error: e?.message || e })
     }
   }
   isFixingEnv.value = false
@@ -1753,7 +1753,7 @@ async function importDiscoveredDatabase(candidate: any) {
     }
   } catch (err: any) {
     console.error("Import database error:", err)
-    notification.value = `تعذر استيراد قاعدة البيانات: ${err?.message || err}`
+    notification.value = t('error_importing_db', { error: err?.message || err })
   } finally {
     isImportingDB.value = false
   }
@@ -1949,15 +1949,15 @@ const isCheckingUpdates = ref(false)
 const downloadProgress = ref<Record<string, number>>({})
 
 const availableRuntimes = ref([
-  { name: 'caddy', label: 'Caddy Server v2.8', desc: 'خادم الويب الرئيسي وإدارة شهادات SSL التلقائية' },
-  { name: 'php-8.5', label: 'PHP 8.5 (NTS x64)', desc: 'أحدث إصدار رسمي لمحرك PHP' },
-  { name: 'php-8.4', label: 'PHP 8.4 (NTS x64)', desc: 'إصدار رسمي مستقر لمحرك PHP' },
-  { name: 'php-8.3', label: 'PHP 8.3 (NTS x64)', desc: 'إصدار مستقر موصى به لـ Laravel 11/12' },
-  { name: 'php-8.2', label: 'PHP 8.2 (NTS x64)', desc: 'إصدار مستقر متوافق مع المشاريع السابقة' },
-  { name: 'php-8.1', label: 'PHP 8.1 (NTS x64)', desc: 'إصدار متوافق مع مشاريع PHP 8.1 القديمة' },
-  { name: 'mysql', label: 'MariaDB / MySQL Server', desc: 'خادم قواعد البيانات المحمول مع التهيئة التلقائية' },
-  { name: 'redis', label: 'Redis Server (Windows)', desc: 'خادم الكاش وتخزين الجلسات محلياً' },
-  { name: 'mailpit', label: 'Mailpit Server v1.21', desc: 'صيد واختبار رسائل البريد الإلكتروني محلياً' },
+  { name: 'caddy', label: 'Caddy Server v2.8', desc_key: 'service_caddy_desc' },
+  { name: 'php-8.5', label: 'PHP 8.5 (NTS x64)', desc_key: 'service_php85_desc' },
+  { name: 'php-8.4', label: 'PHP 8.4 (NTS x64)', desc_key: 'service_php84_desc' },
+  { name: 'php-8.3', label: 'PHP 8.3 (NTS x64)', desc_key: 'service_php83_desc' },
+  { name: 'php-8.2', label: 'PHP 8.2 (NTS x64)', desc_key: 'service_php82_desc' },
+  { name: 'php-8.1', label: 'PHP 8.1 (NTS x64)', desc_key: 'service_php81_desc' },
+  { name: 'mysql', label: 'MariaDB / MySQL Server', desc_key: 'service_mysql_desc' },
+  { name: 'redis', label: 'Redis Server (Windows)', desc_key: 'service_redis_desc' },
+  { name: 'mailpit', label: 'Mailpit Server v1.21', desc_key: 'service_mailpit_desc' },
 ])
 
 const locales: Record<string, Record<string, string>> = {
@@ -2059,7 +2059,7 @@ const phpSelectOptions = computed(() => {
     if (ver === latestPhpVersion.value) {
       suffix = ` (${t('php_latest_label')})`
     } else if (ver === '8.3') {
-      suffix = currentLang.value === 'ar' ? ' (الموصى به لـ Laravel 11/12)' : ' (Recommended for Laravel 11/12)'
+      suffix = ` (${t('php_recommended_badge')})`
     } else if (item.eol) {
       suffix = ` (${t('runtime_eol_badge')})`
     } else if (item.eol_date) {
@@ -2082,7 +2082,7 @@ const phpSelectOptionsPrefixed = computed(() => {
     if (ver === latestPhpVersion.value) {
       suffix = ` (${t('php_latest_label')})`
     } else if (ver === '8.3') {
-      suffix = currentLang.value === 'ar' ? ' (الموصى به لـ Laravel 11/12)' : ' (Recommended for Laravel 11/12)'
+      suffix = ` (${t('php_recommended_badge')})`
     } else if (item.eol) {
       suffix = ` (${t('runtime_eol_badge')})`
     } else if (item.eol_date) {
@@ -2221,10 +2221,10 @@ async function syncHostsNow() {
       const msg = await (window as any).go.main.App.SyncHosts()
       notification.value = msg
     } else {
-      notification.value = 'تمت مزامنة النطاقات مع ملف hosts وتحديث DNS بنجاح.'
+      notification.value = t('hosts_synced_success')
     }
   } catch (err: any) {
-    notification.value = `حدث خطأ أثناء مزامنة النطاقات: ${err?.message || err}`
+    notification.value = t('error_syncing_hosts', { error: err?.message || err })
   } finally {
     isSyncingHosts.value = false
   }
@@ -2391,18 +2391,18 @@ async function executeStopService() {
       const running = await (window as any).go.main.App.ToggleService(s.id)
       s.running = Boolean(running)
       if (!running) {
-        notification.value = `تم إيقاف ${t(s.name_key)} بنجاح.`
+        notification.value = t('service_stopped_msg', { service: t(s.name_key) })
       } else {
-        notification.value = `تعذر إيقاف ${t(s.name_key)}.`
+        notification.value = t('service_stop_failed', { service: t(s.name_key) })
       }
       await loadServices()
     } catch (err: any) {
-      notification.value = `تعذر إيقاف ${t(s.name_key)}: ${err?.message || err}`
+      notification.value = t('service_stop_failed_error', { service: t(s.name_key), error: err?.message || err })
       await loadServices()
     }
   } else {
     s.running = false
-    notification.value = `تم إيقاف ${t(s.name_key)} بنجاح.`
+    notification.value = t('service_stopped_msg', { service: t(s.name_key) })
   }
   confirmService.value = null
 }
@@ -2414,7 +2414,7 @@ async function installSSL() {
       notification.value = res || t('success_ssl')
       return
     } catch (err: any) {
-      notification.value = `خطأ أثناء تثبيت الشهادة: ${err}`
+      notification.value = t('error_installing_ssl', { error: err })
       return
     }
   }
@@ -2450,7 +2450,7 @@ async function handleCreateProject() {
     }))
   }
 
-  notification.value = `تم إنشاء المشروع «${projectName}» بنجاح وضبط رابط https://${domain} الموثوق بـ SSL.`
+  notification.value = t('project_created_success', { name: projectName, domain: domain })
   showNewModal.value = false
   newProject.value.name = ''
   projectError.value = ''
@@ -2472,9 +2472,9 @@ async function checkUpdatesNow() {
         }
         runtimeUpdates.value = map
         if (count > 0) {
-          notification.value = `تم العثور على ${count} تحديث متاح للحزم والمحركات.`
+          notification.value = t('updates_found_count', { count })
         } else {
-          notification.value = 'جميع الحزم والمحركات محدثة إلى أحدث إصدار مستقر.'
+          notification.value = t('all_runtimes_up_to_date')
         }
       }
     } catch (err: any) {
@@ -2487,7 +2487,7 @@ async function checkUpdatesNow() {
 async function triggerDownloadRuntime(name: string) {
   downloadingRuntime.value = name
   downloadProgress.value[name] = 0
-  notification.value = `جاري بدء تنزيل وتثبيت حزمة ${name}...`
+  notification.value = t('runtime_download_starting', { name })
 
   if ((window as any).go?.main?.App?.UpgradeRuntime) {
     try {
@@ -2498,12 +2498,12 @@ async function triggerDownloadRuntime(name: string) {
         runtimeUpdates.value[name].has_update = false
         runtimeUpdates.value[name].current_version = runtimeUpdates.value[name].latest_version
       }
-      notification.value = msg || `تمت ترقية وتثبيت حزمة ${name} بنجاح.`
+      notification.value = msg || t('runtime_upgrade_success', { name })
       return
     } catch (err: any) {
       console.warn("Upgrade err:", err)
       downloadingRuntime.value = ''
-      notification.value = `خطأ أثناء ترقية حزمة ${name}: ${err?.message || err}`
+      notification.value = t('runtime_upgrade_failed', { name, error: err?.message || err })
       return
     }
   }
@@ -2513,12 +2513,12 @@ async function triggerDownloadRuntime(name: string) {
       const msg = await (window as any).go.main.App.DownloadBinary(name)
       downloadingRuntime.value = ''
       downloadProgress.value[name] = 100
-      notification.value = msg || `تم تجهيز وتثبيت حزمة ${name} بنجاح.`
+      notification.value = msg || t('runtime_install_success', { name })
       return
     } catch (err: any) {
       console.warn("Download err:", err)
       downloadingRuntime.value = ''
-      notification.value = `خطأ أثناء تنزيل حزمة ${name}: ${err?.message || err}`
+      notification.value = t('runtime_download_failed', { name, error: err?.message || err })
       return
     }
   }
@@ -2533,7 +2533,7 @@ async function triggerDownloadRuntime(name: string) {
     clearInterval(interval)
     downloadProgress.value[name] = 100
     downloadingRuntime.value = ''
-    notification.value = `تم تجهيز وتثبيت حزمة ${name} بنجاح في مجلد bin/${name}.`
+    notification.value = t('runtime_ready_in_dir', { name })
   }, 1500)
 }
 </script>
