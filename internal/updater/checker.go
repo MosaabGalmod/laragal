@@ -9,7 +9,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/laragal/laragal/internal/runtimes"
@@ -60,6 +62,9 @@ func NewPHPSource(baseURL ...string) *PHPSource {
 func (s *PHPSource) Latest(ctx context.Context, name string) ([]LiveRelease, error) {
 	url := s.BaseURL
 	if url == "" {
+		if testing.Testing() {
+			return nil, fmt.Errorf("network calls to live php releases feed disabled in tests; configure BaseURL or use catalog")
+		}
 		url = "https://windows.php.net/downloads/releases/releases.json"
 	}
 	timeout := s.HTTPTimeout
@@ -99,7 +104,11 @@ func (s *PHPSource) Latest(ctx context.Context, name string) ([]LiveRelease, err
 
 // DefaultRegistry defines the global registry mapping runtime families to ReleaseSource.
 var DefaultRegistry = Registry{
-	"php": &PHPSource{},
+	"php":     &PHPSource{},
+	"caddy":   NewGitHubSource("caddyserver/caddy", regexp.MustCompile(`^caddy_.*_windows_amd64\.zip$`), "caddy"),
+	"mailpit": NewGitHubSource("axllent/mailpit", regexp.MustCompile(`^mailpit-windows-amd64\.zip$`), "mailpit"),
+	"adminer": NewGitHubSource("vrana/adminer", regexp.MustCompile(`^adminer-.*-mysql\.php$`), "adminer"),
+	"redis":   NewGitHubSource("redis-windows/redis-windows", regexp.MustCompile(`^Redis-.*-Windows-x64-msys2\.zip$`), "redis"),
 }
 
 type RuntimeUpdateInfo struct {
@@ -112,6 +121,7 @@ type RuntimeUpdateInfo struct {
 	ReleaseNotesURL string `json:"release_notes_url"`
 	SHA256          string `json:"sha256,omitempty"`
 	IsNew           bool   `json:"is_new,omitempty"`
+	MajorChange     bool   `json:"major_change,omitempty"`
 }
 
 type CheckOptions struct {
@@ -301,6 +311,13 @@ func DetectInstalledBinaryVersion(binDir string, name string) string {
 			return ExtractVersion(string(out))
 		}
 	case name == "adminer":
+		for _, f := range []string{filepath.Join("data", "adminer", "adminer-core.php"), filepath.Join("data", "adminer", "index.php")} {
+			if data, err := os.ReadFile(f); err == nil {
+				if v := ExtractVersion(string(data)); v != "" {
+					return v
+				}
+			}
+		}
 		idx := filepath.Join("data", "adminer", "index.php")
 		if _, err := os.Stat(idx); err == nil {
 			return "4.8.1"
@@ -356,6 +373,11 @@ func DetectInstalledBinaryVersion(binDir string, name string) string {
 	case name == "redis":
 		exe := filepath.Join(binDir, "redis", "redis-server.exe")
 		if _, err := os.Stat(exe); err != nil {
+			if matches, gErr := filepath.Glob(filepath.Join(binDir, "redis", "*", "redis-server.exe")); gErr == nil && len(matches) > 0 {
+				exe = matches[0]
+			}
+		}
+		if _, err := os.Stat(exe); err != nil {
 			if p, err := exec.LookPath("redis-server.exe"); err == nil {
 				exe = p
 			}
@@ -393,25 +415,44 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 		reg = DefaultRegistry
 	}
 
-	// 1. Fetch live releases from the registry (starting with PHP family)
+	// 1. Fetch live releases from the registry across all families
+	liveMap := make(map[string]LiveRelease)
 	var livePHPReleases []LiveRelease
-	var phpSrc ReleaseSource
+
 	if reg != nil {
-		phpSrc = reg["php"]
-	}
-	if opts.PHPReleasesURL != "" {
-		phpSrc = &PHPSource{
+		for family, src := range reg {
+			if src == nil {
+				continue
+			}
+			if family == "php" && opts.PHPReleasesURL != "" {
+				src = &PHPSource{
+					BaseURL:     opts.PHPReleasesURL,
+					HTTPTimeout: opts.HTTPTimeout,
+				}
+			}
+			releases, err := src.Latest(ctx, family)
+			if err != nil {
+				// rate limit or network error -> fall back to catalog
+				continue
+			}
+			for _, rel := range releases {
+				liveMap[rel.Name] = rel
+				if family == "php" || strings.HasPrefix(rel.Name, "php-") {
+					livePHPReleases = append(livePHPReleases, rel)
+				}
+			}
+		}
+	} else if opts.PHPReleasesURL != "" {
+		phpSrc := &PHPSource{
 			BaseURL:     opts.PHPReleasesURL,
 			HTTPTimeout: opts.HTTPTimeout,
 		}
-	}
-	if phpSrc != nil {
-		livePHPReleases, _ = phpSrc.Latest(ctx, "php")
-	}
-
-	liveMap := make(map[string]LiveRelease, len(livePHPReleases))
-	for _, rel := range livePHPReleases {
-		liveMap[rel.Name] = rel
+		if releases, err := phpSrc.Latest(ctx, "php"); err == nil {
+			for _, rel := range releases {
+				liveMap[rel.Name] = rel
+				livePHPReleases = append(livePHPReleases, rel)
+			}
+		}
 	}
 
 	// 2. Base catalog runtimes
@@ -485,6 +526,26 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 			}
 			if liveRel.Checksum != "" {
 				info.SHA256 = liveRel.Checksum
+			}
+			if liveRel.MajorChange {
+				info.MajorChange = true
+			}
+		}
+
+		baseVer := curVer
+		if baseVer == "" {
+			if rt, exists := runtimes.Get(name); exists {
+				baseVer = rt.Version
+			}
+		}
+		if baseVer != "" && info.LatestVersion != "" {
+			if IsMajorChange(baseVer, info.LatestVersion) {
+				info.MajorChange = true
+			}
+		}
+		if name == "redis" {
+			if liveRel, ok := liveMap[name]; ok && !strings.Contains(liveRel.Source, "tporadowski") {
+				info.MajorChange = true
 			}
 		}
 

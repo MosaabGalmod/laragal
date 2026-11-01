@@ -74,7 +74,14 @@ func verifyStagingArtifact(name, stagingDir string) error {
 			return fmt.Errorf("staging verification failed for mailpit: missing expected mailpit.exe")
 		}
 	case norm == "redis":
-		if !fileExists(filepath.Join(stagingDir, "redis-server.exe")) {
+		exeInRoot := fileExists(filepath.Join(stagingDir, "redis-server.exe"))
+		exeInSub := false
+		if !exeInRoot {
+			if matches, _ := filepath.Glob(filepath.Join(stagingDir, "*", "redis-server.exe")); len(matches) > 0 {
+				exeInSub = true
+			}
+		}
+		if !exeInRoot && !exeInSub {
 			return fmt.Errorf("staging verification failed for redis: missing expected redis-server.exe")
 		}
 	case norm == "phpmyadmin":
@@ -202,11 +209,16 @@ func InstallArtifactZipWithRename(name string, zipPath string, destDir string, r
 		}
 	}
 
-	// C. Preserve Redis config
+	// C. Preserve Redis config (supports both redis.conf and legacy redis.windows.conf)
 	if safeName == "redis" {
-		oldRedisConf := filepath.Join(destDir, "redis.conf")
-		if fileExists(oldRedisConf) {
-			_ = copyFile(oldRedisConf, filepath.Join(stagingDir, "redis.conf"))
+		for _, confName := range []string{"redis.conf", "redis.windows.conf"} {
+			oldConf := filepath.Join(destDir, confName)
+			if fileExists(oldConf) {
+				_ = copyFile(oldConf, filepath.Join(stagingDir, confName))
+			}
+			if matches, err := filepath.Glob(filepath.Join(destDir, "*", confName)); err == nil && len(matches) > 0 {
+				_ = copyFile(matches[0], filepath.Join(stagingDir, confName))
+			}
 		}
 	}
 

@@ -57,8 +57,10 @@ type App struct {
 	phpReleasesURL    string
 	baseBinDir        string
 	tempDir           string
+	dataDir           string
 	checkClient       *http.Client
 	caddyRootCertPath string
+	registry          updater.Registry
 }
 
 func (a *App) getBaseBinDir() string {
@@ -73,6 +75,24 @@ func (a *App) getTempDir() string {
 		return a.tempDir
 	}
 	return filepath.Join("data", "tmp")
+}
+
+func (a *App) getDataDir() string {
+	if a.dataDir != "" {
+		return a.dataDir
+	}
+	return "data"
+}
+
+func (a *App) getRegistry() updater.Registry {
+	if a.registry != nil {
+		return a.registry
+	}
+	return updater.DefaultRegistry
+}
+
+func (a *App) SetRegistry(r updater.Registry) {
+	a.registry = r
 }
 
 func (a *App) SetPHPReleasesURL(u string) {
@@ -266,6 +286,17 @@ func (a *App) findPHPExecutableForVersion(version string) string {
 func (a *App) findRedisExecutable() string {
 	candidates := []string{
 		filepath.Join("bin", "redis", "redis-server.exe"),
+	}
+	if a.baseBinDir != "" {
+		candidates = append([]string{
+			filepath.Join(a.baseBinDir, "redis", "redis-server.exe"),
+		}, candidates...)
+		if matches, err := filepath.Glob(filepath.Join(a.baseBinDir, "redis", "*", "redis-server.exe")); err == nil {
+			candidates = append(candidates, matches...)
+		}
+	}
+	if matches, err := filepath.Glob(filepath.Join("bin", "redis", "*", "redis-server.exe")); err == nil {
+		candidates = append(candidates, matches...)
 	}
 
 	if localApp := os.Getenv("LOCALAPPDATA"); localApp != "" {
@@ -570,7 +601,14 @@ func (a *App) ToggleService(name string) (bool, error) {
 		if redisExe == "" {
 			return false, fmt.Errorf("Redis binary not found on this system")
 		}
-		err := a.supervisor.StartService("redis", redisExe, []string{}, 6379)
+		redisDir := filepath.Dir(redisExe)
+		args := []string{}
+		if _, err := os.Stat(filepath.Join(redisDir, "redis.conf")); err == nil {
+			args = append(args, "redis.conf")
+		} else if _, err := os.Stat(filepath.Join(redisDir, "redis.windows.conf")); err == nil {
+			args = append(args, "redis.windows.conf")
+		}
+		err := a.supervisor.StartServiceInDir("redis", redisExe, args, redisDir, 6379)
 		return err == nil, err
 
 	case "mysql":
@@ -960,12 +998,17 @@ func (a *App) downloadAndInstallArtifact(name string, url string, expectedChecks
 	}
 
 	if strings.ToLower(name) == "adminer" {
-		adminerDir := filepath.Join("data", "adminer")
+		adminerDir := filepath.Join(a.getDataDir(), "adminer")
 		_ = os.MkdirAll(adminerDir, 0755)
-		adminerPath := filepath.Join(adminerDir, "index.php")
+		adminerPath := filepath.Join(adminerDir, "adminer-core.php")
 		if err := downloader.DownloadFile(ctx, url, adminerPath, onProgress, algo, expectedChecksum); err != nil {
 			return UIMessage{}, err
 		}
+		base := "."
+		if a.dataDir != "" {
+			base = filepath.Dir(a.dataDir)
+		}
+		_, _ = adminer.EnsureInstalled(base)
 		if a.ctx != nil {
 			runtime.EventsEmit(a.ctx, "download-progress", map[string]interface{}{
 				"name":       name,
@@ -1003,9 +1046,9 @@ func (a *App) downloadAndInstallArtifact(name string, url string, expectedChecks
 	return UIMessage{Key: "runtime_install_success_path", Params: map[string]string{"name": name, "dest": filepath.ToSlash(destDir)}}, nil
 }
 
-// resolveArtifact resolves an artifact for any name: live release (with checksum) if available, else catalog pinned.
-// Names not in the catalog are installable only via a live release with a checksum; otherwise returns clear error.
-func (a *App) resolveArtifact(name string) (string, string, string, error) {
+// resolveArtifactInfo resolves an artifact for any name: live release (with checksum) if available, else catalog pinned.
+// Returns (url, checksum, algo, version, majorChange, err).
+func (a *App) resolveArtifactInfo(name string) (string, string, string, string, bool, error) {
 	norm := runtimes.NormalizeName(name)
 	ctx := context.Background()
 	if a.ctx != nil {
@@ -1020,7 +1063,7 @@ func (a *App) resolveArtifact(name string) (string, string, string, error) {
 		if _, inCatalog := runtimes.Get(norm); !inCatalog {
 			minor := strings.TrimPrefix(norm, "php-")
 			if !updater.IsVersionNewer(updater.HighestCatalogPHPMajorMinor(), minor) {
-				return "", "", "", fmt.Errorf("unknown runtime or version: %s (no verified artifact found)", name)
+				return "", "", "", "", false, fmt.Errorf("unknown runtime or version: %s (no verified artifact found)", name)
 			}
 		}
 	}
@@ -1028,6 +1071,8 @@ func (a *App) resolveArtifact(name string) (string, string, string, error) {
 	var source updater.ReleaseSource
 	if family == "php" && a.phpReleasesURL != "" {
 		source = &updater.PHPSource{BaseURL: a.phpReleasesURL}
+	} else if a.registry != nil {
+		source = a.registry[family]
 	} else if updater.DefaultRegistry != nil {
 		source = updater.DefaultRegistry[family]
 	}
@@ -1042,7 +1087,25 @@ func (a *App) resolveArtifact(name string) (string, string, string, error) {
 						if algo == "" {
 							algo = "sha256"
 						}
-						return rel.URL, rel.Checksum, algo, nil
+
+						// Determine major change against currently installed or catalog version
+						curVer := a.detectInstalledVersion(name)
+						if curVer == "" {
+							if catRt, ok := runtimes.Get(norm); ok {
+								curVer = catRt.Version
+							}
+						}
+						isMajor := rel.MajorChange
+						if curVer != "" && rel.Version != "" {
+							if updater.IsMajorChange(curVer, rel.Version) {
+								isMajor = true
+							}
+						}
+						if norm == "redis" && !strings.Contains(rel.Source, "tporadowski") {
+							isMajor = true
+						}
+
+						return rel.URL, rel.Checksum, algo, rel.Version, isMajor, nil
 					}
 				}
 			}
@@ -1052,12 +1115,33 @@ func (a *App) resolveArtifact(name string) (string, string, string, error) {
 	// 2. Fall back to pinned catalog artifact
 	if rt, exists := runtimes.Get(norm); exists {
 		if rt.URL != "" && rt.SHA256 != "" {
-			return rt.URL, rt.SHA256, "sha256", nil
+			return rt.URL, rt.SHA256, "sha256", rt.Version, false, nil
 		}
 	}
 
 	// 3. Names not in catalog are installable ONLY via a live release with a checksum
-	return "", "", "", fmt.Errorf("unknown runtime or version: %s (no verified artifact or checksum available)", name)
+	return "", "", "", "", false, fmt.Errorf("unknown runtime or version: %s (no verified artifact or checksum available)", name)
+}
+
+func (a *App) resolveArtifact(name string) (string, string, string, error) {
+	url, checksum, algo, _, _, err := a.resolveArtifactInfo(name)
+	return url, checksum, algo, err
+}
+
+func (a *App) detectInstalledVersion(name string) string {
+	if strings.ToLower(name) == "adminer" && a.dataDir != "" {
+		for _, f := range []string{
+			filepath.Join(a.dataDir, "adminer", "adminer-core.php"),
+			filepath.Join(a.dataDir, "adminer", "index.php"),
+		} {
+			if data, err := os.ReadFile(f); err == nil {
+				if v := updater.ExtractVersion(string(data)); v != "" {
+					return v
+				}
+			}
+		}
+	}
+	return updater.DetectInstalledBinaryVersion(a.getBaseBinDir(), name)
 }
 
 func (a *App) DownloadBinary(name string) (UIMessage, error) {
@@ -1072,7 +1156,7 @@ func (a *App) DownloadBinary(name string) (UIMessage, error) {
 }
 
 func (a *App) resolveUpgradeArtifact(name string) (string, string, error) {
-	url, checksum, _, err := a.resolveArtifact(name)
+	url, checksum, _, _, _, err := a.resolveArtifactInfo(name)
 	return url, checksum, err
 }
 
@@ -1120,24 +1204,37 @@ func (a *App) CheckRuntimeUpdates() []updater.RuntimeUpdateInfo {
 	opts := updater.CheckOptions{
 		PHPReleasesURL: a.phpReleasesURL,
 		BaseBinDir:     a.getBaseBinDir(),
+		Registry:       a.getRegistry(),
 	}
 	return updater.CheckUpdates(ctx, opts)
 }
 
-// UpgradeRuntime stops running service if active, downloads latest release, preserves configs, and restarts service
+// UpgradeRuntime stops running service if active, downloads latest release, preserves configs, and restarts service.
+// Upgrades with MajorChange=true must NOT run from the normal Upgrade call:
+// UpgradeRuntime(name) returns a clear error "major_change_requires_confirmation".
 func (a *App) UpgradeRuntime(name string) (UIMessage, error) {
+	return a.upgradeRuntimeInternal(name, false)
+}
+
+// UpgradeRuntimeConfirmed performs the runtime upgrade explicitly even if MajorChange=true.
+func (a *App) UpgradeRuntimeConfirmed(name string) (UIMessage, error) {
+	return a.upgradeRuntimeInternal(name, true)
+}
+
+func (a *App) upgradeRuntimeInternal(name string, confirmed bool) (UIMessage, error) {
+	url, checksum, algo, _, majorChange, err := a.resolveArtifactInfo(name)
+	if err != nil {
+		return UIMessage{}, err
+	}
+
+	if majorChange && !confirmed {
+		return UIMessage{}, fmt.Errorf("major_change_requires_confirmation")
+	}
+
 	wasRunning := false
 	if status, exists := a.supervisor.GetServiceStatus(name); exists && status.Running {
 		wasRunning = true
 		_ = a.supervisor.StopService(name)
-	}
-
-	url, checksum, algo, err := a.resolveArtifact(name)
-	if err != nil {
-		if wasRunning {
-			_, _ = a.ToggleService(name)
-		}
-		return UIMessage{}, err
 	}
 
 	msg, err := a.downloadAndInstallArtifact(name, url, checksum, algo)

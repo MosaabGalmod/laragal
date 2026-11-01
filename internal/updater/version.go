@@ -105,3 +105,24 @@ func IsVersionNewer(current string, latest string) bool {
 
 	return latBuild > curBuild
 }
+
+// ExtractMajor returns the major version number from a version string (e.g. "4.8.1" -> 4).
+func ExtractMajor(v string) (int, error) {
+	parts, _ := parseVersionComponents(v)
+	if len(parts) == 0 {
+		return 0, strconv.ErrSyntax
+	}
+	return parts[0], nil
+}
+
+// IsMajorChange compares the major version of current (or catalog) vs target.
+// Returns true if both versions have parsed majors and they differ.
+func IsMajorChange(currentOrCatalog string, target string) bool {
+	curMajor, err1 := ExtractMajor(currentOrCatalog)
+	tgtMajor, err2 := ExtractMajor(target)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return curMajor != tgtMajor
+}
+

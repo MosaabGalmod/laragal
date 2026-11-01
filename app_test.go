@@ -1244,3 +1244,444 @@ func TestCheckFrameable(t *testing.T) {
 		}
 	})
 }
+
+func TestGitHub_DigestMismatchFailsInstall(t *testing.T) {
+	fakeContent := []byte("Corrupted Caddy Binary")
+	zipBytes, _ := createTestZip(t, "caddy.exe", fakeContent)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/release":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"tag_name": "v2.12.0",
+				"assets": [
+					{
+						"name": "caddy_2.12.0_windows_amd64.zip",
+						"browser_download_url": "` + r.Header.Get("X-Server-URL") + `/caddy.zip",
+						"digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+					}
+				]
+			}`))
+		case "/caddy.zip":
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(zipBytes)))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(zipBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	tmpDir := filepath.Join(tempDir, "tmp")
+
+	// Pre-populate existing installed caddy.exe
+	caddyDir := filepath.Join(binDir, "caddy")
+	_ = os.MkdirAll(caddyDir, 0755)
+	existingContent := []byte("Pristine existing caddy.exe")
+	if err := os.WriteFile(filepath.Join(caddyDir, "caddy.exe"), existingContent, 0755); err != nil {
+		t.Fatalf("failed to write original binary: %v", err)
+	}
+
+	caddySrc := updater.NewGitHubSource("caddyserver/caddy", regexp.MustCompile(`^caddy_.*_windows_amd64\.zip$`), "caddy")
+	caddySrc.BaseURL = server.URL + "/release"
+	caddySrc.CacheTTL = -1
+	caddySrc.HTTPClient = &http.Client{
+		Transport: &testHeaderTransport{header: "X-Server-URL", value: server.URL},
+	}
+
+	app := &App{
+		supervisor: process.NewSupervisor(),
+		baseBinDir: binDir,
+		tempDir:    tmpDir,
+		registry: updater.Registry{
+			"caddy": caddySrc,
+		},
+	}
+
+	_, err := app.UpgradeRuntimeConfirmed("caddy")
+	if err == nil {
+		t.Fatalf("expected digest mismatch error, got nil")
+	}
+	if !strings.Contains(strings.ToLower(err.Error()), "mismatch") {
+		t.Errorf("expected error to mention mismatch, got: %v", err)
+	}
+
+	// Verify original file untouched
+	installedContent, err := os.ReadFile(filepath.Join(caddyDir, "caddy.exe"))
+	if err != nil {
+		t.Fatalf("failed to read caddy.exe: %v", err)
+	}
+	if !bytes.Equal(installedContent, existingContent) {
+		t.Errorf("expected caddy.exe untouched, got %q", string(installedContent))
+	}
+}
+
+type testHeaderTransport struct {
+	header string
+	value  string
+}
+
+func (t *testHeaderTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set(t.header, t.value)
+	return http.DefaultTransport.RoundTrip(req)
+}
+
+func TestGitHub_RateLimitFallbackToCatalog(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = w.Write([]byte(`{"message": "API rate limit exceeded"}`))
+	}))
+	defer server.Close()
+
+	caddySrc := updater.NewGitHubSource("caddyserver/caddy", regexp.MustCompile(`^caddy_.*_windows_amd64\.zip$`), "caddy")
+	caddySrc.BaseURL = server.URL
+	caddySrc.CacheTTL = -1
+
+	app := &App{
+		supervisor: process.NewSupervisor(),
+		registry: updater.Registry{
+			"caddy": caddySrc,
+		},
+	}
+
+	updates := app.CheckRuntimeUpdates()
+	var caddyUpdate *updater.RuntimeUpdateInfo
+	for i := range updates {
+		if updates[i].Name == "caddy" {
+			caddyUpdate = &updates[i]
+			break
+		}
+	}
+
+	if caddyUpdate == nil {
+		t.Fatalf("expected update entry for caddy")
+	}
+	// Falls back to catalog version 2.11.7
+	if caddyUpdate.LatestVersion != "2.11.7" {
+		t.Errorf("expected fallback to catalog version 2.11.7, got %s", caddyUpdate.LatestVersion)
+	}
+}
+
+func TestGitHub_AdminerMajorBlockedFromPlainUpgrade(t *testing.T) {
+	adminerContent := []byte("<?php echo 'Adminer 6.2.0 Single File Script';")
+	hasher := sha256.New()
+	hasher.Write(adminerContent)
+	adminerHash := hex.EncodeToString(hasher.Sum(nil))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/release":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"tag_name": "v6.2.0",
+				"assets": [
+					{
+						"name": "adminer-6.2.0.php",
+						"browser_download_url": "` + r.Header.Get("X-Server-URL") + `/adminer-plain.php",
+						"digest": "sha256:1111"
+					},
+					{
+						"name": "adminer-6.2.0-mysql.php",
+						"browser_download_url": "` + r.Header.Get("X-Server-URL") + `/adminer-mysql.php",
+						"digest": "sha256:` + adminerHash + `"
+					}
+				]
+			}`))
+		case "/adminer-mysql.php":
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(adminerContent)))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(adminerContent)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	tmpDir := filepath.Join(tempDir, "tmp")
+	dataDir := filepath.Join(tempDir, "data")
+
+	adminerSrc := updater.NewGitHubSource("vrana/adminer", regexp.MustCompile(`^adminer-.*-mysql\.php$`), "adminer")
+	adminerSrc.BaseURL = server.URL + "/release"
+	adminerSrc.CacheTTL = -1
+	adminerSrc.HTTPClient = &http.Client{
+		Transport: &testHeaderTransport{header: "X-Server-URL", value: server.URL},
+	}
+
+	app := &App{
+		supervisor: process.NewSupervisor(),
+		baseBinDir: binDir,
+		tempDir:    tmpDir,
+		dataDir:    dataDir,
+		registry: updater.Registry{
+			"adminer": adminerSrc,
+		},
+	}
+
+	// 1. Verify CheckRuntimeUpdates marks MajorChange=true
+	updates := app.CheckRuntimeUpdates()
+	var adminerInfo *updater.RuntimeUpdateInfo
+	for i := range updates {
+		if updates[i].Name == "adminer" {
+			adminerInfo = &updates[i]
+			break
+		}
+	}
+	if adminerInfo == nil {
+		t.Fatalf("expected adminer in updates")
+	}
+	if !adminerInfo.MajorChange {
+		t.Errorf("expected adminer MajorChange=true (4.8.1 -> 6.2.0), got false")
+	}
+
+	// 2. Plain UpgradeRuntime must be BLOCKED with major_change_requires_confirmation
+	_, err := app.UpgradeRuntime("adminer")
+	if err == nil {
+		t.Fatalf("expected UpgradeRuntime('adminer') to fail with major change confirmation error, got nil")
+	}
+	if err.Error() != "major_change_requires_confirmation" {
+		t.Errorf("expected 'major_change_requires_confirmation', got: %v", err)
+	}
+
+	// 3. UpgradeRuntimeConfirmed must SUCCEED
+	msg, err := app.UpgradeRuntimeConfirmed("adminer")
+	if err != nil {
+		t.Fatalf("UpgradeRuntimeConfirmed failed: %v", err)
+	}
+	if msg.Key != "adminer_download_success" {
+		t.Errorf("unexpected msg key: %+v", msg)
+	}
+
+	// Verify data/adminer/adminer-core.php exists and has downloaded content
+	coreFile := filepath.Join(dataDir, "adminer", "adminer-core.php")
+	content, err := os.ReadFile(coreFile)
+	if err != nil {
+		t.Fatalf("failed to read adminer-core.php: %v", err)
+	}
+	if !bytes.Equal(content, adminerContent) {
+		t.Errorf("adminer-core.php content mismatch: %q", string(content))
+	}
+}
+
+func TestGitHub_CaddyMinorNotMajor_PlainUpgradeSucceeds(t *testing.T) {
+	caddyContent := []byte("Caddy 2.12.0 binary")
+	zipBytes, zipHash := createTestZip(t, "caddy.exe", caddyContent)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/release":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"tag_name": "v2.12.0",
+				"assets": [
+					{
+						"name": "caddy_2.12.0_windows_amd64.zip",
+						"browser_download_url": "` + r.Header.Get("X-Server-URL") + `/caddy.zip",
+						"digest": "sha256:` + zipHash + `"
+					}
+				]
+			}`))
+		case "/caddy.zip":
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(zipBytes)))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(zipBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	tmpDir := filepath.Join(tempDir, "tmp")
+
+	caddySrc := updater.NewGitHubSource("caddyserver/caddy", regexp.MustCompile(`^caddy_.*_windows_amd64\.zip$`), "caddy")
+	caddySrc.BaseURL = server.URL + "/release"
+	caddySrc.CacheTTL = -1
+	caddySrc.HTTPClient = &http.Client{
+		Transport: &testHeaderTransport{header: "X-Server-URL", value: server.URL},
+	}
+
+	app := &App{
+		supervisor: process.NewSupervisor(),
+		baseBinDir: binDir,
+		tempDir:    tmpDir,
+		registry: updater.Registry{
+			"caddy": caddySrc,
+		},
+	}
+
+	// 1. Check updates -> MajorChange must be false
+	updates := app.CheckRuntimeUpdates()
+	var caddyInfo *updater.RuntimeUpdateInfo
+	for i := range updates {
+		if updates[i].Name == "caddy" {
+			caddyInfo = &updates[i]
+			break
+		}
+	}
+	if caddyInfo == nil {
+		t.Fatalf("expected caddy update")
+	}
+	if caddyInfo.MajorChange {
+		t.Errorf("expected MajorChange=false for caddy (2.11.7 -> 2.12.0), got true")
+	}
+
+	// 2. Plain UpgradeRuntime must SUCCEED directly
+	msg, err := app.UpgradeRuntime("caddy")
+	if err != nil {
+		t.Fatalf("expected plain UpgradeRuntime('caddy') to succeed, got: %v", err)
+	}
+	if msg.Params["name"] != "caddy" {
+		t.Errorf("unexpected message name param: %+v", msg)
+	}
+
+	installed := filepath.Join(binDir, "caddy", "caddy.exe")
+	content, err := os.ReadFile(installed)
+	if err != nil {
+		t.Fatalf("failed to read installed caddy.exe: %v", err)
+	}
+	if !bytes.Equal(content, caddyContent) {
+		t.Errorf("caddy.exe content mismatch")
+	}
+}
+
+func TestGitHub_RedisSuccessor_AssetSelectionAndMajorBlock(t *testing.T) {
+	redisContent := []byte("Redis 8.10.3 binary from redis-windows msys2")
+	redisConfContent := []byte("# Redis 8.10.3 test configuration\nport 6379\n")
+
+	// Create zip with top-level folder as found in real redis-windows archive
+	buf := new(bytes.Buffer)
+	zw := zip.NewWriter(buf)
+	wExe, _ := zw.Create("Redis-8.10.3-Windows-x64-msys2/redis-server.exe")
+	_, _ = wExe.Write(redisContent)
+	wConf, _ := zw.Create("Redis-8.10.3-Windows-x64-msys2/redis.conf")
+	_, _ = wConf.Write(redisConfContent)
+	_ = zw.Close()
+	zipBytes := buf.Bytes()
+
+	hasher := sha256.New()
+	hasher.Write(zipBytes)
+	zipHash := hex.EncodeToString(hasher.Sum(nil))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/release":
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"tag_name": "8.10.3",
+				"assets": [
+					{
+						"name": "Redis-8.10.3-Windows-x64-cygwin-with-Service.zip",
+						"browser_download_url": "` + r.Header.Get("X-Server-URL") + `/cygwin-service.zip",
+						"digest": "sha256:1111"
+					},
+					{
+						"name": "Redis-8.10.3-Windows-x64-cygwin.zip",
+						"browser_download_url": "` + r.Header.Get("X-Server-URL") + `/cygwin.zip",
+						"digest": "sha256:2222"
+					},
+					{
+						"name": "Redis-8.10.3-Windows-x64-msys2-with-Service.zip",
+						"browser_download_url": "` + r.Header.Get("X-Server-URL") + `/msys2-service.zip",
+						"digest": "sha256:3333"
+					},
+					{
+						"name": "Redis-8.10.3-Windows-x64-msys2.zip",
+						"browser_download_url": "` + r.Header.Get("X-Server-URL") + `/redis-msys2.zip",
+						"digest": "sha256:` + zipHash + `"
+					}
+				]
+			}`))
+		case "/redis-msys2.zip":
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(zipBytes)))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(zipBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	tmpDir := filepath.Join(tempDir, "tmp")
+
+	redisSrc := updater.NewGitHubSource("redis-windows/redis-windows", regexp.MustCompile(`^Redis-.*-Windows-x64-msys2\.zip$`), "redis")
+	redisSrc.BaseURL = server.URL + "/release"
+	redisSrc.CacheTTL = -1
+	redisSrc.HTTPClient = &http.Client{
+		Transport: &testHeaderTransport{header: "X-Server-URL", value: server.URL},
+	}
+
+	app := &App{
+		supervisor: process.NewSupervisor(),
+		baseBinDir: binDir,
+		tempDir:    tmpDir,
+		registry: updater.Registry{
+			"redis": redisSrc,
+		},
+	}
+
+	// 1. Check updates -> MajorChange must be true (tporadowski 5.0.14.1 -> redis-windows 8.10.3)
+	updates := app.CheckRuntimeUpdates()
+	var redisInfo *updater.RuntimeUpdateInfo
+	for i := range updates {
+		if updates[i].Name == "redis" {
+			redisInfo = &updates[i]
+			break
+		}
+	}
+	if redisInfo == nil {
+		t.Fatalf("expected redis in updates")
+	}
+	if !redisInfo.MajorChange {
+		t.Errorf("expected redis MajorChange=true, got false")
+	}
+
+	// 2. Plain UpgradeRuntime must be BLOCKED
+	_, err := app.UpgradeRuntime("redis")
+	if err == nil {
+		t.Fatalf("expected UpgradeRuntime('redis') to fail with major change confirmation error, got nil")
+	}
+	if err.Error() != "major_change_requires_confirmation" {
+		t.Errorf("expected 'major_change_requires_confirmation', got: %v", err)
+	}
+
+	// 3. UpgradeRuntimeConfirmed must SUCCEED
+	msg, err := app.UpgradeRuntimeConfirmed("redis")
+	if err != nil {
+		t.Fatalf("UpgradeRuntimeConfirmed failed: %v", err)
+	}
+	if msg.Params["name"] != "redis" {
+		t.Errorf("unexpected message params: %+v", msg)
+	}
+
+	// Verify installed binary and config
+	installed := filepath.Join(binDir, "redis", "redis-server.exe")
+	if _, err := os.Stat(installed); err != nil {
+		// Also check subfolder if not stripped
+		matches, _ := filepath.Glob(filepath.Join(binDir, "redis", "*", "redis-server.exe"))
+		if len(matches) > 0 {
+			installed = matches[0]
+		}
+	}
+	content, err := os.ReadFile(installed)
+	if err != nil {
+		t.Fatalf("failed to find installed redis-server.exe: %v", err)
+	}
+	if !bytes.Equal(content, redisContent) {
+		t.Errorf("redis-server.exe content mismatch")
+	}
+
+	// Verify findRedisExecutable finds it
+	found := app.findRedisExecutable()
+	if found == "" {
+		t.Errorf("findRedisExecutable failed to locate the newly installed redis executable")
+	}
+}
+
