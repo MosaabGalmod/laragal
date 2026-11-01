@@ -36,13 +36,23 @@ describe('no hardcoded Arabic UI text in frontend components', () => {
       vueFiles.push(appVue)
     }
 
-    if (fs.existsSync(componentsDir)) {
-      const entries = fs.readdirSync(componentsDir)
+    function collectVueFilesRecursively(dir: string): string[] {
+      const results: string[] = []
+      if (!fs.existsSync(dir)) return results
+      const entries = fs.readdirSync(dir, { withFileTypes: true })
       for (const entry of entries) {
-        if (entry.endsWith('.vue')) {
-          vueFiles.push(path.join(componentsDir, entry))
+        const fullPath = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          results.push(...collectVueFilesRecursively(fullPath))
+        } else if (entry.isFile() && entry.name.endsWith('.vue')) {
+          results.push(fullPath)
         }
       }
+      return results
+    }
+
+    if (fs.existsSync(componentsDir)) {
+      vueFiles.push(...collectVueFilesRecursively(componentsDir))
     }
 
     expect(vueFiles.length).toBeGreaterThan(0)
