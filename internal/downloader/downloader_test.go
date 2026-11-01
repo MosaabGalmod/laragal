@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -63,6 +65,74 @@ func TestGetDownloadURL(t *testing.T) {
 	}
 }
 
+func TestArtifactSHA256Configured(t *testing.T) {
+	requiredArtifacts := []string{
+		"caddy",
+		"mailpit",
+		"php-8.5",
+		"php-8.4",
+		"php-8.3",
+		"php-8.2",
+		"php-8.1",
+		"mysql",
+		"redis",
+		"adminer",
+		"phpmyadmin",
+	}
+
+	for _, name := range requiredArtifacts {
+		art, err := downloader.GetDownloadArtifact(name)
+		if err != nil {
+			t.Errorf("GetDownloadArtifact(%q) returned error: %v", name, err)
+			continue
+		}
+		if art.URL == "" {
+			t.Errorf("artifact %s has empty URL", name)
+		}
+		if len(art.SHA256) != 64 {
+			t.Errorf("artifact %s has invalid or missing SHA-256 hash: %q", name, art.SHA256)
+		}
+		expected := downloader.GetExpectedSHA256(name)
+		if expected != art.SHA256 {
+			t.Errorf("GetExpectedSHA256(%q) = %q, want %q", name, expected, art.SHA256)
+		}
+	}
+}
+
+func TestDynamicURLWarnPath(t *testing.T) {
+	art, err := downloader.GetDownloadArtifact("php-8.6")
+	if err != nil {
+		t.Fatalf("unexpected error for dynamic php-8.6: %v", err)
+	}
+	if art.SHA256 != "" {
+		t.Errorf("dynamic version should have empty SHA256, got: %s", art.SHA256)
+	}
+	expected := downloader.GetExpectedSHA256("php-8.6")
+	if expected != "" {
+		t.Errorf("dynamic version should return empty expected hash, got: %s", expected)
+	}
+
+	payload := []byte("Dynamic unhashed binary content")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(payload)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	destFile := filepath.Join(tempDir, "dynamic_php.zip")
+
+	// Dynamic URLs have no known hash; code must not refuse but succeed and leave file in place
+	err = downloader.DownloadFile(context.Background(), server.URL, destFile, nil)
+	if err != nil {
+		t.Fatalf("dynamic download failed unexpectedly: %v", err)
+	}
+	if _, err := os.Stat(destFile); err != nil {
+		t.Fatalf("dynamic download file missing: %v", err)
+	}
+}
+
 func TestDownloadFileWithProgress(t *testing.T) {
 	payload := []byte("Hello LaraGal Downloader Payload with sufficient length to test chunking and byte counts")
 
@@ -102,6 +172,78 @@ func TestDownloadFileWithProgress(t *testing.T) {
 	}
 	if string(content) != string(payload) {
 		t.Errorf("content mismatch, got %q, want %q", string(content), string(payload))
+	}
+}
+
+func TestDownloadFileIntegrity_MatchingHash(t *testing.T) {
+	payload := []byte("Secure artifact payload content for SHA-256 integrity check")
+	hasher := sha256.New()
+	hasher.Write(payload)
+	expectedHash := hex.EncodeToString(hasher.Sum(nil))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(payload)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	destFile := filepath.Join(tempDir, "verified_artifact.zip")
+
+	err := downloader.DownloadFile(context.Background(), server.URL, destFile, nil, expectedHash)
+	if err != nil {
+		t.Fatalf("DownloadFile with matching hash failed unexpectedly: %v", err)
+	}
+
+	content, err := os.ReadFile(destFile)
+	if err != nil {
+		t.Fatalf("failed to read successfully downloaded file: %v", err)
+	}
+	if !bytes.Equal(content, payload) {
+		t.Errorf("downloaded content mismatch")
+	}
+}
+
+func TestDownloadFileIntegrity_MismatchingHash(t *testing.T) {
+	payload := []byte("Compromised or mismatched content payload")
+	wrongHash := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" // hash of empty string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(payload)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	destFile := filepath.Join(tempDir, "compromised_artifact.zip")
+
+	err := downloader.DownloadFile(context.Background(), server.URL, destFile, nil, wrongHash)
+	if err == nil {
+		t.Fatalf("expected error on hash mismatch, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "mismatch") {
+		t.Errorf("expected error message to mention 'mismatch', got: %v", err)
+	}
+
+	// Verify destFile was NOT created
+	if _, err := os.Stat(destFile); !os.IsNotExist(err) {
+		t.Errorf("destination file %s should NOT exist after hash mismatch", destFile)
+	}
+
+	// Verify no temporary files were left behind in tempDir
+	entries, err := os.ReadDir(tempDir)
+	if err != nil {
+		t.Fatalf("failed to read temp dir: %v", err)
+	}
+	if len(entries) > 0 {
+		names := make([]string, len(entries))
+		for i, e := range entries {
+			names[i] = e.Name()
+		}
+		t.Errorf("temporary files left behind after mismatch: %v", names)
 	}
 }
 

@@ -1,10 +1,13 @@
-﻿package downloader
+package downloader
 
 import (
 	"archive/zip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,19 +15,66 @@ import (
 	"time"
 )
 
-var defaultURLs = map[string]string{
-	"caddy":   "https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_windows_amd64.zip",
-	"mailpit": "https://github.com/axllent/mailpit/releases/download/v1.21.8/mailpit-windows-amd64.zip",
-	"php-8.5": "https://windows.php.net/downloads/releases/php-8.5.12-1-nts-Win32-vs17-x64.zip",
-	"php-8.4": "https://windows.php.net/downloads/releases/php-8.4.4-nts-Win32-vs17-x64.zip",
-	"php-8.3": "https://windows.php.net/downloads/releases/php-8.3.17-nts-Win32-vs16-x64.zip",
-	"php-8.2": "https://windows.php.net/downloads/releases/php-8.2.27-nts-Win32-vs16-x64.zip",
-	"php-8.1": "https://windows.php.net/downloads/releases/archives/php-8.1.31-nts-Win32-vs16-x64.zip",
-	"mysql":   "https://archive.mariadb.org/mariadb-10.11.10/winx64-packages/mariadb-10.11.10-winx64.zip",
-	"redis":      "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip",
-	"adminer":    "https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1.php",
-	"phpmyadmin": "https://files.phpmyadmin.net/phpMyAdmin/5.2.2/phpMyAdmin-5.2.2-all-languages.zip",
+// Artifact represents a downloadable binary runtime package with its official integrity checksum.
+type Artifact struct {
+	URL    string `json:"url"`
+	SHA256 string `json:"sha256"`
 }
+
+var defaultArtifacts = map[string]Artifact{
+	"caddy": {
+		URL:    "https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_windows_amd64.zip",
+		SHA256: "2631fbe1c4f6fb08783ed6dc6ac238d6655b4c923abe2bce1433dbd7fd079630",
+	},
+	"mailpit": {
+		URL:    "https://github.com/axllent/mailpit/releases/download/v1.21.8/mailpit-windows-amd64.zip",
+		SHA256: "934dbd469da0f61ec7d1619e2d3c5a8c6179b7beab4a6d1900c3916ee2d547fb",
+	},
+	"php-8.5": {
+		URL:    "https://windows.php.net/downloads/releases/php-8.5.12-1-nts-Win32-vs17-x64.zip",
+		SHA256: "2a36a2edcb7a5b9252f638fd5e4cf84d7f6e066092654220dc0b63e5cf4e9723",
+	},
+	"php-8.4": {
+		URL:    "https://windows.php.net/downloads/releases/archives/php-8.4.4-nts-Win32-vs17-x64.zip",
+		SHA256: "f2269ec0bdd74c1ba8db58c13b559592cc0ea2acbb0c3886a7ca5b7f2e05f1b1",
+	},
+	"php-8.3": {
+		URL:    "https://windows.php.net/downloads/releases/archives/php-8.3.17-nts-Win32-vs16-x64.zip",
+		SHA256: "630fec87d618c3f221864255cc2076471421dfaf7352779af3b7f8c76e00e8bd",
+	},
+	"php-8.2": {
+		URL:    "https://windows.php.net/downloads/releases/archives/php-8.2.27-nts-Win32-vs16-x64.zip",
+		SHA256: "ab8acf92d3b32425d82cea66c190e56969e61f15b7878730a112446d97521515",
+	},
+	"php-8.1": {
+		URL:    "https://windows.php.net/downloads/releases/archives/php-8.1.31-nts-Win32-vs16-x64.zip",
+		SHA256: "77feab37229359a897f602aa86dc5aff0cc7e414c0f21afc3098ae4e991a9e8f",
+	},
+	"mysql": {
+		URL:    "https://archive.mariadb.org/mariadb-10.11.10/winx64-packages/mariadb-10.11.10-winx64.zip",
+		SHA256: "5626478891370011b568e3776ba76d840846c2a08261b14b82de97f0608311cf",
+	},
+	"redis": {
+		URL:    "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip",
+		SHA256: "018ea18a35876383cbb5f4cd0258adfc87747cf9d619bce1cf73a2e36f720ccf",
+	},
+	"adminer": {
+		URL:    "https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1.php",
+		SHA256: "2fd7e6d8f987b243ab1839249551f62adce19704c47d3d0c8dd9e57ea5b9c6b3",
+	},
+	"phpmyadmin": {
+		URL:    "https://files.phpmyadmin.net/phpMyAdmin/5.2.2/phpMyAdmin-5.2.2-all-languages.zip",
+		SHA256: "6b99534f72ffb1d7275f50d23ca4141e1495c97d7cadb73a41d6dc580ed5ce29",
+	},
+}
+
+var defaultURLs = func() map[string]string {
+	m := make(map[string]string, len(defaultArtifacts))
+	for k, v := range defaultArtifacts {
+		m[k] = v.URL
+	}
+	return m
+}()
 
 func normalizeBinaryName(name string) string {
 	n := strings.ToLower(strings.TrimSpace(name))
@@ -55,21 +105,67 @@ func normalizeBinaryName(name string) string {
 	return n
 }
 
-// GetDownloadURL returns the direct download URL for known portable runtimes
-func GetDownloadURL(name string) (string, error) {
+// GetDownloadArtifact returns the artifact metadata (URL and SHA-256) for known portable runtimes.
+func GetDownloadArtifact(name string) (Artifact, error) {
 	norm := normalizeBinaryName(name)
-	url, exists := defaultURLs[norm]
+	art, exists := defaultArtifacts[norm]
 	if exists {
-		return url, nil
+		return art, nil
 	}
 
 	// For future or unlisted PHP versions (e.g. php-8.6, php-9.0), provide dynamic official pattern
 	if strings.HasPrefix(norm, "php-") {
 		ver := strings.TrimPrefix(norm, "php-")
-		return fmt.Sprintf("https://windows.php.net/downloads/releases/php-%s.0-nts-Win32-vs17-x64.zip", ver), nil
+		return Artifact{
+			URL:    fmt.Sprintf("https://windows.php.net/downloads/releases/php-%s.0-nts-Win32-vs17-x64.zip", ver),
+			SHA256: "",
+		}, nil
 	}
 
-	return "", fmt.Errorf("no known download url for binary: %s", name)
+	return Artifact{}, fmt.Errorf("no known download artifact for binary: %s", name)
+}
+
+// GetDownloadURL returns the direct download URL for known portable runtimes
+func GetDownloadURL(name string) (string, error) {
+	art, err := GetDownloadArtifact(name)
+	if err != nil {
+		return "", err
+	}
+	return art.URL, nil
+}
+
+// GetExpectedSHA256 returns the configured SHA-256 checksum for a binary name or download URL.
+// Returns an empty string if no known checksum is configured.
+func GetExpectedSHA256(nameOrURL string) string {
+	target := strings.TrimSpace(nameOrURL)
+	if target == "" {
+		return ""
+	}
+
+	// Try normalized binary name
+	norm := normalizeBinaryName(target)
+	if art, exists := defaultArtifacts[norm]; exists {
+		return art.SHA256
+	}
+
+	// Try matching URL directly
+	for _, art := range defaultArtifacts {
+		if art.URL == target {
+			return art.SHA256
+		}
+	}
+
+	// Try matching by filename in URL (e.g. php-8.4.4-nts-Win32-vs17-x64.zip)
+	targetFilename := filepath.Base(target)
+	if targetFilename != "" && targetFilename != "." && targetFilename != "/" {
+		for _, art := range defaultArtifacts {
+			if filepath.Base(art.URL) == targetFilename {
+				return art.SHA256
+			}
+		}
+	}
+
+	return ""
 }
 
 // ProgressCallback reports downloaded bytes, total expected bytes, and calculated percentage
@@ -104,8 +200,10 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
-// DownloadFile streams a remote binary to local disk and triggers progress callbacks
-func DownloadFile(ctx context.Context, url string, destPath string, onProgress ProgressCallback) error {
+// DownloadFile streams a remote binary to a temporary file, computes its SHA-256 checksum,
+// verifies integrity before placing the file into destPath, and reports progress.
+// On hash mismatch, the temporary file is deleted and an error is returned.
+func DownloadFile(ctx context.Context, url string, destPath string, onProgress ProgressCallback, expectedSHA256 ...string) error {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return err
@@ -126,26 +224,67 @@ func DownloadFile(ctx context.Context, url string, destPath string, onProgress P
 		return fmt.Errorf("failed to download %s: HTTP %s", url, resp.Status)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+	destDir := filepath.Dir(destPath)
+	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return err
 	}
 
-	outFile, err := os.Create(destPath)
+	// Create temp file in the same directory so os.Rename is atomic (same volume)
+	tempFile, err := os.CreateTemp(destDir, ".tmp-download-*")
 	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
+		return fmt.Errorf("failed to create temporary download file: %w", err)
 	}
-	defer outFile.Close()
+	tempPath := tempFile.Name()
 
+	success := false
+	defer func() {
+		if !success {
+			_ = tempFile.Close()
+			_ = os.Remove(tempPath)
+		}
+	}()
+
+	hasher := sha256.New()
 	pw := &progressWriter{
 		total:      resp.ContentLength,
 		callback:   onProgress,
 		lastReport: time.Now(),
 	}
 
-	writer := io.MultiWriter(outFile, pw)
+	writer := io.MultiWriter(tempFile, hasher, pw)
 	if _, err := io.Copy(writer, resp.Body); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
+
+	if err := tempFile.Close(); err != nil {
+		return fmt.Errorf("failed to finalize temporary download file: %w", err)
+	}
+
+	// Determine expected SHA-256 hash
+	var expected string
+	if len(expectedSHA256) > 0 && strings.TrimSpace(expectedSHA256[0]) != "" {
+		expected = strings.TrimSpace(expectedSHA256[0])
+	} else {
+		expected = GetExpectedSHA256(url)
+	}
+
+	actualHash := hex.EncodeToString(hasher.Sum(nil))
+
+	if expected != "" {
+		if !strings.EqualFold(expected, actualHash) {
+			return fmt.Errorf("SHA-256 checksum mismatch for %s: expected %s, got %s", url, expected, actualHash)
+		}
+	} else {
+		log.Printf("WARNING: no SHA-256 checksum configured for %s; skipping integrity verification", url)
+	}
+
+	// Safely move verified file into destPath (handling Windows existing file replacement)
+	_ = os.Remove(destPath)
+	if err := os.Rename(tempPath, destPath); err != nil {
+		return fmt.Errorf("failed to move verified file to destination %s: %w", destPath, err)
+	}
+
+	success = true
 
 	if onProgress != nil && resp.ContentLength > 0 {
 		onProgress(resp.ContentLength, resp.ContentLength, 100)
