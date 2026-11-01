@@ -133,7 +133,7 @@ LaraGal is built strictly for local development environments:
 ## Updates
 
 - **PHP Patch Upgrades:** LaraGal checks `windows.php.net/downloads/releases/releases.json` for newer patch releases of supported PHP versions (NTS builds). Downloads are verified with the published SHA-256 digest, with fallback to official archive mirrors if a release has been moved.
-- **Bundled Service Runtimes:** Versions for Caddy, MariaDB, Mailpit, phpMyAdmin, Adminer, and Redis are pinned in the internal runtime catalog (`internal/runtimes/catalog.go`) and are updated through new LaraGal releases.
+- **Bundled Service Runtimes:** Versions for Caddy, MariaDB, Mailpit, phpMyAdmin, Adminer, and Redis are pinned in the internal runtime catalog (`internal/runtimes/runtimes.go`) and are updated through new LaraGal releases.
 - **Application Releases:** LaraGal does not include an automatic background updater or update notifications. New application versions are published on [GitHub Releases](https://github.com/MosaabGalmod/laragal/releases) and installed manually by replacing the executable.
 
 ---
@@ -220,7 +220,7 @@ build.bat
 ### التحديثات:
 
 * ترقيات حزم `PHP`: يجلب البرنامج التحديثات الفرعية مباشرة من ملف `releases.json` على `windows.php.net` بعد التحقق من بصمة `SHA-256`، مع دعم التنزيل من الأرشيف الرسمي عند أرشفة الإصدار.
-* إصدارات الخدمات المدمجة: إصدارات `Caddy` و `MariaDB` و `Mailpit` و `phpMyAdmin` و `Adminer` و `Redis` مثبتة في الكتالوج الداخلي `internal/runtimes/catalog.go` ولا تتغير إلا مع إصدار نسخة جديدة من `LaraGal`.
+* إصدارات الخدمات المدمجة: إصدارات `Caddy` و `MariaDB` و `Mailpit` و `phpMyAdmin` و `Adminer` و `Redis` مثبتة في الكتالوج الداخلي `internal/runtimes/runtimes.go` ولا تتغير إلا مع إصدار نسخة جديدة من `LaraGal`.
 * تحديث البرنامج: لا يحتوي البرنامج على خاصية التحديث التلقائي في الخلفية أو إشعارات التحديث؛ ويجري تنزيل الإصدارات الجديدة يدويًا من صفحة الإصدارات في `GitHub Releases`.
 
 </div>
