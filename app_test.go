@@ -943,6 +943,34 @@ func TestLiveRelease_PHP86_FeedDownErrors(t *testing.T) {
 	}
 }
 
+func TestLiveRelease_OlderFeedMinor_Rejected(t *testing.T) {
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	tmpDir := filepath.Join(tempDir, "tmp")
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rawFeed, _ := os.ReadFile(filepath.Join("internal", "updater", "testdata", "releases.json"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(rawFeed)
+	}))
+	defer server.Close()
+
+	app := &App{
+		supervisor:     process.NewSupervisor(),
+		phpReleasesURL: server.URL,
+		baseBinDir:     binDir,
+		tempDir:        tmpDir,
+	}
+
+	_, err := app.DownloadBinary("php-8.0")
+	if err == nil {
+		t.Fatalf("expected error when attempting to download uncataloged older feed minor php-8.0, got nil")
+	}
+	if !strings.Contains(err.Error(), "unknown") && !strings.Contains(err.Error(), "no verified artifact") {
+		t.Errorf("expected error to mention unknown runtime or no verified artifact, got: %v", err)
+	}
+}
+
 func TestUIMessage_CheckPortConflict(t *testing.T) {
 	app := &App{
 		supervisor: process.NewSupervisor(),

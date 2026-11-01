@@ -159,14 +159,24 @@ func ParsePHPReleasesJSON(data []byte, customBaseURL ...string) (map[string]PHPV
 			continue
 		}
 
-		// Pick "nts-vs17-x64" else "nts-vs16-x64"; skip minors with no nts-x64 build
+		// Pick "nts-vs17-x64", else "nts-vs16-x64", else "nts-vc15-x64" or any nts-*-x64 build; skip if none
 		var buildNode interface{}
 		if nts17, exists := minorData["nts-vs17-x64"]; exists {
 			buildNode = nts17
 		} else if nts16, exists := minorData["nts-vs16-x64"]; exists {
 			buildNode = nts16
+		} else if nts15, exists := minorData["nts-vc15-x64"]; exists {
+			buildNode = nts15
 		} else {
-			continue
+			for k, v := range minorData {
+				if strings.HasPrefix(k, "nts-") && strings.HasSuffix(k, "-x64") {
+					buildNode = v
+					break
+				}
+			}
+			if buildNode == nil {
+				continue
+			}
 		}
 
 		buildMap, ok := buildNode.(map[string]interface{})
@@ -358,6 +368,23 @@ func DetectInstalledBinaryVersion(binDir string, name string) string {
 	return ""
 }
 
+// HighestCatalogPHPMajorMinor returns the highest PHP minor version currently present in the catalog (e.g. "8.5").
+func HighestCatalogPHPMajorMinor() string {
+	highest := ""
+	for _, rt := range runtimes.All() {
+		if strings.HasPrefix(rt.Name, "php-") {
+			ver := strings.TrimPrefix(rt.Name, "php-")
+			if highest == "" || IsVersionNewer(highest, ver) {
+				highest = ver
+			}
+		}
+	}
+	if highest == "" {
+		return "8.5"
+	}
+	return highest
+}
+
 // CheckUpdates inspects available releases and compares them with current local installations.
 // Uses the registry to enrich catalog runtimes and discover new PHP minors in the feed.
 func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
@@ -471,15 +498,32 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 	}
 
 	// 3. Any PHP minor in the feed but not in the catalog (e.g. 8.6, 9.0) becomes an entry with IsNew=true
+	// Rule: a feed-only minor is offered as new ONLY if it is newer than the highest PHP minor in the catalog (today 8.5).
+	// Older minors not in the catalog (e.g. 8.0, 7.4) are ignored.
+	highestCatalogPHP := HighestCatalogPHPMajorMinor()
+
 	for _, liveRel := range livePHPReleases {
+		if !strings.HasPrefix(liveRel.Name, "php-") {
+			continue
+		}
+		minorVer := strings.TrimPrefix(liveRel.Name, "php-")
+
+		// If already in catalog, it was already handled in step 2
+		if _, inCatalog := runtimes.Get(liveRel.Name); inCatalog {
+			continue
+		}
+
+		// Feed-only minor must be strictly newer than the highest catalog minor
+		if !IsVersionNewer(highestCatalogPHP, minorVer) {
+			continue
+		}
+
 		if processed[liveRel.Name] {
-			// If already processed (e.g. found on disk), mark IsNew if not in catalog
-			if _, inCatalog := runtimes.Get(liveRel.Name); !inCatalog {
-				for i := range results {
-					if results[i].Name == liveRel.Name {
-						results[i].IsNew = true
-						break
-					}
+			// If already processed (e.g. found on disk), mark IsNew since it is newer than highest in catalog
+			for i := range results {
+				if results[i].Name == liveRel.Name {
+					results[i].IsNew = true
+					break
 				}
 			}
 			continue

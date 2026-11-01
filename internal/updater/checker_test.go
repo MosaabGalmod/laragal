@@ -184,6 +184,15 @@ func TestCheckUpdates_WithNewMinorFromFeed(t *testing.T) {
 	if found86.SHA256 != fake86SHA {
 		t.Errorf("expected SHA256 %s, got %s", fake86SHA, found86.SHA256)
 	}
+
+	for _, u := range updates {
+		if u.Name == "php-8.0" {
+			t.Errorf("expected updates NOT to contain EOL feed minor php-8.0, but found: %+v", u)
+		}
+		if u.Name == "php-7.4" {
+			t.Errorf("expected updates NOT to contain EOL feed minor php-7.4, but found: %+v", u)
+		}
+	}
 }
 
 func TestPHPSource_Latest(t *testing.T) {

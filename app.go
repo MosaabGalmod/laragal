@@ -1014,6 +1014,17 @@ func (a *App) resolveArtifact(name string) (string, string, string, error) {
 
 	// 1. Try live release via the registry
 	family := updater.RuntimeFamily(norm)
+
+	// For PHP, feed releases for uncataloged versions are only allowed if newer than highest catalog minor
+	if family == "php" {
+		if _, inCatalog := runtimes.Get(norm); !inCatalog {
+			minor := strings.TrimPrefix(norm, "php-")
+			if !updater.IsVersionNewer(updater.HighestCatalogPHPMajorMinor(), minor) {
+				return "", "", "", fmt.Errorf("unknown runtime or version: %s (no verified artifact found)", name)
+			}
+		}
+	}
+
 	var source updater.ReleaseSource
 	if family == "php" && a.phpReleasesURL != "" {
 		source = &updater.PHPSource{BaseURL: a.phpReleasesURL}
