@@ -33,16 +33,7 @@ func GetDownloadArtifact(name string) (Artifact, error) {
 		}, nil
 	}
 
-	// For future or unlisted PHP versions (e.g. php-8.6, php-9.0), provide dynamic official pattern
-	if strings.HasPrefix(norm, "php-") {
-		ver := strings.TrimPrefix(norm, "php-")
-		return Artifact{
-			URL:    fmt.Sprintf("https://windows.php.net/downloads/releases/php-%s.0-nts-Win32-vs17-x64.zip", ver),
-			SHA256: "",
-		}, nil
-	}
-
-	return Artifact{}, fmt.Errorf("no known download artifact for binary: %s", name)
+	return Artifact{}, fmt.Errorf("unknown runtime or version: %s (no verified artifact found)", name)
 }
 
 // GetDownloadURL returns the direct download URL for known portable runtimes
@@ -92,6 +83,13 @@ func (pw *progressWriter) Write(p []byte) (int, error) {
 	return n, nil
 }
 
+func getArchiveFallbackURL(rawURL string) string {
+	if strings.Contains(rawURL, "/downloads/releases/") && !strings.Contains(rawURL, "/downloads/releases/archives/") {
+		return strings.Replace(rawURL, "/downloads/releases/", "/downloads/releases/archives/", 1)
+	}
+	return ""
+}
+
 // DownloadFile streams a remote binary to a temporary file, computes its SHA-256 checksum,
 // verifies integrity before placing the file into destPath, and reports progress.
 // On hash mismatch, the temporary file is deleted and an error is returned.
@@ -109,6 +107,20 @@ func DownloadFile(ctx context.Context, url string, destPath string, onProgress P
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to connect to %s: %w", url, err)
+	}
+
+	// For windows.php.net release URLs, on HTTP 404 retry under /downloads/releases/archives/
+	if resp.StatusCode == http.StatusNotFound {
+		if archiveURL := getArchiveFallbackURL(url); archiveURL != "" {
+			_ = resp.Body.Close()
+			archiveReq, aErr := http.NewRequestWithContext(ctx, "GET", archiveURL, nil)
+			if aErr == nil {
+				archiveReq.Header.Set("User-Agent", "LaraGal-Downloader/1.0")
+				if aResp, doErr := client.Do(archiveReq); doErr == nil {
+					resp = aResp
+				}
+			}
+		}
 	}
 	defer resp.Body.Close()
 

@@ -201,13 +201,21 @@ func GetURL(name string) (string, error) {
 		return rt.URL, nil
 	}
 
-	// For future/unlisted PHP versions, provide dynamic pattern
-	if strings.HasPrefix(norm, "php-") {
-		ver := strings.TrimPrefix(norm, "php-")
-		return fmt.Sprintf("https://windows.php.net/downloads/releases/php-%s.0-nts-Win32-vs17-x64.zip", ver), nil
-	}
-
 	return "", fmt.Errorf("no known download artifact for binary: %s", name)
+}
+
+// SetForTest allows unit tests to temporarily override a catalog entry and returns a cleanup function.
+func SetForTest(name string, rt Runtime) func() {
+	norm := NormalizeName(name)
+	old, existed := catalog[norm]
+	catalog[norm] = rt
+	return func() {
+		if existed {
+			catalog[norm] = old
+		} else {
+			delete(catalog, norm)
+		}
+	}
 }
 
 // GetExpectedSHA256 returns the configured SHA-256 for a name, alias, URL, or filename.

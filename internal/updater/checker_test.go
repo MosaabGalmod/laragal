@@ -60,6 +60,61 @@ func TestParsePHPReleasesJSON(t *testing.T) {
 	}
 }
 
+func TestParsePHPReleasesJSON_SelectsNTSx64BuildExplicitly(t *testing.T) {
+	complexJSON := `{
+		"8.4": {
+			"8.4.6": {
+				"version": "8.4.6",
+				"security": "yes",
+				"ts-vs17-x64": {
+					"zip": {
+						"url": "https://windows.php.net/downloads/releases/php-8.4.6-Win32-vs17-x64.zip",
+						"sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+					}
+				},
+				"nts-vs17-x86": {
+					"zip": {
+						"url": "https://windows.php.net/downloads/releases/php-8.4.6-nts-Win32-vs17-x86.zip",
+						"sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+					}
+				},
+				"debug_pack": {
+					"zip": {
+						"url": "https://windows.php.net/downloads/releases/php-debug-pack-8.4.6-nts-Win32-vs17-x64.zip",
+						"sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+					}
+				},
+				"nts-vs17-x64": {
+					"zip": {
+						"url": "https://windows.php.net/downloads/releases/php-8.4.6-nts-Win32-vs17-x64.zip",
+						"sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+					}
+				}
+			}
+		}
+	}`
+
+	releases, err := updater.ParsePHPReleasesJSON([]byte(complexJSON))
+	if err != nil {
+		t.Fatalf("ParsePHPReleasesJSON failed: %v", err)
+	}
+
+	meta, ok := releases["8.4"]
+	if !ok {
+		t.Fatalf("expected 8.4 in releases")
+	}
+
+	expectedURL := "https://windows.php.net/downloads/releases/php-8.4.6-nts-Win32-vs17-x64.zip"
+	if meta.ZipURL != expectedURL {
+		t.Errorf("expected NTS x64 zip URL %q, got %q", expectedURL, meta.ZipURL)
+	}
+
+	expectedSHA := "4444444444444444444444444444444444444444444444444444444444444444"
+	if meta.SHA256 != expectedSHA {
+		t.Errorf("expected SHA-256 %q, got %q", expectedSHA, meta.SHA256)
+	}
+}
+
 func TestCheckUpdates_WithMockServer(t *testing.T) {
 	mockJSON := `{
 		"8.4": {

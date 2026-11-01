@@ -32,14 +32,35 @@ import (
 )
 
 type App struct {
-	ctx        context.Context
-	cfg        *config.AppConfig
-	supervisor *process.Supervisor
-	sites      []caddy.SiteDef
-	sitesMu    sync.RWMutex
-	cfgPath       string
-	userStopped   map[string]bool
-	userStoppedMu sync.RWMutex
+	ctx            context.Context
+	cfg            *config.AppConfig
+	supervisor     *process.Supervisor
+	sites          []caddy.SiteDef
+	sitesMu        sync.RWMutex
+	cfgPath        string
+	userStopped    map[string]bool
+	userStoppedMu  sync.RWMutex
+	phpReleasesURL string
+	baseBinDir     string
+	tempDir        string
+}
+
+func (a *App) getBaseBinDir() string {
+	if a.baseBinDir != "" {
+		return a.baseBinDir
+	}
+	return "bin"
+}
+
+func (a *App) getTempDir() string {
+	if a.tempDir != "" {
+		return a.tempDir
+	}
+	return filepath.Join("data", "tmp")
+}
+
+func (a *App) SetPHPReleasesURL(u string) {
+	a.phpReleasesURL = u
 }
 
 func NewApp() *App {
@@ -693,16 +714,10 @@ func (a *App) InstallSSLTrust() (string, error) {
 	return "تم تثبيت شهادة الجذر في متجر شهادات ويندوز بنجاح.", nil
 }
 
-func (a *App) DownloadBinary(name string) (string, error) {
-	url, err := downloader.GetDownloadURL(name)
-	if err != nil {
-		return "", err
-	}
-
-	tempDir := filepath.Join("data", "tmp")
+func (a *App) downloadAndInstallArtifact(name string, url string, expectedSHA string) (string, error) {
+	tempDir := a.getTempDir()
 	_ = os.MkdirAll(tempDir, 0755)
-	zipPath := filepath.Join(tempDir, fmt.Sprintf("%s.zip", name))
-	destDir := filepath.Join("bin", name)
+	destDir := filepath.Join(a.getBaseBinDir(), name)
 
 	onProgress := func(downloaded int64, total int64, percent int) {
 		if a.ctx != nil {
@@ -724,7 +739,7 @@ func (a *App) DownloadBinary(name string) (string, error) {
 		adminerDir := filepath.Join("data", "adminer")
 		_ = os.MkdirAll(adminerDir, 0755)
 		adminerPath := filepath.Join(adminerDir, "index.php")
-		if err := downloader.DownloadFile(ctx, url, adminerPath, onProgress); err != nil {
+		if err := downloader.DownloadFile(ctx, url, adminerPath, onProgress, expectedSHA); err != nil {
 			return "", err
 		}
 		if a.ctx != nil {
@@ -739,7 +754,8 @@ func (a *App) DownloadBinary(name string) (string, error) {
 		return fmt.Sprintf("تم تنزيل وتحديث أداة Adminer بنجاح في %s", adminerPath), nil
 	}
 
-	if err := downloader.DownloadFile(ctx, url, zipPath, onProgress); err != nil {
+	zipPath := filepath.Join(tempDir, fmt.Sprintf("%s.zip", name))
+	if err := downloader.DownloadFile(ctx, url, zipPath, onProgress, expectedSHA); err != nil {
 		_ = os.Remove(zipPath)
 		return "", err
 	}
@@ -767,6 +783,48 @@ func (a *App) DownloadBinary(name string) (string, error) {
 	return fmt.Sprintf("تم تنزيل وتثبيت %s بنجاح في %s", name, destDir), nil
 }
 
+func (a *App) DownloadBinary(name string) (string, error) {
+	art, err := downloader.GetDownloadArtifact(name)
+	if err != nil {
+		return "", err
+	}
+	if art.SHA256 == "" {
+		return "", fmt.Errorf("no verified checksum available for binary: %s", name)
+	}
+	return a.downloadAndInstallArtifact(name, art.URL, art.SHA256)
+}
+
+func (a *App) resolveUpgradeArtifact(name string) (string, string, error) {
+	norm := runtimes.NormalizeName(name)
+	ctx := context.Background()
+	if a.ctx != nil {
+		ctx = a.ctx
+	}
+
+	// 1. If PHP, try live feed first
+	if strings.HasPrefix(norm, "php-") {
+		minor := strings.TrimPrefix(norm, "php-")
+		feedURL := a.phpReleasesURL
+		if feedURL == "" {
+			feedURL = "https://windows.php.net/downloads/releases/releases.json"
+		}
+		liveReleases, err := updater.FetchPHPReleases(ctx, feedURL, 5*time.Second)
+		if err == nil && liveReleases != nil {
+			if meta, ok := liveReleases[minor]; ok && meta.ZipURL != "" && meta.SHA256 != "" {
+				return meta.ZipURL, meta.SHA256, nil
+			}
+		}
+	}
+
+	// 2. Fall back to pinned catalog artifact
+	art, err := downloader.GetDownloadArtifact(name)
+	if err == nil && art.URL != "" && art.SHA256 != "" {
+		return art.URL, art.SHA256, nil
+	}
+
+	return "", "", fmt.Errorf("no verified artifact or checksum available to upgrade %s", name)
+}
+
 // GetRuntimeCatalog returns all runtime artifacts from the catalog.
 func (a *App) GetRuntimeCatalog() []runtimes.Artifact {
 	return runtimes.All()
@@ -779,7 +837,8 @@ func (a *App) CheckRuntimeUpdates() []updater.RuntimeUpdateInfo {
 		ctx = a.ctx
 	}
 	opts := updater.CheckOptions{
-		BaseBinDir: "bin",
+		PHPReleasesURL: a.phpReleasesURL,
+		BaseBinDir:     a.getBaseBinDir(),
 	}
 	return updater.CheckUpdates(ctx, opts)
 }
@@ -792,8 +851,19 @@ func (a *App) UpgradeRuntime(name string) (string, error) {
 		_ = a.supervisor.StopService(name)
 	}
 
-	msg, err := a.DownloadBinary(name)
+	url, sha, err := a.resolveUpgradeArtifact(name)
 	if err != nil {
+		if wasRunning {
+			_, _ = a.ToggleService(name)
+		}
+		return "", err
+	}
+
+	msg, err := a.downloadAndInstallArtifact(name, url, sha)
+	if err != nil {
+		if wasRunning {
+			_, _ = a.ToggleService(name)
+		}
 		return "", err
 	}
 

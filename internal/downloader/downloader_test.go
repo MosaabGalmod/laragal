@@ -30,8 +30,6 @@ func TestGetDownloadURL(t *testing.T) {
 		"redis",
 		"php8.5",
 		"php85",
-		"php-8.6",
-		"php-9.0",
 		"mariadb",
 	}
 
@@ -99,37 +97,15 @@ func TestArtifactSHA256Configured(t *testing.T) {
 	}
 }
 
-func TestDynamicURLWarnPath(t *testing.T) {
-	art, err := downloader.GetDownloadArtifact("php-8.6")
-	if err != nil {
-		t.Fatalf("unexpected error for dynamic php-8.6: %v", err)
-	}
-	if art.SHA256 != "" {
-		t.Errorf("dynamic version should have empty SHA256, got: %s", art.SHA256)
-	}
-	expected := downloader.GetExpectedSHA256("php-8.6")
-	if expected != "" {
-		t.Errorf("dynamic version should return empty expected hash, got: %s", expected)
-	}
-
-	payload := []byte("Dynamic unhashed binary content")
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(payload)))
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write(payload)
-	}))
-	defer server.Close()
-
-	tempDir := t.TempDir()
-	destFile := filepath.Join(tempDir, "dynamic_php.zip")
-
-	// Dynamic URLs have no known hash; code must not refuse but succeed and leave file in place
-	err = downloader.DownloadFile(context.Background(), server.URL, destFile, nil)
-	if err != nil {
-		t.Fatalf("dynamic download failed unexpectedly: %v", err)
-	}
-	if _, err := os.Stat(destFile); err != nil {
-		t.Fatalf("dynamic download file missing: %v", err)
+func TestUnknownVersionReturnsError(t *testing.T) {
+	for _, unknown := range []string{"php-8.6", "php-9.0", "php-unknown", "unknown-tool"} {
+		_, err := downloader.GetDownloadArtifact(unknown)
+		if err == nil {
+			t.Errorf("expected error for unpinned unknown runtime %q, got nil", unknown)
+		}
+		if err != nil && !strings.Contains(err.Error(), "unknown") && !strings.Contains(err.Error(), "no known") {
+			t.Errorf("expected clear error message for %q, got: %v", unknown, err)
+		}
 	}
 }
 
@@ -202,6 +178,56 @@ func TestDownloadFileIntegrity_MatchingHash(t *testing.T) {
 	}
 	if !bytes.Equal(content, payload) {
 		t.Errorf("downloaded content mismatch")
+	}
+}
+
+func TestDownloadFile_ArchivesFallbackOn404(t *testing.T) {
+	payload := []byte("Archive fallback payload content for superseded PHP build")
+	hasher := sha256.New()
+	hasher.Write(payload)
+	expectedHash := hex.EncodeToString(hasher.Sum(nil))
+
+	var primaryRequested, archiveRequested bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/downloads/releases/php-8.4.27-1-nts-Win32-vs17-x64.zip":
+			primaryRequested = true
+			w.WriteHeader(http.StatusNotFound)
+		case "/downloads/releases/archives/php-8.4.27-1-nts-Win32-vs17-x64.zip":
+			archiveRequested = true
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(payload)))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(payload)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	destFile := filepath.Join(tempDir, "fallback_php.zip")
+
+	primaryURL := server.URL + "/downloads/releases/php-8.4.27-1-nts-Win32-vs17-x64.zip"
+
+	err := downloader.DownloadFile(context.Background(), primaryURL, destFile, nil, expectedHash)
+	if err != nil {
+		t.Fatalf("DownloadFile failed on archive fallback: %v", err)
+	}
+
+	if !primaryRequested {
+		t.Errorf("expected primary URL to be requested first")
+	}
+	if !archiveRequested {
+		t.Errorf("expected archive URL to be requested on 404")
+	}
+
+	content, err := os.ReadFile(destFile)
+	if err != nil {
+		t.Fatalf("failed to read downloaded file: %v", err)
+	}
+	if !bytes.Equal(content, payload) {
+		t.Errorf("content mismatch, got %q, want %q", string(content), string(payload))
 	}
 }
 

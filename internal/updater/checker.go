@@ -3,6 +3,7 @@ package updater
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -23,6 +24,7 @@ type RuntimeUpdateInfo struct {
 	IsSecurityFix   bool   `json:"is_security_fix"`
 	DownloadURL     string `json:"download_url"`
 	ReleaseNotesURL string `json:"release_notes_url"`
+	SHA256          string `json:"sha256,omitempty"`
 }
 
 type CheckOptions struct {
@@ -36,29 +38,121 @@ type PHPVersionMeta struct {
 	Version    string
 	IsSecurity bool
 	ZipURL     string
+	SHA256     string
 }
 
-func findZipURLRecursive(node interface{}) string {
-	switch val := node.(type) {
-	case map[string]interface{}:
-		for k, v := range val {
-			if k == "url" {
-				if s, ok := v.(string); ok && strings.HasSuffix(strings.ToLower(s), ".zip") {
-					return s
-				}
+func extractZipAndSHA(node interface{}) (string, string) {
+	m, ok := node.(map[string]interface{})
+	if !ok {
+		return "", ""
+	}
+
+	var urlStr, shaStr string
+
+	if zipNode, hasZip := m["zip"]; hasZip {
+		if zipMap, ok := zipNode.(map[string]interface{}); ok {
+			if u, ok := zipMap["url"].(string); ok {
+				urlStr = u
 			}
-			if found := findZipURLRecursive(v); found != "" {
-				return found
-			}
-		}
-	case []interface{}:
-		for _, item := range val {
-			if found := findZipURLRecursive(item); found != "" {
-				return found
+			if s, ok := zipMap["sha256"].(string); ok {
+				shaStr = s
 			}
 		}
 	}
-	return ""
+
+	if urlStr == "" {
+		if u, ok := m["url"].(string); ok && strings.HasSuffix(strings.ToLower(u), ".zip") {
+			urlStr = u
+		}
+	}
+
+	if shaStr == "" {
+		if s, ok := m["sha256"].(string); ok {
+			shaStr = s
+		}
+	}
+
+	return urlStr, strings.ToLower(strings.TrimSpace(shaStr))
+}
+
+func normalizePHPURL(u string) string {
+	if u == "" {
+		return ""
+	}
+	if strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") {
+		return u
+	}
+	if strings.HasPrefix(u, "/") {
+		return "https://windows.php.net" + u
+	}
+	return "https://windows.php.net/downloads/releases/" + u
+}
+
+// extractNTSx64Build selects the 64-bit Non-Thread Safe (NTS) zip build explicitly,
+// prioritizing modern vs17/vs16 toolchains and rejecting TS, debug packs, and x86 builds.
+func extractNTSx64Build(vMap map[string]interface{}) (string, string) {
+	// 1. Explicit flat keys with compiler prioritization (e.g. "nts-vs17-x64")
+	flatKeys := []string{"nts-vs17-x64", "nts-vs16-x64", "nts-vs15-x64", "nts-x64"}
+	for _, k := range flatKeys {
+		if child, ok := vMap[k]; ok {
+			if u, s := extractZipAndSHA(child); u != "" {
+				return normalizePHPURL(u), s
+			}
+		}
+	}
+
+	// 2. Nested under "nts": e.g. vMap["nts"]["vs17"]["x64"]["zip"]
+	if ntsNode, ok := vMap["nts"].(map[string]interface{}); ok {
+		compKeys := []string{"vs17", "vs16", "vs15"}
+		for _, comp := range compKeys {
+			if compNode, ok := ntsNode[comp].(map[string]interface{}); ok {
+				if x64Node, ok := compNode["x64"]; ok {
+					if u, s := extractZipAndSHA(x64Node); u != "" {
+						return normalizePHPURL(u), s
+					}
+				}
+			}
+		}
+		if x64Node, ok := ntsNode["x64"]; ok {
+			if u, s := extractZipAndSHA(x64Node); u != "" {
+				return normalizePHPURL(u), s
+			}
+		}
+		for _, compVal := range ntsNode {
+			if compNode, ok := compVal.(map[string]interface{}); ok {
+				if x64Node, ok := compNode["x64"]; ok {
+					if u, s := extractZipAndSHA(x64Node); u != "" {
+						return normalizePHPURL(u), s
+					}
+				}
+			}
+		}
+	}
+
+	// 3. Nested under compiler key first: e.g. vMap["vs17"]["nts"]["x64"]
+	for _, comp := range []string{"vs17", "vs16", "vs15"} {
+		if compNode, ok := vMap[comp].(map[string]interface{}); ok {
+			if ntsNode, ok := compNode["nts"].(map[string]interface{}); ok {
+				if x64Node, ok := ntsNode["x64"]; ok {
+					if u, s := extractZipAndSHA(x64Node); u != "" {
+						return normalizePHPURL(u), s
+					}
+				}
+			}
+		}
+	}
+
+	// 4. Any key matching nts and x64 and not debug or ts
+	for k, v := range vMap {
+		kLower := strings.ToLower(k)
+		if strings.Contains(kLower, "nts") && strings.Contains(kLower, "x64") && !strings.Contains(kLower, "debug") && !strings.HasPrefix(kLower, "ts") {
+			if u, s := extractZipAndSHA(v); u != "" {
+				return normalizePHPURL(u), s
+			}
+		}
+	}
+
+	return "", ""
 }
 
 // ParsePHPReleasesJSON parses windows.php.net releases.json feed
@@ -97,12 +191,13 @@ func ParsePHPReleasesJSON(data []byte) (map[string]PHPVersionMeta, error) {
 					}
 				}
 
-				zipURL := findZipURLRecursive(vMap)
+				zipURL, sha := extractNTSx64Build(vMap)
 
 				meta = PHPVersionMeta{
 					Version:    verStr,
 					IsSecurity: isSec,
 					ZipURL:     zipURL,
+					SHA256:     sha,
 				}
 			}
 		}
@@ -113,6 +208,40 @@ func ParsePHPReleasesJSON(data []byte) (map[string]PHPVersionMeta, error) {
 	}
 
 	return result, nil
+}
+
+// FetchPHPReleases fetches and parses windows.php.net releases.json feed
+func FetchPHPReleases(ctx context.Context, releasesURL string, timeout time.Duration) (map[string]PHPVersionMeta, error) {
+	if releasesURL == "" {
+		releasesURL = "https://windows.php.net/downloads/releases/releases.json"
+	}
+	if timeout <= 0 {
+		timeout = 5 * time.Second
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "GET", releasesURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "LaraGal-Updater/1.0")
+
+	client := &http.Client{Timeout: timeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP %s", resp.Status)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return ParsePHPReleasesJSON(body)
 }
 
 // GetDownloadURL returns the configured download URL for a runtime from the catalog.
@@ -218,28 +347,8 @@ func DetectInstalledBinaryVersion(binDir string, name string) string {
 
 // CheckUpdates inspects available releases and compares them with current local installations
 func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
-	phpURL := opts.PHPReleasesURL
-	if phpURL == "" {
-		phpURL = "https://windows.php.net/downloads/releases/releases.json"
-	}
-	timeout := opts.HTTPTimeout
-	if timeout <= 0 {
-		timeout = 5 * time.Second
-	}
-
 	// 1. Fetch live PHP releases feed
-	var livePHPReleases map[string]PHPVersionMeta
-	req, err := http.NewRequestWithContext(ctx, "GET", phpURL, nil)
-	if err == nil {
-		req.Header.Set("User-Agent", "LaraGal-Updater/1.0")
-		client := &http.Client{Timeout: timeout}
-		resp, fetchErr := client.Do(req)
-		if fetchErr == nil && resp.StatusCode == http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			_ = resp.Body.Close()
-			livePHPReleases, _ = ParsePHPReleasesJSON(body)
-		}
-	}
+	livePHPReleases, _ := FetchPHPReleases(ctx, opts.PHPReleasesURL, opts.HTTPTimeout)
 
 	runtimesToCheck := []string{"caddy", "php-8.5", "php-8.4", "php-8.3", "php-8.2", "php-8.1", "mysql", "redis", "mailpit", "phpmyadmin", "adminer"}
 	if opts.BaseBinDir != "" {
@@ -267,6 +376,7 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 		if rt, exists := runtimes.Get(name); exists {
 			info.LatestVersion = rt.Version
 			info.DownloadURL = rt.URL
+			info.SHA256 = rt.SHA256
 		}
 
 		// Detect installed version
@@ -289,6 +399,9 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 				info.IsSecurityFix = meta.IsSecurity
 				if meta.ZipURL != "" {
 					info.DownloadURL = meta.ZipURL
+				}
+				if meta.SHA256 != "" {
+					info.SHA256 = meta.SHA256
 				}
 			}
 		}

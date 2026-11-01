@@ -1,7 +1,14 @@
 package main
 
 import (
+	"archive/zip"
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,8 +17,8 @@ import (
 
 	"github.com/laragal/laragal/internal/config"
 	"github.com/laragal/laragal/internal/process"
-	"github.com/laragal/laragal/internal/services/adminer"
 	"github.com/laragal/laragal/internal/runtimes"
+	"github.com/laragal/laragal/internal/services/adminer"
 	"github.com/laragal/laragal/internal/services/caddy"
 )
 
@@ -501,5 +508,227 @@ func TestGetRuntimeCatalog(t *testing.T) {
 	}
 	if php82.EOLDate != "2026-12-31" {
 		t.Errorf("expected php-8.2 EOLDate to be 2026-12-31, got %s", php82.EOLDate)
+	}
+}
+
+func createTestZip(t *testing.T, innerPath string, content []byte) ([]byte, string) {
+	buf := new(bytes.Buffer)
+	zw := zip.NewWriter(buf)
+	w, err := zw.Create(innerPath)
+	if err != nil {
+		t.Fatalf("failed to create zip entry %s: %v", innerPath, err)
+	}
+	if _, err := w.Write(content); err != nil {
+		t.Fatalf("failed to write zip content: %v", err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("failed to close zip: %v", err)
+	}
+	zipBytes := buf.Bytes()
+	hasher := sha256.New()
+	hasher.Write(zipBytes)
+	hash := hex.EncodeToString(hasher.Sum(nil))
+	return zipBytes, hash
+}
+
+func TestUpgradeRuntime_PicksFeedVersionAndNTSZip(t *testing.T) {
+	feedBinContent := []byte("PHP 8.4.99 binary from live releases feed")
+	feedZipBytes, feedZipHash := createTestZip(t, "php.exe", feedBinContent)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/releases.json":
+			feedJSON := fmt.Sprintf(`{
+				"8.4": {
+					"8.4.99": {
+						"version": "8.4.99",
+						"nts-vs17-x64": {
+							"zip": {
+								"url": "http://%s/downloads/feed-php-8.4.99.zip",
+								"sha256": "%s"
+							}
+						}
+					}
+				}
+			}`, r.Host, feedZipHash)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(feedJSON))
+		case "/downloads/feed-php-8.4.99.zip":
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(feedZipBytes)))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(feedZipBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	tmpDir := filepath.Join(tempDir, "tmp")
+
+	app := &App{
+		supervisor:     process.NewSupervisor(),
+		phpReleasesURL: server.URL + "/releases.json",
+		baseBinDir:     binDir,
+		tempDir:        tmpDir,
+	}
+
+	msg, err := app.UpgradeRuntime("php-8.4")
+	if err != nil {
+		t.Fatalf("UpgradeRuntime failed: %v", err)
+	}
+	if !strings.Contains(msg, "php-8.4") {
+		t.Errorf("unexpected success message: %s", msg)
+	}
+
+	installedExe := filepath.Join(binDir, "php-8.4", "php.exe")
+	content, err := os.ReadFile(installedExe)
+	if err != nil {
+		t.Fatalf("failed to read upgraded binary: %v", err)
+	}
+	if !bytes.Equal(content, feedBinContent) {
+		t.Errorf("expected upgraded binary %q, got %q", string(feedBinContent), string(content))
+	}
+}
+
+func TestUpgradeRuntime_HashMismatchLeavesBinUntouched(t *testing.T) {
+	tamperedContent := []byte("Tampered or corrupted payload")
+	tamperedZipBytes, _ := createTestZip(t, "php.exe", tamperedContent)
+
+	wrongHash := "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/releases.json":
+			feedJSON := fmt.Sprintf(`{
+				"8.4": {
+					"8.4.99": {
+						"version": "8.4.99",
+						"nts-vs17-x64": {
+							"zip": {
+								"url": "http://%s/downloads/tampered.zip",
+								"sha256": "%s"
+							}
+						}
+					}
+				}
+			}`, r.Host, wrongHash)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(feedJSON))
+		case "/downloads/tampered.zip":
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(tamperedZipBytes)))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(tamperedZipBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	tmpDir := filepath.Join(tempDir, "tmp")
+
+	// Pre-populate existing installed php.exe
+	phpDir := filepath.Join(binDir, "php-8.4")
+	_ = os.MkdirAll(phpDir, 0755)
+	existingContent := []byte("Original pristine installed php binary")
+	installedExe := filepath.Join(phpDir, "php.exe")
+	if err := os.WriteFile(installedExe, existingContent, 0755); err != nil {
+		t.Fatalf("failed to write original binary: %v", err)
+	}
+
+	app := &App{
+		supervisor:     process.NewSupervisor(),
+		phpReleasesURL: server.URL + "/releases.json",
+		baseBinDir:     binDir,
+		tempDir:        tmpDir,
+	}
+
+	_, err := app.UpgradeRuntime("php-8.4")
+	if err == nil {
+		t.Fatalf("expected hash mismatch error, got nil")
+	}
+	if !strings.Contains(err.Error(), "mismatch") {
+		t.Errorf("expected error to mention 'mismatch', got: %v", err)
+	}
+
+	// Verify installed binary is untouched!
+	content, err := os.ReadFile(installedExe)
+	if err != nil {
+		t.Fatalf("installed binary was deleted or inaccessible: %v", err)
+	}
+	if !bytes.Equal(content, existingContent) {
+		t.Errorf("installed binary was modified! got %q, want %q", string(content), string(existingContent))
+	}
+}
+
+func TestUpgradeRuntime_FeedDownFallsBackToPinnedCatalog(t *testing.T) {
+	pinnedContent := []byte("Pinned catalog PHP binary content")
+	pinnedZipBytes, pinnedZipHash := createTestZip(t, "php.exe", pinnedContent)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/releases.json":
+			w.WriteHeader(http.StatusInternalServerError)
+		case "/pinned-php84.zip":
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(pinnedZipBytes)))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(pinnedZipBytes)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	// Override catalog for php-8.4 to use our mock server pinned URL
+	restore := runtimes.SetForTest("php-8.4", runtimes.Runtime{
+		Name:    "php-8.4",
+		Version: "8.4.27-1",
+		URL:     server.URL + "/pinned-php84.zip",
+		SHA256:  pinnedZipHash,
+	})
+	defer restore()
+
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	tmpDir := filepath.Join(tempDir, "tmp")
+
+	app := &App{
+		supervisor:     process.NewSupervisor(),
+		phpReleasesURL: server.URL + "/releases.json", // Returns 500
+		baseBinDir:     binDir,
+		tempDir:        tmpDir,
+	}
+
+	msg, err := app.UpgradeRuntime("php-8.4")
+	if err != nil {
+		t.Fatalf("UpgradeRuntime failed on fallback to catalog: %v", err)
+	}
+	if !strings.Contains(msg, "php-8.4") {
+		t.Errorf("unexpected success message: %s", msg)
+	}
+
+	installedExe := filepath.Join(binDir, "php-8.4", "php.exe")
+	content, err := os.ReadFile(installedExe)
+	if err != nil {
+		t.Fatalf("failed to read installed binary: %v", err)
+	}
+	if !bytes.Equal(content, pinnedContent) {
+		t.Errorf("expected binary from catalog %q, got %q", string(pinnedContent), string(content))
+	}
+}
+
+func TestUpgradeRuntime_NoHashErrors(t *testing.T) {
+	app := &App{
+		supervisor: process.NewSupervisor(),
+	}
+	_, err := app.UpgradeRuntime("unknown-runtime-xyz")
+	if err == nil {
+		t.Fatalf("expected error for unhashed/unknown runtime, got nil")
+	}
+	if !strings.Contains(err.Error(), "no verified artifact") {
+		t.Errorf("expected clear error message, got: %v", err)
 	}
 }
