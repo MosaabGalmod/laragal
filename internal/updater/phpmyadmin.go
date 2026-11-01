@@ -33,6 +33,7 @@ func NewPhpMyAdminSource(baseURL ...string) *PhpMyAdminSource {
 	}
 	return &PhpMyAdminSource{
 		BaseURL:          u,
+		FilesBaseURL:     "https://files.phpmyadmin.net",
 		ActivePHPVersion: "8.4",
 	}
 }
@@ -122,24 +123,7 @@ func (s *PhpMyAdminSource) Latest(ctx context.Context, name string) ([]LiveRelea
 	}
 
 	// Build download and checksum URLs
-	filesBase := s.FilesBaseURL
-	if filesBase == "" {
-		// If BaseURL was set to a custom test server, reuse its scheme/host
-		if strings.HasPrefix(baseURL, "http://") || strings.HasPrefix(baseURL, "https://") {
-			parts := strings.SplitN(baseURL, "/", 4)
-			if len(parts) >= 3 {
-				filesBase = parts[0] + "//" + parts[2]
-			}
-		}
-	}
-	if filesBase == "" {
-		filesBase = "https://files.phpmyadmin.net"
-	}
-	filesBase = strings.TrimRight(filesBase, "/")
-
-	zipFileName := fmt.Sprintf("phpMyAdmin-%s-all-languages.zip", ver)
-	zipURL := fmt.Sprintf("%s/phpMyAdmin/%s/%s", filesBase, ver, zipFileName)
-	shaURL := zipURL + ".sha256"
+	zipURL, shaURL := s.BuildURLs(ver)
 
 	// Fetch .sha256 checksum file
 	shaReq, err := http.NewRequestWithContext(ctx, "GET", shaURL, nil)
@@ -213,6 +197,20 @@ func (s *PhpMyAdminSource) Latest(ctx context.Context, name string) ([]LiveRelea
 	return []LiveRelease{liveRel}, nil
 }
 
+// BuildURLs constructs the official zip download URL and .sha256 checksum URL for a phpMyAdmin version
+func (s *PhpMyAdminSource) BuildURLs(ver string) (string, string) {
+	filesBase := s.FilesBaseURL
+	if filesBase == "" {
+		filesBase = "https://files.phpmyadmin.net"
+	}
+	filesBase = strings.TrimRight(filesBase, "/")
+
+	zipFileName := fmt.Sprintf("phpMyAdmin-%s-all-languages.zip", ver)
+	zipURL := fmt.Sprintf("%s/phpMyAdmin/%s/%s", filesBase, ver, zipFileName)
+	shaURL := zipURL + ".sha256"
+	return zipURL, shaURL
+}
+
 // ParseSha256ChecksumFile parses standard "<hex>  <filename>" or "<hex>" format
 func ParseSha256ChecksumFile(data []byte) (string, error) {
 	fields := strings.Fields(string(data))
@@ -225,7 +223,7 @@ func ParseSha256ChecksumFile(data []byte) (string, error) {
 	}
 	for _, c := range hexPart {
 		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
-			return "", fmt.Errorf("invalid sha256 hex character: %c", c)
+			return "", fmt.Errorf("invalid sha256 checksum: contains non-hex character '%c'", c)
 		}
 	}
 	return hexPart, nil
