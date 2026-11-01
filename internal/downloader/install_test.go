@@ -2,6 +2,7 @@ package downloader_test
 
 import (
 	"archive/zip"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -283,5 +284,195 @@ func TestInstallArtifactZip_VerificationRules(t *testing.T) {
 	destMailpit := filepath.Join(tempBase, "bin", "mailpit")
 	if err := downloader.InstallArtifactZip("mailpit", mailpitZip, destMailpit); err == nil {
 		t.Errorf("expected error for Mailpit missing mailpit.exe")
+	}
+}
+
+// Injected failure tests to guarantee user data files are NEVER deleted on failures
+
+func TestInstallArtifactZip_MariaDBDataPreserved_WhenDestDirRenameFails(t *testing.T) {
+	tempBase := t.TempDir()
+	destDir := filepath.Join(tempBase, "bin", "mysql")
+	dataDir := filepath.Join(destDir, "data", "shop_db")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.MkdirAll(filepath.Join(destDir, "bin"), 0755)
+
+	_ = os.WriteFile(filepath.Join(destDir, "bin", "mysqld.exe"), []byte("old-mysqld"), 0755)
+	_ = os.WriteFile(filepath.Join(dataDir, "users.ibd"), []byte("user-data-preserve-test-1"), 0644)
+
+	zipPath := filepath.Join(tempBase, "mariadb.zip")
+	createTestZip(t, zipPath, map[string]string{
+		"bin/mysqld.exe": "new-mysqld-binary",
+	})
+
+	// Inject rename that fails when renaming destDir -> oldDir
+	failingRename := func(oldpath, newpath string) error {
+		if strings.Contains(newpath, ".old-") {
+			return errors.New("simulated failure renaming destDir to .old")
+		}
+		return os.Rename(oldpath, newpath)
+	}
+
+	err := downloader.InstallArtifactZipWithRename("mysql", zipPath, destDir, failingRename)
+	if err == nil {
+		t.Fatal("expected InstallArtifactZipWithRename to fail")
+	}
+
+	// Database file must still exist and be intact (restored to destDir/data)
+	dbFile, readErr := os.ReadFile(filepath.Join(destDir, "data", "shop_db", "users.ibd"))
+	if readErr != nil || string(dbFile) != "user-data-preserve-test-1" {
+		t.Fatalf("CRITICAL: user data was lost on destDir rename failure! got: %s (err: %v)", string(dbFile), readErr)
+	}
+}
+
+func TestInstallArtifactZip_MariaDBDataPreserved_WhenRollbackRenameFails(t *testing.T) {
+	tempBase := t.TempDir()
+	destDir := filepath.Join(tempBase, "bin", "mysql")
+	dataDir := filepath.Join(destDir, "data", "shop_db")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.MkdirAll(filepath.Join(destDir, "bin"), 0755)
+
+	_ = os.WriteFile(filepath.Join(destDir, "bin", "mysqld.exe"), []byte("old-mysqld"), 0755)
+	_ = os.WriteFile(filepath.Join(dataDir, "users.ibd"), []byte("user-data-preserve-test-2"), 0644)
+
+	zipPath := filepath.Join(tempBase, "mariadb.zip")
+	createTestZip(t, zipPath, map[string]string{
+		"bin/mysqld.exe": "new-mysqld-binary",
+	})
+
+	// Inject rename that fails on destDir -> oldDir AND also fails on rollback rename of data
+	var capturedSiblingDir string
+	failingRename := func(oldpath, newpath string) error {
+		if strings.Contains(newpath, ".mysql-data-") {
+			capturedSiblingDir = newpath
+			return os.Rename(oldpath, newpath)
+		}
+		if strings.Contains(newpath, ".old-") {
+			return errors.New("simulated failure renaming destDir to .old")
+		}
+		if strings.Contains(oldpath, ".mysql-data-") && strings.HasSuffix(newpath, "data") {
+			return errors.New("simulated failure on rollback rename of data directory")
+		}
+		return os.Rename(oldpath, newpath)
+	}
+
+	err := downloader.InstallArtifactZipWithRename("mysql", zipPath, destDir, failingRename)
+	if err == nil {
+		t.Fatal("expected InstallArtifactZipWithRename to fail")
+	}
+
+	// The error message MUST name the sibling folder containing preserved data
+	if !strings.Contains(err.Error(), "database files preserved at") {
+		t.Errorf("expected error to mention 'database files preserved at', got: %v", err)
+	}
+
+	// The database file MUST still exist in the sibling directory
+	if capturedSiblingDir == "" {
+		t.Fatal("capturedSiblingDir is empty")
+	}
+	dbFile, readErr := os.ReadFile(filepath.Join(capturedSiblingDir, "shop_db", "users.ibd"))
+	if readErr != nil || string(dbFile) != "user-data-preserve-test-2" {
+		t.Fatalf("CRITICAL: user data was deleted when rollback rename failed! got: %s (err: %v)", string(dbFile), readErr)
+	}
+}
+
+func TestInstallArtifactZip_MariaDBDataPreserved_WhenFinalDataMoveFails(t *testing.T) {
+	tempBase := t.TempDir()
+	destDir := filepath.Join(tempBase, "bin", "mysql")
+	dataDir := filepath.Join(destDir, "data", "shop_db")
+	if err := os.MkdirAll(dataDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.MkdirAll(filepath.Join(destDir, "bin"), 0755)
+
+	_ = os.WriteFile(filepath.Join(destDir, "bin", "mysqld.exe"), []byte("old-mysqld"), 0755)
+	_ = os.WriteFile(filepath.Join(dataDir, "users.ibd"), []byte("user-data-preserve-test-3"), 0644)
+
+	zipPath := filepath.Join(tempBase, "mariadb.zip")
+	createTestZip(t, zipPath, map[string]string{
+		"bin/mysqld.exe": "new-mysqld-binary",
+	})
+
+	// Inject rename that succeeds on swap but fails when moving savedDataDir into new destDir
+	var capturedSiblingDir string
+	failingRename := func(oldpath, newpath string) error {
+		if strings.Contains(newpath, ".mysql-data-") {
+			capturedSiblingDir = newpath
+			return os.Rename(oldpath, newpath)
+		}
+		if strings.Contains(oldpath, ".mysql-data-") && strings.HasSuffix(newpath, "data") {
+			return errors.New("simulated failure moving data directory into newly upgraded runtime")
+		}
+		return os.Rename(oldpath, newpath)
+	}
+
+	err := downloader.InstallArtifactZipWithRename("mysql", zipPath, destDir, failingRename)
+	if err == nil {
+		t.Fatal("expected InstallArtifactZipWithRename to fail")
+	}
+
+	// The error message MUST name the sibling folder containing preserved data
+	if !strings.Contains(err.Error(), "database files preserved at") {
+		t.Errorf("expected error to mention 'database files preserved at', got: %v", err)
+	}
+
+	// Data must still exist in the sibling directory
+	dbFile, readErr := os.ReadFile(filepath.Join(capturedSiblingDir, "shop_db", "users.ibd"))
+	if readErr != nil || string(dbFile) != "user-data-preserve-test-3" {
+		t.Fatalf("CRITICAL: user data was deleted when final data move failed! got: %s (err: %v)", string(dbFile), readErr)
+	}
+}
+
+func TestInstallArtifactZip_DeferredCleanup_NeverDeletesDataInStaging(t *testing.T) {
+	tempBase := t.TempDir()
+	destDir := filepath.Join(tempBase, "bin", "mysql")
+	if err := os.MkdirAll(destDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Zip containing data directory
+	zipPath := filepath.Join(tempBase, "mariadb-with-data.zip")
+	createTestZip(t, zipPath, map[string]string{
+		"bin/mysqld.exe":   "mysqld-bin",
+		"data/crucial.db": "precious-db-data",
+	})
+
+	// Inject rename that fails during installation after zip extraction
+	failingRename := func(oldpath, newpath string) error {
+		return errors.New("simulated error during rename")
+	}
+
+	err := downloader.InstallArtifactZipWithRename("mysql", zipPath, destDir, failingRename)
+	if err == nil {
+		t.Fatal("expected InstallArtifactZipWithRename to fail")
+	}
+
+	// If staging has data/, the error MUST state "database files preserved at <path>"
+	if !strings.Contains(err.Error(), "database files preserved at") {
+		t.Errorf("expected error to state 'database files preserved at', got: %v", err)
+	}
+
+	// Verify the staging directory with data was NOT deleted by deferred cleanup
+	parentDir := filepath.Dir(destDir)
+	entries, _ := os.ReadDir(parentDir)
+	foundStagingWithData := false
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), ".staging-") {
+			stagingData := filepath.Join(parentDir, entry.Name(), "data")
+			if _, statErr := os.Stat(stagingData); statErr == nil {
+				foundStagingWithData = true
+				content, _ := os.ReadFile(filepath.Join(stagingData, "crucial.db"))
+				if string(content) != "precious-db-data" {
+					t.Errorf("crucial.db corrupted, got: %s", string(content))
+				}
+			}
+		}
+	}
+
+	if !foundStagingWithData {
+		t.Error("CRITICAL: staging directory containing data was deleted by deferred cleanup!")
 	}
 }

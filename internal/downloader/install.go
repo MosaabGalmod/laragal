@@ -12,6 +12,9 @@ import (
 	"github.com/laragal/laragal/internal/services/php"
 )
 
+// RenameFunc defines the signature for renaming files and directories, allowing dependency injection in tests.
+type RenameFunc func(oldpath, newpath string) error
+
 func sanitizeArtifactName(name string) string {
 	clean := strings.ToLower(strings.TrimSpace(name))
 	clean = strings.ReplaceAll(clean, "/", "_")
@@ -98,6 +101,17 @@ func dirExists(path string) bool {
 // config files (php.ini, my.ini, redis.conf) and ensures MariaDB data is never touched or lost,
 // performs an atomic replacement, and rolls back to the original version on any failure.
 func InstallArtifactZip(name string, zipPath string, destDir string) error {
+	return InstallArtifactZipWithRename(name, zipPath, destDir, os.Rename)
+}
+
+// InstallArtifactZipWithRename installs or upgrades an artifact using a configurable rename function.
+// If destDir/data exists for MariaDB, it is moved to a sibling directory outside staging first.
+// On any failure, data remains preserved in the sibling folder and the error reports its path.
+func InstallArtifactZipWithRename(name string, zipPath string, destDir string, rename RenameFunc) (retErr error) {
+	if rename == nil {
+		rename = os.Rename
+	}
+
 	parentDir := filepath.Dir(destDir)
 	if err := os.MkdirAll(parentDir, 0755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
@@ -109,6 +123,17 @@ func InstallArtifactZip(name string, zipPath string, destDir string) error {
 	success := false
 	defer func() {
 		if !success {
+			// Rule: user data must NEVER be deleted by cleanup.
+			stagingData := filepath.Join(stagingDir, "data")
+			if dirExists(stagingData) {
+				msg := fmt.Sprintf("database files preserved at %s", stagingData)
+				if retErr == nil {
+					retErr = fmt.Errorf("installation failed; %s", msg)
+				} else if !strings.Contains(retErr.Error(), stagingData) {
+					retErr = fmt.Errorf("%w; %s", retErr, msg)
+				}
+				return
+			}
 			_ = os.RemoveAll(stagingDir)
 		}
 	}()
@@ -130,7 +155,7 @@ func InstallArtifactZip(name string, zipPath string, destDir string) error {
 		if strings.HasPrefix(safeName, "php") {
 			_ = php.EnsurePHPIni(stagingDir, name)
 		}
-		if err := os.Rename(stagingDir, destDir); err != nil {
+		if err := rename(stagingDir, destDir); err != nil {
 			return fmt.Errorf("failed to move staging directory into place: %w", err)
 		}
 		success = true
@@ -138,7 +163,7 @@ func InstallArtifactZip(name string, zipPath string, destDir string) error {
 	}
 
 	// 3. Upgrade / Reinstall existing runtime: preserve user configs and data
-	movedDataDir := false
+	var savedDataDir string
 
 	// A. Preserve PHP config
 	if strings.HasPrefix(safeName, "php") {
@@ -162,14 +187,18 @@ func InstallArtifactZip(name string, zipPath string, destDir string) error {
 
 		oldDataDir := filepath.Join(destDir, "data")
 		if dirExists(oldDataDir) {
-			stagingDataDir := filepath.Join(stagingDir, "data")
-			if dirExists(stagingDataDir) {
-				_ = os.RemoveAll(stagingDataDir)
+			// Move data directory to a sibling folder OUTSIDE staging FIRST
+			siblingData := filepath.Join(parentDir, fmt.Sprintf(".mysql-data-%s-%d", safeName, time.Now().UnixNano()))
+			if err := rename(oldDataDir, siblingData); err != nil {
+				return fmt.Errorf("refusing upgrade: failed to safely preserve existing MariaDB data directory: %w", err)
 			}
-			if err := os.Rename(oldDataDir, stagingDataDir); err != nil {
-				return fmt.Errorf("refusing upgrade: failed to safely move existing MariaDB data directory: %w", err)
+			savedDataDir = siblingData
+
+			// Ensure staging does not have a conflicting empty data folder from the zip
+			stagingData := filepath.Join(stagingDir, "data")
+			if dirExists(stagingData) {
+				_ = os.RemoveAll(stagingData)
 			}
-			movedDataDir = true
 		}
 	}
 
@@ -184,23 +213,45 @@ func InstallArtifactZip(name string, zipPath string, destDir string) error {
 	// 4. Atomic swap with rollback
 	oldDir := filepath.Join(parentDir, fmt.Sprintf(".old-%s-%d", safeName, time.Now().UnixNano()))
 
-	if err := os.Rename(destDir, oldDir); err != nil {
-		if movedDataDir {
-			_ = os.Rename(filepath.Join(stagingDir, "data"), filepath.Join(destDir, "data"))
+	// Step 4a: rename destDir -> oldDir
+	if err := rename(destDir, oldDir); err != nil {
+		if savedDataDir != "" {
+			oldDataDir := filepath.Join(destDir, "data")
+			if rErr := rename(savedDataDir, oldDataDir); rErr != nil {
+				return fmt.Errorf("failed to rename existing runtime to backup folder (%w); rollback of data directory failed (database files preserved at %s): %v", err, savedDataDir, rErr)
+			}
 		}
 		return fmt.Errorf("failed to rename existing runtime to backup folder: %w", err)
 	}
 
-	if err := os.Rename(stagingDir, destDir); err != nil {
-		// Roll back
+	// Step 4b: rename stagingDir -> destDir
+	if err := rename(stagingDir, destDir); err != nil {
+		var rollbackErrs []string
 		_ = os.RemoveAll(destDir)
-		restoreErr := os.Rename(oldDir, destDir)
-		if movedDataDir {
-			if _, statErr := os.Stat(filepath.Join(stagingDir, "data")); statErr == nil {
-				_ = os.Rename(filepath.Join(stagingDir, "data"), filepath.Join(destDir, "data"))
+		if rErr := rename(oldDir, destDir); rErr != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Sprintf("failed to restore old folder from %s: %v", oldDir, rErr))
+		} else if savedDataDir != "" {
+			oldDataDir := filepath.Join(destDir, "data")
+			if dErr := rename(savedDataDir, oldDataDir); dErr != nil {
+				rollbackErrs = append(rollbackErrs, fmt.Sprintf("failed to restore data directory to %s (database files preserved at %s): %v", oldDataDir, savedDataDir, dErr))
 			}
 		}
-		return fmt.Errorf("failed to move staging runtime into place (rollback status: %v): %w", restoreErr, err)
+		if len(rollbackErrs) > 0 {
+			if savedDataDir != "" && dirExists(savedDataDir) {
+				rollbackErrs = append(rollbackErrs, fmt.Sprintf("database files preserved at %s", savedDataDir))
+			}
+			return fmt.Errorf("failed to move staging runtime into place (%w); rollback errors: %s", err, strings.Join(rollbackErrs, "; "))
+		}
+		return fmt.Errorf("failed to move staging runtime into place (rolled back to original): %w", err)
+	}
+
+	// Step 4c: move preserved data directory into the new destDir
+	if savedDataDir != "" {
+		newDestData := filepath.Join(destDir, "data")
+		if err := rename(savedDataDir, newDestData); err != nil {
+			// On any failure, data stays in savedDataDir and error names it!
+			return fmt.Errorf("runtime upgrade placed new binary but failed to move database files into new runtime; database files preserved at %s: %w", savedDataDir, err)
+		}
 	}
 
 	// 5. Delete backup folder
