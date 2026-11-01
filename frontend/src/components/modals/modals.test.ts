@@ -504,5 +504,180 @@ describe('Modal smoke tests', () => {
 
     expect(confirmedCalledWith).toBe('mariadb-11.8')
   })
+
+  it('STEP U: hide removes card and adds to hidden count; show-hidden reveals', async () => {
+    let persistedHidden: string[] = []
+    ;(window as any).go.main.App.GetHiddenRuntimes = async () => [...persistedHidden]
+    ;(window as any).go.main.App.SetRuntimeHidden = async (name: string, hidden: boolean) => {
+      if (hidden && !persistedHidden.includes(name)) {
+        persistedHidden.push(name)
+      } else if (!hidden) {
+        persistedHidden = persistedHidden.filter((h) => h !== name)
+      }
+    }
+
+    const { useRuntimeCatalog } = await import('../../composables/useRuntimeCatalog')
+    const { hiddenRuntimes } = useRuntimeCatalog()
+    hiddenRuntimes.value = []
+
+    const wrapper = mount(DownloadModal, {
+      props: {
+        modelValue: true,
+      },
+    })
+    await wrapper.vm.$nextTick()
+
+    // Initially php-8.2 card is visible
+    let card82 = wrapper.findAll('.p-3').find((c) => c.text().includes('PHP 8.2'))
+    expect(card82).toBeDefined()
+
+    // 1. Click hide on php-8.2
+    const hideBtn = card82!.findAll('button').find((b) => b.text().trim() === t('runtime_hide'))
+    expect(hideBtn).toBeDefined()
+    await hideBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    // 2. Hide removes card from default list and shows bottom toggle with count 1
+    card82 = wrapper.findAll('.p-3').find((c) => c.text().includes('PHP 8.2'))
+    expect(card82).toBeUndefined()
+
+    const showHiddenBtn = wrapper.findAll('button').find((b) => b.text().includes(t('runtime_show_hidden', { count: 1 })))
+    expect(showHiddenBtn).toBeDefined()
+
+    // 3. Click show-hidden reveals the card dimmed with unhide button
+    await showHiddenBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    card82 = wrapper.findAll('.p-3').find((c) => c.text().includes('PHP 8.2'))
+    expect(card82).toBeDefined()
+    expect(card82!.classes()).toContain('opacity-60')
+
+    const unhideBtn = card82!.findAll('button').find((b) => b.text().trim() === t('runtime_unhide'))
+    expect(unhideBtn).toBeDefined()
+
+    // 4. Click unhide restores it
+    await unhideBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(card82!.classes()).not.toContain('opacity-60')
+    expect(hiddenRuntimes.value).not.toContain('php-8.2')
+  })
+
+  it('STEP U: uninstall button only on managed php; external shows winget command', async () => {
+    ;(window as any).go.main.App.CheckRuntimeUpdates = async () => [
+      {
+        name: 'php-8.1',
+        current_version: '8.1.34',
+        latest_version: '8.1.34',
+        has_update: false,
+        is_managed: true,
+      },
+      {
+        name: 'php-8.3',
+        current_version: '8.3.36',
+        latest_version: '8.3.36',
+        has_update: false,
+        is_managed: false, // external (WinGet)
+      },
+      {
+        name: 'caddy',
+        current_version: '2.11.7',
+        latest_version: '2.11.7',
+        has_update: false,
+        is_managed: true,
+      },
+    ]
+
+    const { useRuntimeCatalog } = await import('../../composables/useRuntimeCatalog')
+    const { checkUpdatesNow, hiddenRuntimes } = useRuntimeCatalog()
+    hiddenRuntimes.value = []
+    await checkUpdatesNow({ silent: true })
+
+    const wrapper = mount(DownloadModal, {
+      props: {
+        modelValue: true,
+      },
+    })
+    await wrapper.vm.$nextTick()
+
+    // 1. Managed PHP 8.1 has uninstall button
+    const card81 = wrapper.findAll('.p-3').find((c) => c.text().includes('PHP 8.1'))
+    expect(card81).toBeDefined()
+    const uninstallBtn81 = card81!.findAll('button').find((b) => b.text().trim() === t('runtime_uninstall'))
+    expect(uninstallBtn81).toBeDefined()
+
+    // 2. Non-PHP (caddy) does NOT have uninstall button
+    const cardCaddy = wrapper.findAll('.p-3').find((c) => c.text().includes('Caddy Server'))
+    expect(cardCaddy).toBeDefined()
+    const uninstallBtnCaddy = cardCaddy!.findAll('button').find((b) => b.text().trim() === t('runtime_uninstall'))
+    expect(uninstallBtnCaddy).toBeUndefined()
+
+    // 3. External PHP 8.3 shows winget command in chip and NOT uninstall button
+    const card83 = wrapper.findAll('.p-3').find((c) => c.text().includes('PHP 8.3'))
+    expect(card83).toBeDefined()
+    const uninstallBtn83 = card83!.findAll('button').find((b) => b.text().trim() === t('runtime_uninstall'))
+    expect(uninstallBtn83).toBeUndefined()
+    expect(card83!.text()).toContain('winget uninstall --id PHP.PHP.8.3')
+  })
+
+  it('STEP U: blockers disable confirm button in uninstall modal', async () => {
+    ;(window as any).go.main.App.CheckRuntimeUpdates = async () => [
+      {
+        name: 'php-8.1',
+        current_version: '8.1.34',
+        latest_version: '8.1.34',
+        has_update: false,
+        is_managed: true,
+      },
+    ]
+
+    let blockersList = ['demo.test', 'blog.test']
+    ;(window as any).go.main.App.GetUninstallBlockers = async () => blockersList
+    let uninstalledName = ''
+    ;(window as any).go.main.App.UninstallRuntime = async (name: string) => {
+      uninstalledName = name
+      return { key: 'runtime_uninstall_success', params: { name } }
+    }
+
+    const { useRuntimeCatalog } = await import('../../composables/useRuntimeCatalog')
+    const { checkUpdatesNow, hiddenRuntimes } = useRuntimeCatalog()
+    hiddenRuntimes.value = []
+    await checkUpdatesNow({ silent: true })
+
+    const wrapper = mount(DownloadModal, {
+      props: {
+        modelValue: true,
+      },
+    })
+    await wrapper.vm.$nextTick()
+
+    const card81 = wrapper.findAll('.p-3').find((c) => c.text().includes('PHP 8.1'))
+    const uninstallBtn = card81!.findAll('button').find((b) => b.text().trim() === t('runtime_uninstall'))
+    await uninstallBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    // 1. Uninstall confirm modal is open showing path and blockers
+    expect(wrapper.text()).toContain(t('runtime_uninstall_confirm_title'))
+    expect(wrapper.text()).toContain('bin\\php-8.1')
+    expect(wrapper.text()).toContain('demo.test')
+    expect(wrapper.text()).toContain('blog.test')
+
+    // 2. Confirm button is disabled because blockers exist
+    const confirmBtn = wrapper.findAll('button').find((b) => b.text().trim() === t('runtime_uninstall') && b.classes().includes('bg-rose-600'))
+    expect(confirmBtn).toBeDefined()
+    expect((confirmBtn!.element as HTMLButtonElement).disabled).toBe(true)
+
+    // 3. If blockers are cleared, confirm button becomes enabled and uninstalls
+    blockersList = []
+    await uninstallBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    const enabledConfirmBtn = wrapper.findAll('button').find((b) => b.text().trim() === t('runtime_uninstall') && b.classes().includes('bg-rose-600'))
+    expect((enabledConfirmBtn!.element as HTMLButtonElement).disabled).toBe(false)
+    await enabledConfirmBtn!.trigger('click')
+    await wrapper.vm.$nextTick()
+
+    expect(uninstalledName).toBe('php-8.1')
+  })
 })
 

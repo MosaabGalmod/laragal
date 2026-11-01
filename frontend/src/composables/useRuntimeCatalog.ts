@@ -25,6 +25,7 @@ export interface RuntimeUpdateInfo {
   source_status?: 'live' | 'catalog_fallback'
   source_error?: string
   eol_date?: string
+  is_managed?: boolean
 }
 
 export interface RuntimeDefinition {
@@ -39,6 +40,7 @@ const runtimeUpdates = ref<Record<string, RuntimeUpdateInfo>>({})
 const isCheckingUpdates = ref(false)
 const downloadProgress = ref<Record<string, number>>({})
 const downloadingRuntime = ref('')
+const hiddenRuntimes = ref<string[]>([])
 
 const availableRuntimes = ref<RuntimeDefinition[]>([
   { name: 'caddy', label: 'Caddy Server', desc_key: 'service_caddy_desc' },
@@ -117,7 +119,7 @@ export function getRecommendedMariaDBSeries(updates: RuntimeUpdateInfo[]): Runti
 
 export function extractPhpVersionNumber(ver?: string): string {
   if (!ver) return '8.3'
-  const clean = ver.replace(/PHP\s*/i, '').trim()
+  const clean = ver.replace(/^PHP[-_\s]*/i, '').trim()
   const match = clean.match(/^(\d+\.\d+)/)
   if (match) return match[1]
   return clean || '8.3'
@@ -147,6 +149,16 @@ export function useRuntimeCatalog() {
         }
       } catch (e) {
         console.warn('Could not load runtime catalog:', e)
+      }
+    }
+    if (w.go?.main?.App?.GetHiddenRuntimes) {
+      try {
+        const hiddenList = await w.go.main.App.GetHiddenRuntimes()
+        if (Array.isArray(hiddenList)) {
+          hiddenRuntimes.value = hiddenList
+        }
+      } catch (e) {
+        console.warn('Could not load hidden runtimes:', e)
       }
     }
   }
@@ -200,52 +212,135 @@ export function useRuntimeCatalog() {
     return highest || '8.5'
   })
 
-  const phpSelectOptions = computed(() => {
-    return phpCatalog.value.map((item) => {
-      const ver = item.name.replace(/^php-/, '')
-      let suffix = ''
-      if (ver === latestPhpVersion.value) {
-        suffix = ` (${t('php_latest_label')})`
-      } else if (ver === '8.3') {
-        suffix = ` (${t('php_recommended_badge')})`
-      } else if (item.eol) {
-        suffix = ` (${t('runtime_eol_badge')})`
-      } else if (item.eol_date) {
-        suffix = ` (${t('runtime_security_only', { date: item.eol_date })})`
-      }
-      return {
-        version: ver,
-        label: `PHP ${ver}${suffix}`,
-        eol: Boolean(item.eol),
-        eol_date: item.eol_date,
-        php_port: item.php_port,
-      }
+  function isRuntimeHidden(name: string): boolean {
+    if (!name) return false
+    const n = name.toLowerCase().trim()
+    const clean = n.replace(/^php-/, '')
+    return hiddenRuntimes.value.some((h) => {
+      const hl = h.toLowerCase().trim()
+      const hClean = hl.replace(/^php-/, '')
+      if (hl === n) return true
+      if (n.startsWith('php-') && (hl === clean || hClean === clean)) return true
+      return false
     })
+  }
+
+  async function setRuntimeHidden(name: string, hidden: boolean) {
+    const w = window as any
+    if (w.go?.main?.App?.SetRuntimeHidden) {
+      try {
+        await w.go.main.App.SetRuntimeHidden(name, hidden)
+      } catch (err) {
+        console.warn('SetRuntimeHidden error:', err)
+      }
+    }
+    const cleanName = name.trim()
+    const exists = hiddenRuntimes.value.some((h) => h.toLowerCase() === cleanName.toLowerCase())
+    if (hidden && !exists) {
+      hiddenRuntimes.value = [...hiddenRuntimes.value, cleanName]
+    } else if (!hidden && exists) {
+      hiddenRuntimes.value = hiddenRuntimes.value.filter((h) => h.toLowerCase() !== cleanName.toLowerCase())
+    }
+  }
+
+  function isManagedRuntime(name: string): boolean {
+    const update = runtimeUpdates.value[name]
+    if (update && typeof update.is_managed === 'boolean') {
+      return update.is_managed
+    }
+    return Boolean(update?.current_version)
+  }
+
+  async function getUninstallBlockers(name: string): Promise<string[]> {
+    const w = window as any
+    if (w.go?.main?.App?.GetUninstallBlockers) {
+      try {
+        const blockers = await w.go.main.App.GetUninstallBlockers(name)
+        return Array.isArray(blockers) ? blockers : []
+      } catch (err) {
+        console.warn('GetUninstallBlockers error:', err)
+        return []
+      }
+    }
+    return []
+  }
+
+  async function uninstallRuntime(name: string): Promise<boolean> {
+    const w = window as any
+    if (w.go?.main?.App?.UninstallRuntime) {
+      try {
+        const msg = await w.go.main.App.UninstallRuntime(name)
+        await loadRuntimeCatalog()
+        await checkUpdatesNow({ silent: true })
+        showToast(renderUIMessage(msg) || t('runtime_uninstall_success', { name }))
+        return true
+      } catch (err: any) {
+        console.warn('Uninstall error:', err)
+        const errKey = typeof err === 'string' ? err : err?.message
+        showToast(t(errKey, { name, error: errKey }) || t('operation_failed', { error: errKey }))
+        return false
+      }
+    }
+    return false
+  }
+
+  const phpSelectOptions = computed(() => {
+    return phpCatalog.value
+      .filter((item) => !isRuntimeHidden(item.name))
+      .map((item) => {
+        const ver = item.name.replace(/^php-/, '')
+        let suffix = ''
+        if (ver === latestPhpVersion.value) {
+          suffix = ` (${t('php_latest_label')})`
+        } else if (ver === '8.3') {
+          suffix = ` (${t('php_recommended_badge')})`
+        } else if (item.eol) {
+          suffix = ` (${t('runtime_eol_badge')})`
+        } else if (item.eol_date) {
+          suffix = ` (${t('runtime_security_only', { date: item.eol_date })})`
+        }
+        return {
+          version: ver,
+          label: `PHP ${ver}${suffix}`,
+          eol: Boolean(item.eol),
+          eol_date: item.eol_date,
+          php_port: item.php_port,
+        }
+      })
   })
 
-  const phpSelectOptionsPrefixed = computed(() => {
-    return phpCatalog.value.map((item) => {
-      const ver = item.name.replace(/^php-/, '')
-      let suffix = ''
-      if (ver === latestPhpVersion.value) {
-        suffix = ` (${t('php_latest_label')})`
-      } else if (ver === '8.3') {
-        suffix = ` (${t('php_recommended_badge')})`
-      } else if (item.eol) {
-        suffix = ` (${t('runtime_eol_badge')})`
-      } else if (item.eol_date) {
-        suffix = ` (${t('runtime_security_only', { date: item.eol_date })})`
-      }
-      return {
-        value: `PHP ${ver}`,
-        version: ver,
-        label: `PHP ${ver}${suffix}`,
-        eol: Boolean(item.eol),
-        eol_date: item.eol_date,
-        php_port: item.php_port,
-      }
-    })
-  })
+  function getPhpSelectOptionsPrefixed(currentProjectVersion?: string) {
+    const cleanCurrent = currentProjectVersion ? extractPhpVersionNumber(currentProjectVersion) : ''
+    return phpCatalog.value
+      .filter((item) => {
+        const ver = item.name.replace(/^php-/, '')
+        if (cleanCurrent && ver === cleanCurrent) return true
+        return !isRuntimeHidden(item.name)
+      })
+      .map((item) => {
+        const ver = item.name.replace(/^php-/, '')
+        let suffix = ''
+        if (ver === latestPhpVersion.value) {
+          suffix = ` (${t('php_latest_label')})`
+        } else if (ver === '8.3') {
+          suffix = ` (${t('php_recommended_badge')})`
+        } else if (item.eol) {
+          suffix = ` (${t('runtime_eol_badge')})`
+        } else if (item.eol_date) {
+          suffix = ` (${t('runtime_security_only', { date: item.eol_date })})`
+        }
+        return {
+          value: `PHP ${ver}`,
+          version: ver,
+          label: `PHP ${ver}${suffix}`,
+          eol: Boolean(item.eol),
+          eol_date: item.eol_date,
+          php_port: item.php_port,
+        }
+      })
+  }
+
+  const phpSelectOptionsPrefixed = computed(() => getPhpSelectOptionsPrefixed())
 
   async function checkUpdatesNow(options?: { silent?: boolean }) {
     const silent = Boolean(options?.silent)
@@ -409,6 +504,13 @@ export function useRuntimeCatalog() {
     latestPhpVersion,
     phpSelectOptions,
     phpSelectOptionsPrefixed,
+    getPhpSelectOptionsPrefixed,
+    hiddenRuntimes,
+    isRuntimeHidden,
+    setRuntimeHidden,
+    isManagedRuntime,
+    getUninstallBlockers,
+    uninstallRuntime,
     checkUpdatesNow,
     triggerDownloadRuntime,
   }

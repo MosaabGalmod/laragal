@@ -185,7 +185,7 @@
               {{ t('php_default_global') }}
             </option>
             <option
-              v-for="opt in phpSelectOptionsPrefixed"
+              v-for="opt in availablePhpOptions"
               :key="opt.value"
               :value="opt.value"
             >
@@ -280,7 +280,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const { showToast } = useToast()
-const { phpCatalog, phpSelectOptionsPrefixed } = useRuntimeCatalog()
+const { phpCatalog, getPhpSelectOptionsPrefixed } = useRuntimeCatalog()
 
 const settingsForm = ref({
   type: '',
@@ -289,6 +289,10 @@ const settingsForm = ref({
   php_version: '',
   is_ignored: false,
 })
+
+const availablePhpOptions = computed(() =>
+  getPhpSelectOptionsPrefixed(settingsForm.value.php_version || props.site?.php_version),
+)
 
 function getDocRootRelative(site: SiteItem): string {
   if (!site.path || !site.root_path || site.path === site.root_path) {

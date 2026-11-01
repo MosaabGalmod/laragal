@@ -60,6 +60,7 @@
               'border-rose-300 dark:border-rose-900/60 bg-rose-50/20 dark:bg-rose-950/20':
                 (runtimeUpdates[rt.name]?.has_update && runtimeUpdates[rt.name]?.is_security_fix) ||
                 shouldShowEol(rt.name),
+              'opacity-60 dark:opacity-50 border-dashed': isRuntimeHidden(rt.name),
             }"
           >
             <div class="flex items-center justify-between gap-2">
@@ -204,6 +205,46 @@
                 </template>
               </div>
             </div>
+
+            <!-- Card secondary actions & WinGet command -->
+            <div class="flex items-center justify-between pt-1 border-t border-slate-200/60 dark:border-slate-700/50 text-[11px]">
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  class="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 underline underline-offset-2 cursor-pointer transition-colors"
+                  @click="toggleHide(rt.name)"
+                >
+                  {{ isRuntimeHidden(rt.name) ? t('runtime_unhide') : t('runtime_hide') }}
+                </button>
+                <template v-if="rt.name.startsWith('php-') && runtimeUpdates[rt.name]?.current_version && isManagedPHP(rt.name)">
+                  <span class="text-slate-300 dark:text-slate-600">•</span>
+                  <button
+                    type="button"
+                    class="text-rose-500 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 underline underline-offset-2 cursor-pointer transition-colors font-medium"
+                    @click="handleUninstallClick(rt)"
+                  >
+                    {{ t('runtime_uninstall') }}
+                  </button>
+                </template>
+              </div>
+
+              <div
+                v-if="rt.name.startsWith('php-') && runtimeUpdates[rt.name]?.current_version && !isManagedPHP(rt.name)"
+                class="flex items-center gap-1.5 text-slate-500 dark:text-slate-400"
+              >
+                <span>{{ t('runtime_uninstall_external_tip') }}</span>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[10px] bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-200 transition-colors cursor-pointer"
+                  :title="t('copy_command')"
+                  @click="copyWingetCommand(getWingetCommand(rt.name))"
+                >
+                  <bdi dir="ltr">{{ getWingetCommand(rt.name) }}</bdi>
+                  <Copy class="w-2.5 h-2.5 text-slate-500" />
+                </button>
+              </div>
+            </div>
+
             <div
               v-if="downloadingRuntime === rt.name"
               class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden"
@@ -217,8 +258,11 @@
 
           <!-- Merged MariaDB newer series card rendered directly after mysql card -->
           <div
-            v-if="rt.name === 'mysql' && mariadbSeriesUpdates.length > 0"
+            v-if="rt.name === 'mysql' && mariadbSeriesUpdates.length > 0 && (showHidden || !isRuntimeHidden('mariadb_series'))"
             class="p-3 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/20 space-y-2 transition-all"
+            :class="{
+              'opacity-60 dark:opacity-50 border-dashed': isRuntimeHidden('mariadb_series'),
+            }"
           >
             <div class="flex items-center justify-between gap-2">
               <div class="space-y-1.5 flex-1 min-w-0">
@@ -279,6 +323,20 @@
                 </template>
               </div>
             </div>
+
+            <!-- MariaDB series secondary actions -->
+            <div class="flex items-center justify-between pt-1 border-t border-amber-200/60 dark:border-amber-900/40 text-[11px]">
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  class="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 underline underline-offset-2 cursor-pointer transition-colors"
+                  @click="toggleHide('mariadb_series')"
+                >
+                  {{ isRuntimeHidden('mariadb_series') ? t('runtime_unhide') : t('runtime_hide') }}
+                </button>
+              </div>
+            </div>
+
             <div
               v-if="downloadingRuntime === selectedMariaDBSeries"
               class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden"
@@ -293,8 +351,11 @@
 
         <!-- Fallback if mysql was not in displayed runtimes -->
         <div
-          v-if="!hasMysqlInDisplayed && mariadbSeriesUpdates.length > 0"
+          v-if="!hasMysqlInDisplayed && mariadbSeriesUpdates.length > 0 && (showHidden || !isRuntimeHidden('mariadb_series'))"
           class="p-3 rounded-xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/20 dark:bg-amber-950/20 space-y-2 transition-all"
+          :class="{
+            'opacity-60 dark:opacity-50 border-dashed': isRuntimeHidden('mariadb_series'),
+          }"
         >
           <div class="flex items-center justify-between gap-2">
             <div class="space-y-1.5 flex-1 min-w-0">
@@ -355,6 +416,20 @@
               </template>
             </div>
           </div>
+
+          <!-- Fallback MariaDB series secondary actions -->
+          <div class="flex items-center justify-between pt-1 border-t border-amber-200/60 dark:border-amber-900/40 text-[11px]">
+            <div class="flex items-center gap-2">
+              <button
+                type="button"
+                class="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 underline underline-offset-2 cursor-pointer transition-colors"
+                @click="toggleHide('mariadb_series')"
+              >
+                {{ isRuntimeHidden('mariadb_series') ? t('runtime_unhide') : t('runtime_hide') }}
+              </button>
+            </div>
+          </div>
+
           <div
             v-if="downloadingRuntime === selectedMariaDBSeries"
             class="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden"
@@ -368,8 +443,20 @@
       </div>
 
       <div
-        class="pt-3 border-t border-slate-100 dark:border-slate-800 flex justify-end"
+        class="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between"
       >
+        <div>
+          <button
+            v-if="hiddenCount > 0"
+            type="button"
+            class="text-xs font-medium text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 cursor-pointer underline underline-offset-2 transition-colors flex items-center gap-1.5"
+            @click="showHidden = !showHidden"
+          >
+            <EyeOff v-if="!showHidden" class="w-3.5 h-3.5" />
+            <Eye v-else class="w-3.5 h-3.5" />
+            <span>{{ showHidden ? t('runtime_hide_hidden') : t('runtime_show_hidden', { count: hiddenCount }) }}</span>
+          </button>
+        </div>
         <button
           type="button"
           class="px-3.5 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 cursor-pointer"
@@ -377,6 +464,64 @@
         >
           {{ t('cancel_btn') }}
         </button>
+      </div>
+    </div>
+
+    <!-- ================= UNINSTALL CONFIRMATION MODAL ================= -->
+    <div
+      v-if="confirmUninstall"
+      class="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-xs"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="uninstall-modal-title"
+      tabindex="-1"
+    >
+      <div
+        class="w-full max-w-sm rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl p-5 space-y-4 animate-scale-in"
+      >
+        <div class="flex items-center gap-2">
+          <Trash2 class="w-5 h-5 text-rose-500 flex-shrink-0" />
+          <h3 id="uninstall-modal-title" class="font-bold text-base text-slate-900 dark:text-white">
+            {{ t('runtime_uninstall_confirm_title') }}
+          </h3>
+        </div>
+
+        <div class="space-y-2.5 text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+          <p v-html="t('runtime_uninstall_warning', { path: confirmUninstall.path })"></p>
+
+          <div
+            v-if="confirmUninstall.blockers && confirmUninstall.blockers.length > 0"
+            class="p-2.5 rounded-lg border border-rose-200 dark:border-rose-900/50 bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-200 space-y-1.5"
+          >
+            <div class="font-bold flex items-center gap-1">
+              <AlertTriangle class="w-3.5 h-3.5 text-rose-500 flex-shrink-0" />
+              <span>{{ t('runtime_uninstall_blocked_title') }}</span>
+            </div>
+            <ul class="list-disc list-inside text-[11px] font-mono space-y-0.5">
+              <li v-for="dom in confirmUninstall.blockers" :key="dom">
+                <bdi dir="ltr">{{ dom }}</bdi>
+              </li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <button
+            type="button"
+            class="px-3.5 py-1.5 text-xs font-semibold rounded-lg text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800 cursor-pointer"
+            @click="confirmUninstall = null"
+          >
+            {{ t('cancel_btn') }}
+          </button>
+          <button
+            type="button"
+            :disabled="Boolean(confirmUninstall.blockers && confirmUninstall.blockers.length > 0)"
+            class="px-3.5 py-1.5 text-xs font-bold rounded-lg bg-rose-600 hover:bg-rose-700 text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
+            @click="executeUninstall"
+          >
+            {{ t('runtime_uninstall') }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -451,13 +596,19 @@ import {
   Check,
   Globe,
   Info,
+  Trash2,
+  Copy,
+  Eye,
+  EyeOff,
 } from 'lucide-vue-next'
 import { useI18n } from '../../composables/useI18n'
+import { useToast } from '../../composables/useToast'
 import {
   useRuntimeCatalog,
   getMajorMinor,
   formatEolDate,
   getRecommendedMariaDBSeries,
+  extractPhpVersionNumber,
 } from '../../composables/useRuntimeCatalog'
 
 interface Props {
@@ -473,6 +624,7 @@ const emit = defineEmits<{
 }>()
 
 const { t, currentLang } = useI18n()
+const { showToast } = useToast()
 const {
   availableRuntimes,
   runtimeUpdates,
@@ -483,15 +635,38 @@ const {
   getCatalogItem,
   checkUpdatesNow,
   triggerDownloadRuntime,
+  isRuntimeHidden,
+  setRuntimeHidden,
+  isManagedRuntime,
+  getUninstallBlockers,
+  uninstallRuntime,
 } = useRuntimeCatalog()
 
+const showHidden = ref(false)
+const confirmUninstall = ref<{ name: string; path: string; blockers: string[] } | null>(null)
 const confirmMajorChange = ref<{ name: string; label: string } | null>(null)
 const selectedMariaDBSeries = ref<string>('')
 
 const displayedRuntimes = computed(() => {
   return availableRuntimes.value.filter(
-    (r) => !r.name.startsWith('mariadb-') && (r.name === 'mysql' || !r.name.startsWith('mysql-')),
+    (r) =>
+      !r.name.startsWith('mariadb-') &&
+      (r.name === 'mysql' || !r.name.startsWith('mysql-')) &&
+      (showHidden.value || !isRuntimeHidden(r.name)),
   )
+})
+
+const hiddenCount = computed(() => {
+  let count = 0
+  for (const r of availableRuntimes.value) {
+    if (!r.name.startsWith('mariadb-') && (r.name === 'mysql' || !r.name.startsWith('mysql-'))) {
+      if (isRuntimeHidden(r.name)) count++
+    }
+  }
+  if (mariadbSeriesUpdates.value.length > 0 && isRuntimeHidden('mariadb_series')) {
+    count++
+  }
+  return count
 })
 
 const hasMysqlInDisplayed = computed(() => displayedRuntimes.value.some((r) => r.name === 'mysql'))
@@ -524,6 +699,47 @@ const mariaDBSeriesOptions = computed(() => {
     }
   })
 })
+
+function isManagedPHP(name: string): boolean {
+  return isManagedRuntime(name)
+}
+
+function getWingetCommand(name: string): string {
+  const ver = extractPhpVersionNumber(name)
+  return `winget uninstall --id PHP.PHP.${ver}`
+}
+
+async function copyWingetCommand(cmd: string) {
+  try {
+    if (navigator?.clipboard?.writeText) {
+      await navigator.clipboard.writeText(cmd)
+    }
+  } catch (e) {
+    console.warn('Clipboard write failed:', e)
+  }
+  showToast(t('copied_to_clipboard'))
+}
+
+async function toggleHide(name: string) {
+  const willHide = !isRuntimeHidden(name)
+  await setRuntimeHidden(name, willHide)
+}
+
+async function handleUninstallClick(rt: { name: string; label: string }) {
+  const blockers = await getUninstallBlockers(rt.name)
+  confirmUninstall.value = {
+    name: rt.name,
+    path: `bin\\${rt.name}`,
+    blockers,
+  }
+}
+
+async function executeUninstall() {
+  if (!confirmUninstall.value) return
+  const target = confirmUninstall.value.name
+  confirmUninstall.value = null
+  await uninstallRuntime(target)
+}
 
 function handleMariaDBSeriesUpgrade() {
   const targetName = selectedMariaDBSeries.value
@@ -605,6 +821,10 @@ function closeModal() {
 
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
+    if (confirmUninstall.value) {
+      confirmUninstall.value = null
+      return
+    }
     if (confirmMajorChange.value) {
       confirmMajorChange.value = null
       return

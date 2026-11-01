@@ -357,5 +357,20 @@
   "runtime_source_unavailable": "تعذّر الوصول إلى المصدر الرسمي الآن؛ المعروض هو الإصدار المضمَّن. أعد الفحص لاحقًا.",
   "runtime_major_upgrade_btn": "ترقية رئيسية…",
   "mariadb_newer_series": "سلسلة أحدث من MariaDB",
-  "runtime_supported_until": "مدعوم حتى {date}"
+  "runtime_supported_until": "مدعوم حتى {date}",
+  "runtime_hide": "إخفاء",
+  "runtime_unhide": "إظهار",
+  "runtime_uninstall": "إلغاء التثبيت",
+  "runtime_show_hidden": "عرض المخفية ({count})",
+  "runtime_hide_hidden": "إخفاء العناصر المخفية",
+  "runtime_uninstall_confirm_title": "تأكيد إلغاء التثبيت",
+  "runtime_uninstall_warning": "سيُحذف المجلد <bdi dir=\"ltr\">{path}</bdi>؛ ويمكنك تنزيله لاحقًا من هذه النافذة.",
+  "runtime_uninstall_blocked_title": "لا يمكن الحذف: تستخدمه هذه المشاريع:",
+  "runtime_uninstall_external_tip": "هذا الإصدار مثبَّت عبر WinGet؛ أزله بالأمر:",
+  "runtime_uninstall_success": "تم إلغاء تثبيت حزمة {name} بنجاح.",
+  "runtime_uninstall_external": "هذا الإصدار غير مُدار بواسطة LaraGal ومثبَّت خارجيًا؛ يمكنك إزالته عبر الأمر: {command}",
+  "runtime_uninstall_in_use": "لا يمكن حذف هذا الإصدار؛ فهو قيد الاستخدام في المشاريع التالية: {domains}",
+  "runtime_uninstall_last_or_default": "لا يمكن حذف هذا الإصدار؛ لأنه إما الإصدار الافتراضي في الإعدادات أو الإصدار الوحيد المثبَّت على الجهاز.",
+  "copied_to_clipboard": "تم نسخ الأمر إلى الحافظة بنجاح.",
+  "copy_command": "نسخ الأمر"
 }

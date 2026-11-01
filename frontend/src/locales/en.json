@@ -357,5 +357,20 @@
   "runtime_source_unavailable": "Couldn't reach the official source; showing the bundled version. Check again later.",
   "runtime_major_upgrade_btn": "Major upgrade…",
   "mariadb_newer_series": "Newer MariaDB series",
-  "runtime_supported_until": "Supported until {date}"
+  "runtime_supported_until": "Supported until {date}",
+  "runtime_hide": "Hide",
+  "runtime_unhide": "Unhide",
+  "runtime_uninstall": "Uninstall",
+  "runtime_show_hidden": "Show hidden ({count})",
+  "runtime_hide_hidden": "Hide hidden cards",
+  "runtime_uninstall_confirm_title": "Confirm Uninstallation",
+  "runtime_uninstall_warning": "The folder <bdi dir=\"ltr\">{path}</bdi> will be deleted. You can re-download it later from this modal.",
+  "runtime_uninstall_blocked_title": "Cannot uninstall: In use by these projects:",
+  "runtime_uninstall_external_tip": "This version is installed via WinGet; uninstall it using:",
+  "runtime_uninstall_success": "Runtime {name} uninstalled successfully.",
+  "runtime_uninstall_external": "This runtime is not managed by LaraGal; remove it with the command: {command}",
+  "runtime_uninstall_in_use": "Cannot uninstall this version; it is currently used by projects: {domains}",
+  "runtime_uninstall_last_or_default": "Cannot uninstall this version; it is either the default configured version or the last installed PHP version on your system.",
+  "copied_to_clipboard": "Command copied to clipboard.",
+  "copy_command": "Copy command"
 }
