@@ -129,6 +129,7 @@ type RuntimeUpdateInfo struct {
 	SourceStatus    string `json:"source_status"`          // "live" | "catalog_fallback"
 	SourceError     string `json:"source_error,omitempty"` // short, English, e.g. "github rate limit, resets 23:40" or "timeout"
 	EOLDate         string `json:"eol_date,omitempty"`
+	IsManaged       bool   `json:"is_managed"`
 }
 
 type CheckOptions struct {
@@ -737,6 +738,16 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 			info.HasUpdate = IsVersionNewer(curVer, info.LatestVersion)
 		} else {
 			info.HasUpdate = false
+		}
+
+		if strings.HasPrefix(name, "php-") && curVer != "" && opts.BaseBinDir != "" {
+			exe1 := filepath.Join(opts.BaseBinDir, name, "php.exe")
+			exe2 := filepath.Join(opts.BaseBinDir, name, "php-cgi.exe")
+			if _, err := os.Stat(exe1); err == nil {
+				info.IsManaged = true
+			} else if _, err := os.Stat(exe2); err == nil {
+				info.IsManaged = true
+			}
 		}
 
 		results = append(results, info)

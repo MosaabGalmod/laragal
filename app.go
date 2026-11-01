@@ -151,7 +151,7 @@ func NewApp() *App {
 }
 
 func (a *App) getCacheFilePath() string {
-	return filepath.Join("data", "sites_cache.json")
+	return filepath.Join(a.getDataDir(), "sites_cache.json")
 }
 
 func (a *App) loadSitesCache() {
@@ -180,7 +180,7 @@ func (a *App) saveSitesCache() {
 	if count == 0 || err != nil {
 		return
 	}
-	_ = os.MkdirAll("data", 0755)
+	_ = os.MkdirAll(a.getDataDir(), 0755)
 	_ = os.WriteFile(a.getCacheFilePath(), data, 0644)
 }
 
