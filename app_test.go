@@ -1,6 +1,7 @@
 package main
 
 import (
+	"regexp"
 	"archive/zip"
 	"bytes"
 	"crypto/sha256"
@@ -779,5 +780,48 @@ func TestUIMessage_DiagnoseProject(t *testing.T) {
 	}
 	if !hasKey {
 		t.Errorf("expected structured UIMessage with key in issues, got %+v", diag.Issues)
+	}
+}
+
+func TestNoArabicInBackendGoFiles(t *testing.T) {
+	arabicRegex := regexp.MustCompile(`[\x{0600}-\x{06FF}]`)
+
+	filesToScan := []string{"app.go"}
+	err := filepath.Walk("internal", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		normPath := filepath.ToSlash(path)
+		if !strings.HasSuffix(normPath, ".go") || strings.HasSuffix(normPath, "_test.go") {
+			return nil
+		}
+		if strings.HasPrefix(normPath, "internal/services/caddy") {
+			return nil
+		}
+		if strings.HasSuffix(normPath, ".php") {
+			return nil
+		}
+		filesToScan = append(filesToScan, normPath)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("failed to walk internal directory: %v", err)
+	}
+
+	for _, file := range filesToScan {
+		data, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatalf("failed to read file %s: %v", file, err)
+		}
+		normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
+		lines := strings.Split(normalized, "\n")
+		for idx, line := range lines {
+			if arabicRegex.MatchString(line) {
+				t.Errorf("file %s line %d contains Arabic characters: %s", file, idx+1, strings.TrimSpace(line))
+			}
+		}
 	}
 }

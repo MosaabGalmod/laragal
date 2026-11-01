@@ -337,7 +337,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		Path:       cleanDir,
 		DocRoot:    cleanDir,
 		Type:       TypeNonWeb,
-		TypeLabel:  "ط؛ظٹط± ظˆظٹط¨ / ظ…ظ„ظپط§طھ",
+		TypeLabel:  "Non-Web",
 		PHPVersion: "",
 		PHPPort:    0,
 		IsWeb:      false,
@@ -457,7 +457,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 			dirExists(filepath.Join(cleanDir, "web", "static"))
 		if hasGoWeb {
 			result.Type = TypeGo
-			result.TypeLabel = "Go / ظˆظٹط¨"
+			result.TypeLabel = "Go"
 			result.IsWeb = true
 			result.Domain = name + domainSuffix
 			result.Path = cleanDir
@@ -474,7 +474,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 			fileExists(filepath.Join(cleanDir, "src", "main.rs"))
 		if hasRustWeb {
 			result.Type = TypeRust
-			result.TypeLabel = "Rust / ظˆظٹط¨"
+			result.TypeLabel = "Rust"
 			result.IsWeb = true
 			result.Domain = name + domainSuffix
 			result.Path = cleanDir
@@ -688,7 +688,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 			for _, buildSub := range []string{"dist", "out", "build"} {
 				if fileExists(filepath.Join(cleanDir, buildSub, "index.html")) {
 					result.Type = TypeStatic
-					result.TypeLabel = "HTML / ط«ط§ط¨طھ"
+					result.TypeLabel = "Static"
 					result.DocRoot = filepath.Join(cleanDir, buildSub)
 					result.ProxyPort = 0
 					return result
@@ -753,7 +753,7 @@ func detectSingleDir(cleanDir string, defaultPHP string, domainSuffix string) De
 		for _, fName := range htmlFileNames {
 			if fileExists(filepath.Join(targetDir, fName)) {
 				result.Type = TypeStatic
-				result.TypeLabel = "HTML / ط«ط§ط¨طھ"
+				result.TypeLabel = "Static"
 				result.IsWeb = true
 				result.Domain = domain
 				result.DocRoot = targetDir
@@ -797,7 +797,7 @@ func DetectProject(projectDir string, defaultPHP string, domainSuffix string) De
 			Path:       cleanDir,
 			DocRoot:    cleanDir,
 			Type:       TypeNonWeb,
-			TypeLabel:  "ط؛ظٹط± ظˆظٹط¨ / ظ…ظ„ظپط§طھ",
+			TypeLabel:  "Non-Web",
 			PHPVersion: "",
 			PHPPort:    0,
 			IsWeb:      false,
@@ -941,7 +941,7 @@ func DetectProjectDatabase(projectDir string, projectName string) ProjectDatabas
 					Status:         "needs_migration",
 					TablesCount:    0,
 					NeedsMigration: true,
-					Description:    "قاعدة بيانات SQLite فارغة (اضغط لتفعيل الهجرة وإنشاء الجداول)",
+					Description:    "Empty SQLite database (run migrations to create tables)",
 				}
 			}
 
@@ -972,7 +972,7 @@ func DetectProjectDatabase(projectDir string, projectName string) ProjectDatabas
 					Status:         "needs_migration",
 					TablesCount:    tablesCount,
 					NeedsMigration: true,
-					Description:    fmt.Sprintf("قاعدة بيانات SQLite غير مهجرة (%d جدول، يرجى تشغيل migrate)", tablesCount),
+					Description:    fmt.Sprintf("Unmigrated SQLite database (%d table(s), please run migrate)", tablesCount),
 				}
 			}
 
@@ -983,7 +983,7 @@ func DetectProjectDatabase(projectDir string, projectName string) ProjectDatabas
 				Status:         "ready",
 				TablesCount:    tablesCount,
 				NeedsMigration: false,
-				Description:    fmt.Sprintf("قاعدة بيانات SQLite جاهزة (%d جدول)", tablesCount),
+				Description:    fmt.Sprintf("SQLite database ready (%d table(s))", tablesCount),
 			}
 		}
 
@@ -995,7 +995,7 @@ func DetectProjectDatabase(projectDir string, projectName string) ProjectDatabas
 				Status:         "missing",
 				TablesCount:    0,
 				NeedsMigration: true,
-				Description:    "قاعدة بيانات SQLite مفقودة (اضغط لتفعيل الهجرة وإنشاء الجداول)",
+				Description:    "Missing SQLite database (run migrations to create tables)",
 			}
 		}
 	}
@@ -1014,7 +1014,7 @@ func DetectProjectDatabase(projectDir string, projectName string) ProjectDatabas
 			Status:         "ready",
 			TablesCount:    0,
 			NeedsMigration: false,
-			Description:    fmt.Sprintf("قاعدة بيانات MySQL: %s", targetDB),
+			Description:    fmt.Sprintf("MySQL database: %s", targetDB),
 		}
 	}
 
@@ -1024,7 +1024,7 @@ func DetectProjectDatabase(projectDir string, projectName string) ProjectDatabas
 			Type:           "pgsql",
 			Name:           dbName,
 			Status:         "ready",
-			Description:    fmt.Sprintf("قاعدة بيانات PostgreSQL: %s", dbName),
+			Description:    fmt.Sprintf("PostgreSQL database: %s", dbName),
 		}
 	}
 

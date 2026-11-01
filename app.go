@@ -364,7 +364,7 @@ func (a *App) ensurePHPServiceRunning(version string) error {
 
 	phpExe := a.findPHPExecutableForVersion(normVer)
 	if phpExe == "" {
-		return fmt.Errorf("محرك PHP %s غير متوفر", normVer)
+		return fmt.Errorf("PHP executable for %s not found", normVer)
 	}
 
 	phpEnv := []string{
@@ -490,7 +490,7 @@ func (a *App) ToggleService(name string) (bool, error) {
 		}
 		if port > 0 {
 			if !a.waitForPort(port, false, 5*time.Second) {
-				return true, fmt.Errorf("تعذر إيقاف الخدمة %s: لا يزال المنفذ %d قيد الاستخدام", name, port)
+				return true, fmt.Errorf("failed to stop service %s: port %d is still listening", name, port)
 			}
 		}
 		return false, nil
@@ -507,7 +507,7 @@ func (a *App) ToggleService(name string) (bool, error) {
 		ver := strings.TrimPrefix(name, "php-")
 		phpExe := a.findPHPExecutableForVersion(ver)
 		if phpExe == "" {
-			return false, fmt.Errorf("محرك PHP %s غير متوفر. يرجى تنزيله من قسم الحزم المحمولة.", ver)
+			return false, fmt.Errorf("PHP executable for %s not found; download it from runtimes", ver)
 		}
 		phpEnv := []string{
 			"PHP_FCGI_CHILDREN=8",
@@ -518,7 +518,7 @@ func (a *App) ToggleService(name string) (bool, error) {
 			return false, err
 		}
 		if !a.waitForPort(port, true, 5*time.Second) {
-			return false, fmt.Errorf("تعذر تشغيل الخدمة %s: لم يستجب المنفذ %d في غضون 5 ثوانٍ", name, port)
+			return false, fmt.Errorf("failed to start service %s: port %d did not respond within 5 seconds", name, port)
 		}
 		return true, nil
 	}
@@ -527,7 +527,7 @@ func (a *App) ToggleService(name string) (bool, error) {
 	case "caddy":
 		caddyExe := a.findCaddyExecutable()
 		if caddyExe == "" {
-			return false, fmt.Errorf("خادم Caddy غير مثبت بعد. يرجى تنزيله من قسم الحزم المحمولة.")
+			return false, fmt.Errorf("Caddy binary not found; install it from runtimes")
 		}
 		_ = a.ReloadCaddy()
 		caddyDir := filepath.Join("data", "caddy")
@@ -539,7 +539,7 @@ func (a *App) ToggleService(name string) (bool, error) {
 	case "mailpit":
 		mailpitExe := filepath.Join("bin", "mailpit", "mailpit.exe")
 		if _, err := os.Stat(mailpitExe); err != nil {
-			return false, fmt.Errorf("صائد البريد Mailpit غير مثبت بعد.")
+			return false, fmt.Errorf("Mailpit binary not found")
 		}
 		err := a.supervisor.StartService("mailpit", mailpitExe, []string{"--smtp-bind-addr", "127.0.0.1:1025", "--ui-bind-addr", "127.0.0.1:8025"}, 1025)
 		return err == nil, err
@@ -547,7 +547,7 @@ func (a *App) ToggleService(name string) (bool, error) {
 	case "redis":
 		redisExe := a.findRedisExecutable()
 		if redisExe == "" {
-			return false, fmt.Errorf("خادم Redis غير متوفر حالياً على الجهاز.")
+			return false, fmt.Errorf("Redis binary not found on this system")
 		}
 		err := a.supervisor.StartService("redis", redisExe, []string{}, 6379)
 		return err == nil, err
@@ -558,11 +558,11 @@ func (a *App) ToggleService(name string) (bool, error) {
 			if a.IsPortListening(3306) {
 				return true, nil
 			}
-			return false, fmt.Errorf("خادم MySQL/MariaDB المحمول غير متوفر. يمكنك تنزيله من قسم الحزم المحمولة.")
+			return false, fmt.Errorf("MySQL/MariaDB binary not found; install it from runtimes")
 		}
 		dataDir := filepath.Join("data", "mysql")
 		if err := mysql.EnsureDataDir(mysqldExe, dataDir); err != nil {
-			return false, fmt.Errorf("تعذر تهيئة مجلد بيانات MySQL: %w", err)
+			return false, fmt.Errorf("failed to initialize MySQL data directory: %w", err)
 		}
 		if a.IsPortListening(3306) {
 			return true, nil
@@ -1291,7 +1291,7 @@ func (a *App) SelectProjectsDirectory(lang string) (string, error) {
 		wailsDir = ""
 	}
 
-	dialogTitle := "اختر مجلد المشاريع"
+	dialogTitle := "Select Projects Directory"
 	if strings.ToLower(strings.TrimSpace(lang)) == "en" {
 		dialogTitle = "Select Projects Directory"
 	}
@@ -1635,7 +1635,7 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 				if override.IsIgnored || override.Type == "non_web" {
 					isWeb = false
 					projectType = "non_web"
-					typeLabel = "غير ويب / ملفات"
+					typeLabel = "Non-Web"
 				} else {
 					if override.Type != "" {
 						projectType = override.Type
@@ -1658,7 +1658,7 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 						case "node":
 							typeLabel = "Node.js"
 						case "static":
-							typeLabel = "HTML / ثابت"
+							typeLabel = "Static"
 						default:
 							typeLabel = override.Type
 						}
