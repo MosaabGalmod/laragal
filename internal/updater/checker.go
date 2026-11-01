@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"testing"
 	"time"
 
 	"github.com/laragal/laragal/internal/runtimes"
@@ -26,6 +25,7 @@ type LiveRelease struct {
 	ChecksumAlgo string `json:"checksum_algo"` /* "sha256"|"sha512" */
 	MajorChange  bool   `json:"major_change"`
 	Source       string `json:"source"`
+	CompatNote   string `json:"compat_note,omitempty"`
 }
 
 type ReleaseSource interface {
@@ -37,10 +37,13 @@ type Registry map[string]ReleaseSource
 // RuntimeFamily returns the family identifier for a runtime name (e.g. "php-8.4" -> "php", "mariadb" -> "mysql").
 func RuntimeFamily(name string) string {
 	n := strings.ToLower(strings.TrimSpace(name))
+	if n == "phpmyadmin" || n == "pma" {
+		return "phpmyadmin"
+	}
 	if strings.HasPrefix(n, "php") {
 		return "php"
 	}
-	if n == "mariadb" || n == "mysql" {
+	if strings.HasPrefix(n, "mariadb") || strings.HasPrefix(n, "mysql") {
 		return "mysql"
 	}
 	return n
@@ -62,9 +65,6 @@ func NewPHPSource(baseURL ...string) *PHPSource {
 func (s *PHPSource) Latest(ctx context.Context, name string) ([]LiveRelease, error) {
 	url := s.BaseURL
 	if url == "" {
-		if testing.Testing() {
-			return nil, fmt.Errorf("network calls to live php releases feed disabled in tests; configure BaseURL or use catalog")
-		}
 		url = "https://windows.php.net/downloads/releases/releases.json"
 	}
 	timeout := s.HTTPTimeout
@@ -104,11 +104,13 @@ func (s *PHPSource) Latest(ctx context.Context, name string) ([]LiveRelease, err
 
 // DefaultRegistry defines the global registry mapping runtime families to ReleaseSource.
 var DefaultRegistry = Registry{
-	"php":     &PHPSource{},
-	"caddy":   NewGitHubSource("caddyserver/caddy", regexp.MustCompile(`^caddy_.*_windows_amd64\.zip$`), "caddy"),
-	"mailpit": NewGitHubSource("axllent/mailpit", regexp.MustCompile(`^mailpit-windows-amd64\.zip$`), "mailpit"),
-	"adminer": NewGitHubSource("vrana/adminer", regexp.MustCompile(`^adminer-.*-mysql\.php$`), "adminer"),
-	"redis":   NewGitHubSource("redis-windows/redis-windows", regexp.MustCompile(`^Redis-.*-Windows-x64-msys2\.zip$`), "redis"),
+	"php":        &PHPSource{},
+	"caddy":      NewGitHubSource("caddyserver/caddy", regexp.MustCompile(`^caddy_.*_windows_amd64\.zip$`), "caddy"),
+	"mailpit":    NewGitHubSource("axllent/mailpit", regexp.MustCompile(`^mailpit-windows-amd64\.zip$`), "mailpit"),
+	"adminer":    NewGitHubSource("vrana/adminer", regexp.MustCompile(`^adminer-.*-mysql\.php$`), "adminer"),
+	"redis":      NewGitHubSource("redis-windows/redis-windows", regexp.MustCompile(`^Redis-.*-Windows-x64-msys2\.zip$`), "redis"),
+	"mysql":      NewMariaDBSource(),
+	"phpmyadmin": NewPhpMyAdminSource(),
 }
 
 type RuntimeUpdateInfo struct {
@@ -122,6 +124,7 @@ type RuntimeUpdateInfo struct {
 	SHA256          string `json:"sha256,omitempty"`
 	IsNew           bool   `json:"is_new,omitempty"`
 	MajorChange     bool   `json:"major_change,omitempty"`
+	CompatNote      string `json:"compat_note,omitempty"`
 }
 
 type CheckOptions struct {
@@ -323,7 +326,15 @@ func DetectInstalledBinaryVersion(binDir string, name string) string {
 			return "4.8.1"
 		}
 	case name == "phpmyadmin":
-		idx := filepath.Join("data", "phpmyadmin", "index.php")
+		pmaDir := filepath.Join("data", "phpmyadmin")
+		if entries, err := os.ReadDir(pmaDir); err == nil {
+			for _, e := range entries {
+				if strings.HasPrefix(e.Name(), "RELEASE-DATE-") {
+					return strings.TrimPrefix(e.Name(), "RELEASE-DATE-")
+				}
+			}
+		}
+		idx := filepath.Join(pmaDir, "index.php")
 		if _, err := os.Stat(idx); err == nil {
 			return "5.2.3"
 		}
@@ -530,6 +541,9 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 			if liveRel.MajorChange {
 				info.MajorChange = true
 			}
+			if liveRel.CompatNote != "" {
+				info.CompatNote = liveRel.CompatNote
+			}
 		}
 
 		baseVer := curVer
@@ -613,8 +627,31 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 			SHA256:         liveRel.Checksum,
 			HasUpdate:      hasUpdate,
 			IsNew:          true,
+			MajorChange:    liveRel.MajorChange,
+			CompatNote:     liveRel.CompatNote,
 		})
 		processed[liveRel.Name] = true
+	}
+
+	// 4. Any other non-PHP live releases not yet in results (e.g. newer MariaDB LTS series like mariadb-11.4)
+	for _, liveRel := range liveMap {
+		if processed[liveRel.Name] {
+			continue
+		}
+		if strings.HasPrefix(liveRel.Name, "mariadb-") || strings.HasPrefix(liveRel.Name, "mysql-") {
+			results = append(results, RuntimeUpdateInfo{
+				Name:           liveRel.Name,
+				CurrentVersion: "",
+				LatestVersion:  liveRel.Version,
+				DownloadURL:    liveRel.URL,
+				SHA256:         liveRel.Checksum,
+				HasUpdate:      true,
+				IsNew:          true,
+				MajorChange:    liveRel.MajorChange,
+				CompatNote:     liveRel.CompatNote,
+			})
+			processed[liveRel.Name] = true
+		}
 	}
 
 	return results

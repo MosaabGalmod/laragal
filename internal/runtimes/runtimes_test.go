@@ -102,6 +102,7 @@ func TestDownloaderMatchesCheckUpdatesFallbackURL(t *testing.T) {
 	opts := updater.CheckOptions{
 		HTTPTimeout:    10 * time.Millisecond,
 		PHPReleasesURL: "http://127.0.0.1:59999/unreachable",
+		Registry:       updater.Registry{},
 	}
 	updates := updater.CheckUpdates(context.Background(), opts)
 	updateMap := make(map[string]updater.RuntimeUpdateInfo)

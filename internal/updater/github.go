@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"testing"
 	"time"
 
 	"github.com/laragal/laragal/internal/runtimes"
@@ -66,9 +65,6 @@ func (s *GitHubSource) Latest(ctx context.Context, name string) ([]LiveRelease, 
 
 	url := s.BaseURL
 	if url == "" {
-		if testing.Testing() {
-			return nil, fmt.Errorf("network calls to live github api disabled in tests; configure BaseURL or use catalog")
-		}
 		url = fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", s.Repo)
 	}
 

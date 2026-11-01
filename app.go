@@ -84,11 +84,32 @@ func (a *App) getDataDir() string {
 	return "data"
 }
 
-func (a *App) getRegistry() updater.Registry {
-	if a.registry != nil {
-		return a.registry
+func (a *App) getActivePHPVersion() string {
+	if a.supervisor != nil {
+		for _, rt := range runtimes.All() {
+			if strings.HasPrefix(rt.Name, "php-") {
+				if st, ok := a.supervisor.GetServiceStatus(rt.Name); ok && st.Running {
+					return strings.TrimPrefix(rt.Name, "php-")
+				}
+			}
+		}
 	}
-	return updater.DefaultRegistry
+	defVer := "8.4"
+	if a.cfg != nil && a.cfg.DefaultPHP != "" {
+		defVer = a.cfg.DefaultPHP
+	}
+	return defVer
+}
+
+func (a *App) getRegistry() updater.Registry {
+	reg := a.registry
+	if reg == nil {
+		reg = updater.DefaultRegistry
+	}
+	if pmaSrc, ok := reg["phpmyadmin"].(*updater.PhpMyAdminSource); ok && pmaSrc != nil {
+		pmaSrc.ActivePHPVersion = a.getActivePHPVersion()
+	}
+	return reg
 }
 
 func (a *App) SetRegistry(r updater.Registry) {
@@ -361,6 +382,84 @@ func (a *App) findMySQLExecutable() string {
 	return ""
 }
 
+func (a *App) getMySQLPendingUpgradeMarker() string {
+	dataDir := filepath.Join("data", "mysql")
+	if a.dataDir != "" {
+		dataDir = filepath.Join(a.dataDir, "mysql")
+	}
+	return filepath.Join(dataDir, ".pending_upgrade")
+}
+
+func (a *App) markMySQLPendingUpgrade() {
+	marker := a.getMySQLPendingUpgradeMarker()
+	_ = os.MkdirAll(filepath.Dir(marker), 0755)
+	_ = os.WriteFile(marker, []byte(time.Now().Format(time.RFC3339)), 0644)
+}
+
+func (a *App) isMySQLPendingUpgrade() bool {
+	marker := a.getMySQLPendingUpgradeMarker()
+	_, err := os.Stat(marker)
+	return err == nil
+}
+
+func (a *App) clearMySQLPendingUpgrade() {
+	marker := a.getMySQLPendingUpgradeMarker()
+	_ = os.Remove(marker)
+}
+
+func (a *App) runMySQLUpgradeIfNeeded() error {
+	if !a.isMySQLPendingUpgrade() {
+		return nil
+	}
+
+	candidates := []string{
+		filepath.Join(a.getBaseBinDir(), "mysql", "bin", "mariadb-upgrade.exe"),
+		filepath.Join(a.getBaseBinDir(), "mysql", "bin", "mysql_upgrade.exe"),
+		filepath.Join(a.getBaseBinDir(), "mysql", "mariadb-upgrade.exe"),
+		filepath.Join(a.getBaseBinDir(), "mysql", "mysql_upgrade.exe"),
+	}
+	var upgradeExe string
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			upgradeExe = c
+			break
+		}
+	}
+	if upgradeExe == "" {
+		if p, err := exec.LookPath("mariadb-upgrade.exe"); err == nil {
+			upgradeExe = p
+		} else if p, err := exec.LookPath("mysql_upgrade.exe"); err == nil {
+			upgradeExe = p
+		}
+	}
+
+	if upgradeExe == "" {
+		a.clearMySQLPendingUpgrade()
+		return nil
+	}
+
+	logsDir := filepath.Join("data", "logs")
+	if a.dataDir != "" {
+		logsDir = filepath.Join(a.dataDir, "logs")
+	}
+	_ = os.MkdirAll(logsDir, 0755)
+	logFile := filepath.Join(logsDir, "mariadb-upgrade.log")
+
+	cmd := winutil.Command(upgradeExe, "--port=3306")
+	out, err := cmd.CombinedOutput()
+
+	f, openErr := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if openErr == nil {
+		_, _ = f.WriteString(fmt.Sprintf("\n--- mariadb-upgrade executed at %s ---\n", time.Now().Format(time.RFC3339)))
+		_, _ = f.Write(out)
+		_, _ = f.WriteString("\n")
+		_ = f.Close()
+	}
+
+	a.clearMySQLPendingUpgrade()
+	return err
+}
+
 
 func (a *App) markUserStopped(name string) {
 	a.userStoppedMu.Lock()
@@ -615,6 +714,9 @@ func (a *App) ToggleService(name string) (bool, error) {
 		mysqldExe := a.findMySQLExecutable()
 		if mysqldExe == "" {
 			if a.IsPortListening(3306) {
+				if a.isMySQLPendingUpgrade() {
+					_ = a.runMySQLUpgradeIfNeeded()
+				}
 				return true, nil
 			}
 			return false, fmt.Errorf("MySQL/MariaDB binary not found; install it from runtimes")
@@ -624,6 +726,9 @@ func (a *App) ToggleService(name string) (bool, error) {
 			return false, fmt.Errorf("failed to initialize MySQL data directory: %w", err)
 		}
 		if a.IsPortListening(3306) {
+			if a.isMySQLPendingUpgrade() {
+				_ = a.runMySQLUpgradeIfNeeded()
+			}
 			return true, nil
 		}
 		absDataDir, _ := filepath.Abs(dataDir)
@@ -634,7 +739,14 @@ func (a *App) ToggleService(name string) (bool, error) {
 			"--console",
 		}
 		err := a.supervisor.StartService("mysql", mysqldExe, args, 3306)
-		return err == nil, err
+		if err != nil {
+			return false, err
+		}
+		if a.isMySQLPendingUpgrade() {
+			_ = a.waitForPort(3306, true, 5*time.Second)
+			_ = a.runMySQLUpgradeIfNeeded()
+		}
+		return true, nil
 	}
 
 	return false, fmt.Errorf("unknown service: %s", name)
@@ -975,6 +1087,11 @@ func (a *App) downloadAndInstallArtifact(name string, url string, expectedChecks
 	tempDir := a.getTempDir()
 	_ = os.MkdirAll(tempDir, 0755)
 	destDir := filepath.Join(a.getBaseBinDir(), name)
+	if strings.HasPrefix(strings.ToLower(name), "mariadb") || strings.HasPrefix(strings.ToLower(name), "mysql") {
+		destDir = filepath.Join(a.getBaseBinDir(), "mysql")
+	} else if strings.ToLower(name) == "phpmyadmin" {
+		destDir = filepath.Join(a.getDataDir(), "phpmyadmin")
+	}
 
 	onProgress := func(downloaded int64, total int64, percent int) {
 		if a.ctx != nil {
@@ -1032,6 +1149,14 @@ func (a *App) downloadAndInstallArtifact(name string, url string, expectedChecks
 		return UIMessage{}, err
 	}
 	_ = os.Remove(zipPath)
+
+	if strings.ToLower(name) == "phpmyadmin" {
+		base := "."
+		if a.dataDir != "" {
+			base = filepath.Dir(a.dataDir)
+		}
+		_ = phpmyadmin.EnsureConfig(base)
+	}
 
 	if a.ctx != nil {
 		runtime.EventsEmit(a.ctx, "download-progress", map[string]interface{}{
@@ -1231,22 +1356,34 @@ func (a *App) upgradeRuntimeInternal(name string, confirmed bool) (UIMessage, er
 		return UIMessage{}, fmt.Errorf("major_change_requires_confirmation")
 	}
 
+	family := updater.RuntimeFamily(runtimes.NormalizeName(name))
+	serviceName := name
+	if family == "mysql" {
+		serviceName = "mysql"
+	}
+
 	wasRunning := false
-	if status, exists := a.supervisor.GetServiceStatus(name); exists && status.Running {
-		wasRunning = true
-		_ = a.supervisor.StopService(name)
+	if a.supervisor != nil {
+		if status, exists := a.supervisor.GetServiceStatus(serviceName); exists && status.Running {
+			wasRunning = true
+			_ = a.supervisor.StopService(serviceName)
+		}
 	}
 
 	msg, err := a.downloadAndInstallArtifact(name, url, checksum, algo)
 	if err != nil {
 		if wasRunning {
-			_, _ = a.ToggleService(name)
+			_, _ = a.ToggleService(serviceName)
 		}
 		return UIMessage{}, err
 	}
 
+	if family == "mysql" && majorChange {
+		a.markMySQLPendingUpgrade()
+	}
+
 	if wasRunning {
-		_, _ = a.ToggleService(name)
+		_, _ = a.ToggleService(serviceName)
 	}
 
 	return msg, nil

@@ -1685,3 +1685,186 @@ func TestGitHub_RedisSuccessor_AssetSelectionAndMajorBlock(t *testing.T) {
 	}
 }
 
+func TestMariaDB_UpgradeConfirmedRunsUpgradeScriptOnNextStart(t *testing.T) {
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	dataDir := filepath.Join(tempDir, "data")
+	tmpDir := filepath.Join(tempDir, "tmp")
+	_ = os.MkdirAll(binDir, 0755)
+	_ = os.MkdirAll(dataDir, 0755)
+	_ = os.MkdirAll(tmpDir, 0755)
+
+	mysqlBinDir := filepath.Join(binDir, "mysql", "bin")
+	_ = os.MkdirAll(mysqlBinDir, 0755)
+
+	mysqldExe := filepath.Join(mysqlBinDir, "mysqld.exe")
+	_ = os.WriteFile(mysqldExe, []byte("fake mysqld binary"), 0755)
+
+	upgradeExe := filepath.Join(mysqlBinDir, "mariadb-upgrade.exe")
+	sysCmd := filepath.Join(os.Getenv("WINDIR"), "System32", "cmd.exe")
+	if cmdData, err := os.ReadFile(sysCmd); err == nil {
+		_ = os.WriteFile(upgradeExe, cmdData, 0755)
+	} else {
+		_ = os.WriteFile(upgradeExe, []byte("echo upgrade"), 0755)
+	}
+
+	zipBytes, zipSha := createTestZip(t, "bin/mysqld.exe", []byte("upgraded mariadb 11.4 mysqld"))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"major_releases": [{"release_id": "11.4", "release_status": "Stable", "release_support_type": "Long Term Support"}]}`))
+		case "/11.4/latest/":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(fmt.Sprintf(`{"releases": {"11.4.5": {"release_id": "11.4.5", "files": [{"file_name": "mariadb-11.4.5-winx64.zip", "file_download_url": "http://%s/downloads/mariadb.zip", "checksum": {"sha256sum": "%s"}}]}}}`, r.Host, zipSha)))
+		case "/downloads/mariadb.zip":
+			w.Header().Set("Content-Type", "application/zip")
+			w.Write(zipBytes)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	mariaSrc := updater.NewMariaDBSource(server.URL)
+	mariaSrc.CacheTTL = -1
+	mariaSrc.BaseSeries = "10.11"
+
+	app := &App{
+		supervisor: process.NewSupervisor(),
+		baseBinDir: binDir,
+		dataDir:    dataDir,
+		tempDir:    tmpDir,
+		registry: updater.Registry{
+			"mysql": mariaSrc,
+		},
+	}
+
+	// 1. Plain upgrade of major change must fail with major_change_requires_confirmation
+	_, err := app.UpgradeRuntime("mariadb-11.4")
+	if err == nil {
+		t.Fatalf("expected UpgradeRuntime('mariadb-11.4') to fail with major change confirmation error, got nil")
+	}
+	if err.Error() != "major_change_requires_confirmation" {
+		t.Errorf("expected 'major_change_requires_confirmation', got: %v", err)
+	}
+
+	// 2. Confirmed upgrade must succeed and set pending upgrade marker
+	msg, err := app.UpgradeRuntimeConfirmed("mariadb-11.4")
+	if err != nil {
+		t.Fatalf("UpgradeRuntimeConfirmed failed: %v", err)
+	}
+	if msg.Key == "" {
+		t.Errorf("expected non-empty message key")
+	}
+
+	// Verify marker exists
+	if !app.isMySQLPendingUpgrade() {
+		t.Fatalf("expected pending upgrade marker to be created after confirmed upgrade")
+	}
+
+	// 3. Recreate the fake upgrade tool in bin/mysql/bin since install replaced bin/mysql
+	_ = os.MkdirAll(mysqlBinDir, 0755)
+	if cmdData, err := os.ReadFile(sysCmd); err == nil {
+		_ = os.WriteFile(upgradeExe, cmdData, 0755)
+	}
+
+	// 4. Run MySQL upgrade as would happen on next start
+	err = app.runMySQLUpgradeIfNeeded()
+	if err != nil {
+		t.Fatalf("runMySQLUpgradeIfNeeded failed: %v", err)
+	}
+
+	// Verify marker is removed
+	if app.isMySQLPendingUpgrade() {
+		t.Errorf("expected pending upgrade marker to be removed after execution")
+	}
+
+	// Verify logs were written
+	logPath := filepath.Join(dataDir, "logs", "mariadb-upgrade.log")
+	logContent, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("expected log file at %s: %v", logPath, err)
+	}
+	if !strings.Contains(string(logContent), "mariadb-upgrade executed") {
+		t.Errorf("expected log content to record execution, got: %s", string(logContent))
+	}
+}
+
+func TestPhpMyAdmin_UpgradeAndChecksum(t *testing.T) {
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	dataDir := filepath.Join(tempDir, "data")
+	tmpDir := filepath.Join(tempDir, "tmp")
+	_ = os.MkdirAll(binDir, 0755)
+	_ = os.MkdirAll(dataDir, 0755)
+	_ = os.MkdirAll(tmpDir, 0755)
+
+	zipBytes, zipSha := createTestZip(t, "index.php", []byte("<?php echo 'pma 5.2.3';"))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/home_page/version.json":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"version": "5.2.3", "releases": [{"version": "5.2.3", "php_versions": ">=7.2,<8.4"}]}`))
+		case strings.HasSuffix(r.URL.Path, ".sha256"):
+			w.Write([]byte(fmt.Sprintf("%s  phpMyAdmin-5.2.3-all-languages.zip\n", zipSha)))
+		case strings.HasSuffix(r.URL.Path, ".zip"):
+			w.Header().Set("Content-Type", "application/zip")
+			w.Write(zipBytes)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+
+	pmaSrc := updater.NewPhpMyAdminSource(server.URL + "/home_page/version.json")
+	pmaSrc.FilesBaseURL = server.URL
+	pmaSrc.CacheTTL = -1
+	pmaSrc.ActivePHPVersion = "8.4"
+
+	app := &App{
+		supervisor: process.NewSupervisor(),
+		baseBinDir: binDir,
+		dataDir:    dataDir,
+		tempDir:    tmpDir,
+		registry: updater.Registry{
+			"phpmyadmin": pmaSrc,
+		},
+	}
+
+	// 1. CheckUpdates produces CompatNote for PHP 8.4 vs <8.4
+	updates := app.CheckRuntimeUpdates()
+	var pmaUpdate *updater.RuntimeUpdateInfo
+	for i := range updates {
+		if updates[i].Name == "phpmyadmin" {
+			pmaUpdate = &updates[i]
+			break
+		}
+	}
+	if pmaUpdate == nil {
+		t.Fatalf("expected phpmyadmin in CheckRuntimeUpdates results")
+	}
+	if pmaUpdate.CompatNote == "" {
+		t.Errorf("expected CompatNote to be populated for PHP 8.4")
+	}
+	if !strings.Contains(pmaUpdate.CompatNote, "8.4") || !strings.Contains(pmaUpdate.CompatNote, "<8.4") {
+		t.Errorf("expected CompatNote to mention 8.4 and <8.4, got: %s", pmaUpdate.CompatNote)
+	}
+
+	// 2. Download and install phpmyadmin into data/phpmyadmin
+	msg, err := app.UpgradeRuntime("phpmyadmin")
+	if err != nil {
+		t.Fatalf("UpgradeRuntime('phpmyadmin') failed: %v", err)
+	}
+	if msg.Key == "" {
+		t.Errorf("expected non-empty message key")
+	}
+
+	installedIdx := filepath.Join(dataDir, "phpmyadmin", "index.php")
+	if _, err := os.Stat(installedIdx); err != nil {
+		t.Fatalf("expected index.php at %s: %v", installedIdx, err)
+	}
+}
+

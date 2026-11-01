@@ -51,7 +51,7 @@ func verifyStagingArtifact(name, stagingDir string) error {
 	norm := sanitizeArtifactName(name)
 
 	switch {
-	case strings.HasPrefix(norm, "php"):
+	case strings.HasPrefix(norm, "php") && norm != "phpmyadmin":
 		phpCgi := filepath.Join(stagingDir, "php-cgi.exe")
 		phpExe := filepath.Join(stagingDir, "php.exe")
 		cgiExists := fileExists(phpCgi)
@@ -63,7 +63,7 @@ func verifyStagingArtifact(name, stagingDir string) error {
 		if !fileExists(filepath.Join(stagingDir, "caddy.exe")) {
 			return fmt.Errorf("staging verification failed for caddy: missing expected caddy.exe")
 		}
-	case norm == "mysql" || norm == "mariadb":
+	case strings.HasPrefix(norm, "mysql") || strings.HasPrefix(norm, "mariadb"):
 		mysqldInBin := fileExists(filepath.Join(stagingDir, "bin", "mysqld.exe"))
 		mysqldInRoot := fileExists(filepath.Join(stagingDir, "mysqld.exe"))
 		if !mysqldInBin && !mysqldInRoot {
@@ -159,7 +159,7 @@ func InstallArtifactZipWithRename(name string, zipPath string, destDir string, r
 
 	if !destExists {
 		// New installation
-		if strings.HasPrefix(safeName, "php") {
+		if strings.HasPrefix(safeName, "php") && safeName != "phpmyadmin" {
 			_ = php.EnsurePHPIni(stagingDir, name)
 		}
 		if err := rename(stagingDir, destDir); err != nil {
@@ -173,7 +173,7 @@ func InstallArtifactZipWithRename(name string, zipPath string, destDir string, r
 	var savedDataDir string
 
 	// A. Preserve PHP config
-	if strings.HasPrefix(safeName, "php") {
+	if strings.HasPrefix(safeName, "php") && safeName != "phpmyadmin" {
 		oldIni := filepath.Join(destDir, "php.ini")
 		if fileExists(oldIni) {
 			_ = copyFile(oldIni, filepath.Join(stagingDir, "php.ini"))
@@ -182,7 +182,7 @@ func InstallArtifactZipWithRename(name string, zipPath string, destDir string, r
 	}
 
 	// B. Preserve MariaDB / MySQL config and data directory
-	if safeName == "mysql" || safeName == "mariadb" {
+	if strings.HasPrefix(safeName, "mysql") || strings.HasPrefix(safeName, "mariadb") {
 		oldMyIni := filepath.Join(destDir, "my.ini")
 		if fileExists(oldMyIni) {
 			_ = copyFile(oldMyIni, filepath.Join(stagingDir, "my.ini"))
@@ -206,6 +206,14 @@ func InstallArtifactZipWithRename(name string, zipPath string, destDir string, r
 			if dirExists(stagingData) {
 				_ = os.RemoveAll(stagingData)
 			}
+		}
+	}
+
+	// C. Preserve phpMyAdmin configuration
+	if safeName == "phpmyadmin" {
+		oldCfg := filepath.Join(destDir, "config.inc.php")
+		if fileExists(oldCfg) {
+			_ = copyFile(oldCfg, filepath.Join(stagingDir, "config.inc.php"))
 		}
 	}
 
