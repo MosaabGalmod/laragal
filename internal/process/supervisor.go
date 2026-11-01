@@ -59,45 +59,36 @@ func (s *Supervisor) StartServiceInDirWithEnv(name string, exe string, args []st
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// Check if already running
 	if p, exists := s.processes[name]; exists && p.status.Running {
-		return fmt.Errorf("service %s is already running", name)
-	}
-
-	if filepath.Base(exe) == exe {
-		if lp, err := exec.LookPath(exe); err == nil {
-			exe = lp
-		}
-	} else if absExe, err := filepath.Abs(exe); err == nil {
-		exe = absExe
-	}
-	if dir != "" {
-		if absDir, err := filepath.Abs(dir); err == nil {
-			dir = absDir
-		}
-	}
-
-	logsDir := s.getLogsDir()
-	if err := os.MkdirAll(logsDir, 0755); err != nil {
-		return fmt.Errorf("failed to create logs directory: %w", err)
-	}
-	logPath := filepath.Join(logsDir, fmt.Sprintf("%s.log", name))
-	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open log file for %s: %w", name, err)
+		return nil
 	}
 
 	cmd := winutil.Command(exe, args...)
-	cmd.Stdout = logFile
-	cmd.Stderr = logFile
 	if dir != "" {
 		cmd.Dir = dir
 	}
 	if len(env) > 0 {
-		cmd.Env = append(cmd.Environ(), env...)
+		cmd.Env = append(os.Environ(), env...)
 	}
+
+	// Prepare log file
+	logsDir := s.getLogsDir()
+	_ = os.MkdirAll(logsDir, 0755)
+	logFile, err := os.OpenFile(filepath.Join(logsDir, fmt.Sprintf("%s.log", name)), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err == nil {
+		cmd.Stdout = logFile
+		cmd.Stderr = logFile
+	}
+
+	// Set process group on Windows so children can be killed
+	winutil.HideWindow(cmd)
+
 	if err := cmd.Start(); err != nil {
-		_ = logFile.Close()
-		return fmt.Errorf("failed to start service %s: %w", name, err)
+		if logFile != nil {
+			_ = logFile.Close()
+		}
+		return fmt.Errorf("failed to start %s: %w", name, err)
 	}
 
 	p := &managedProcess{
@@ -111,22 +102,20 @@ func (s *Supervisor) StartServiceInDirWithEnv(name string, exe string, args []st
 	}
 	s.processes[name] = p
 
-	// Monitor termination in background goroutine
+	// Monitor in background
 	go func() {
 		_ = cmd.Wait()
-		_ = logFile.Close()
+		if logFile != nil {
+			_ = logFile.Close()
+		}
 
 		s.mu.Lock()
-		isCurrent := false
-		if current, ok := s.processes[name]; ok && current == p {
-			current.status.Running = false
-			current.status.PID = 0
-			isCurrent = true
-		}
+		p.status.Running = false
+		p.status.PID = 0
 		onExit := s.OnExit
 		s.mu.Unlock()
 
-		if isCurrent && onExit != nil {
+		if onExit != nil {
 			onExit(name)
 		}
 	}()
@@ -183,4 +172,32 @@ func (s *Supervisor) GetServiceStatus(name string) (ServiceStatus, bool) {
 		return ServiceStatus{Name: name, Running: false}, false
 	}
 	return p.status, true
+}
+
+func (s *Supervisor) GetAllServices() []ServiceStatus {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	res := make([]ServiceStatus, 0, len(s.processes))
+	for _, p := range s.processes {
+		res = append(res, p.status)
+	}
+	return res
+}
+
+func (s *Supervisor) RemoveService(name string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.processes, name)
+}
+
+func (s *Supervisor) SetServiceStatus(name string, status ServiceStatus) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.processes == nil {
+		s.processes = make(map[string]*managedProcess)
+	}
+	s.processes[name] = &managedProcess{
+		status: status,
+	}
 }

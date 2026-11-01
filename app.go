@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -20,6 +22,7 @@ import (
 	"github.com/laragal/laragal/internal/privilege"
 	"github.com/laragal/laragal/internal/process"
 	"github.com/laragal/laragal/internal/projects"
+	"github.com/laragal/laragal/internal/runtimes"
 	"github.com/laragal/laragal/internal/services/adminer"
 	"github.com/laragal/laragal/internal/services/caddy"
 	"github.com/laragal/laragal/internal/services/mysql"
@@ -30,15 +33,96 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+
+type UIMessage struct {
+	Key    string            `json:"key"`
+	Params map[string]string `json:"params,omitempty"`
+}
+
+type FrameCheck struct {
+	Frameable bool   `json:"frameable"`
+	Reason    string `json:"reason"`
+	Status    int    `json:"status"`
+}
+
 type App struct {
-	ctx        context.Context
-	cfg        *config.AppConfig
-	supervisor *process.Supervisor
-	sites      []caddy.SiteDef
-	sitesMu    sync.RWMutex
-	cfgPath       string
-	userStopped   map[string]bool
-	userStoppedMu sync.RWMutex
+	ctx               context.Context
+	cfg               *config.AppConfig
+	supervisor        *process.Supervisor
+	sites             []caddy.SiteDef
+	sitesMu           sync.RWMutex
+	cfgPath           string
+	userStopped       map[string]bool
+	userStoppedMu     sync.RWMutex
+	phpReleasesURL    string
+	baseBinDir        string
+	tempDir           string
+	dataDir           string
+	checkClient       *http.Client
+	caddyRootCertPath string
+	registry          updater.Registry
+}
+
+func (a *App) getBaseBinDir() string {
+	if a.baseBinDir != "" {
+		return a.baseBinDir
+	}
+	return "bin"
+}
+
+func (a *App) getTempDir() string {
+	if a.tempDir != "" {
+		return a.tempDir
+	}
+	return filepath.Join("data", "tmp")
+}
+
+func (a *App) getDataDir() string {
+	if a.dataDir != "" {
+		return a.dataDir
+	}
+	return "data"
+}
+
+func (a *App) getActivePHPVersion() string {
+	if a.supervisor != nil {
+		for _, rt := range runtimes.All() {
+			if strings.HasPrefix(rt.Name, "php-") {
+				if st, ok := a.supervisor.GetServiceStatus(rt.Name); ok && st.Running {
+					return strings.TrimPrefix(rt.Name, "php-")
+				}
+			}
+		}
+	}
+	defVer := "8.4"
+	if a.cfg != nil && a.cfg.DefaultPHP != "" {
+		defVer = a.cfg.DefaultPHP
+	}
+	return defVer
+}
+
+func (a *App) getRegistry() updater.Registry {
+	reg := a.registry
+	if reg == nil {
+		reg = updater.DefaultRegistry
+	}
+	if pmaSrc, ok := reg["phpmyadmin"].(*updater.PhpMyAdminSource); ok && pmaSrc != nil {
+		pmaSrc.ActivePHPVersion = a.getActivePHPVersion()
+	}
+	if mariaSrc, ok := reg["mysql"].(*updater.MariaDBSource); ok && mariaSrc != nil {
+		if installed := a.detectInstalledVersion("mysql"); installed != "" {
+			mariaSrc.InstalledVersion = installed
+		}
+	}
+	return reg
+}
+
+func (a *App) SetRegistry(r updater.Registry) {
+	a.registry = r
+}
+
+func (a *App) SetPHPReleasesURL(u string) {
+	a.phpReleasesURL = u
 }
 
 func NewApp() *App {
@@ -67,7 +151,7 @@ func NewApp() *App {
 }
 
 func (a *App) getCacheFilePath() string {
-	return filepath.Join("data", "sites_cache.json")
+	return filepath.Join(a.getDataDir(), "sites_cache.json")
 }
 
 func (a *App) loadSitesCache() {
@@ -96,7 +180,7 @@ func (a *App) saveSitesCache() {
 	if count == 0 || err != nil {
 		return
 	}
-	_ = os.MkdirAll("data", 0755)
+	_ = os.MkdirAll(a.getDataDir(), 0755)
 	_ = os.WriteFile(a.getCacheFilePath(), data, 0644)
 }
 
@@ -188,10 +272,11 @@ func (a *App) findPHPExecutable() string {
 
 func (a *App) findPHPExecutableForVersion(version string) string {
 	normVer := projects.NormalizePHPVersion(version)
+	baseBin := a.getBaseBinDir()
 	candidates := []string{
-		filepath.Join("bin", fmt.Sprintf("php-%s", normVer), "php-cgi.exe"),
-		filepath.Join("bin", fmt.Sprintf("php%s", strings.ReplaceAll(normVer, ".", "")), "php-cgi.exe"),
-		filepath.Join("bin", "php", "php-cgi.exe"),
+		filepath.Join(baseBin, fmt.Sprintf("php-%s", normVer), "php-cgi.exe"),
+		filepath.Join(baseBin, fmt.Sprintf("php%s", strings.ReplaceAll(normVer, ".", "")), "php-cgi.exe"),
+		filepath.Join(baseBin, "php", "php-cgi.exe"),
 	}
 
 	if localApp := os.Getenv("LOCALAPPDATA"); localApp != "" {
@@ -227,6 +312,17 @@ func (a *App) findPHPExecutableForVersion(version string) string {
 func (a *App) findRedisExecutable() string {
 	candidates := []string{
 		filepath.Join("bin", "redis", "redis-server.exe"),
+	}
+	if a.baseBinDir != "" {
+		candidates = append([]string{
+			filepath.Join(a.baseBinDir, "redis", "redis-server.exe"),
+		}, candidates...)
+		if matches, err := filepath.Glob(filepath.Join(a.baseBinDir, "redis", "*", "redis-server.exe")); err == nil {
+			candidates = append(candidates, matches...)
+		}
+	}
+	if matches, err := filepath.Glob(filepath.Join("bin", "redis", "*", "redis-server.exe")); err == nil {
+		candidates = append(candidates, matches...)
 	}
 
 	if localApp := os.Getenv("LOCALAPPDATA"); localApp != "" {
@@ -291,6 +387,84 @@ func (a *App) findMySQLExecutable() string {
 	return ""
 }
 
+func (a *App) getMySQLPendingUpgradeMarker() string {
+	dataDir := filepath.Join("data", "mysql")
+	if a.dataDir != "" {
+		dataDir = filepath.Join(a.dataDir, "mysql")
+	}
+	return filepath.Join(dataDir, ".pending_upgrade")
+}
+
+func (a *App) markMySQLPendingUpgrade() {
+	marker := a.getMySQLPendingUpgradeMarker()
+	_ = os.MkdirAll(filepath.Dir(marker), 0755)
+	_ = os.WriteFile(marker, []byte(time.Now().Format(time.RFC3339)), 0644)
+}
+
+func (a *App) isMySQLPendingUpgrade() bool {
+	marker := a.getMySQLPendingUpgradeMarker()
+	_, err := os.Stat(marker)
+	return err == nil
+}
+
+func (a *App) clearMySQLPendingUpgrade() {
+	marker := a.getMySQLPendingUpgradeMarker()
+	_ = os.Remove(marker)
+}
+
+func (a *App) runMySQLUpgradeIfNeeded() error {
+	if !a.isMySQLPendingUpgrade() {
+		return nil
+	}
+
+	candidates := []string{
+		filepath.Join(a.getBaseBinDir(), "mysql", "bin", "mariadb-upgrade.exe"),
+		filepath.Join(a.getBaseBinDir(), "mysql", "bin", "mysql_upgrade.exe"),
+		filepath.Join(a.getBaseBinDir(), "mysql", "mariadb-upgrade.exe"),
+		filepath.Join(a.getBaseBinDir(), "mysql", "mysql_upgrade.exe"),
+	}
+	var upgradeExe string
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			upgradeExe = c
+			break
+		}
+	}
+	if upgradeExe == "" {
+		if p, err := exec.LookPath("mariadb-upgrade.exe"); err == nil {
+			upgradeExe = p
+		} else if p, err := exec.LookPath("mysql_upgrade.exe"); err == nil {
+			upgradeExe = p
+		}
+	}
+
+	if upgradeExe == "" {
+		a.clearMySQLPendingUpgrade()
+		return nil
+	}
+
+	logsDir := filepath.Join("data", "logs")
+	if a.dataDir != "" {
+		logsDir = filepath.Join(a.dataDir, "logs")
+	}
+	_ = os.MkdirAll(logsDir, 0755)
+	logFile := filepath.Join(logsDir, "mariadb-upgrade.log")
+
+	cmd := winutil.Command(upgradeExe, "--port=3306")
+	out, err := cmd.CombinedOutput()
+
+	f, openErr := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if openErr == nil {
+		_, _ = f.WriteString(fmt.Sprintf("\n--- mariadb-upgrade executed at %s ---\n", time.Now().Format(time.RFC3339)))
+		_, _ = f.Write(out)
+		_, _ = f.WriteString("\n")
+		_ = f.Close()
+	}
+
+	a.clearMySQLPendingUpgrade()
+	return err
+}
+
 
 func (a *App) markUserStopped(name string) {
 	a.userStoppedMu.Lock()
@@ -322,8 +496,8 @@ func (a *App) ensurePHPServiceRunning(version string) error {
 	if a.supervisor == nil {
 		return nil
 	}
-	normVer := projects.NormalizePHPVersion(version)
-	port := projects.PHPPortForVersion(normVer)
+	normVer := runtimes.NormalizePHPVersion(version)
+	port := runtimes.PHPPortForVersion(normVer)
 	serviceName := fmt.Sprintf("php-%s", normVer)
 	if a.isUserStopped(serviceName) {
 		return nil
@@ -336,8 +510,10 @@ func (a *App) ensurePHPServiceRunning(version string) error {
 
 	phpExe := a.findPHPExecutableForVersion(normVer)
 	if phpExe == "" {
-		return fmt.Errorf("محرك PHP %s غير متوفر", normVer)
+		return fmt.Errorf("PHP executable for %s not found", normVer)
 	}
+
+	_ = php.EnsurePHPIni(filepath.Dir(phpExe), normVer)
 
 	phpEnv := []string{
 		"PHP_FCGI_CHILDREN=8",
@@ -383,12 +559,24 @@ func (a *App) StartServices() {
 		"PHP_FCGI_MAX_REQUESTS=10000",
 	}
 
-	// 1. Start PHP FastCGI 8.4 and 8.3
-	if php84 := a.findPHPExecutableForVersion("8.4"); php84 != "" {
-		_ = a.supervisor.StartServiceWithEnv("php-8.4", php84, []string{"-b", "127.0.0.1:9084"}, phpEnv, 9084)
+	// 1. Start PHP FastCGI services from discovered / catalog PHP versions
+	defVer := "8.4"
+	if a.cfg != nil && a.cfg.DefaultPHP != "" {
+		defVer = runtimes.NormalizePHPVersion(a.cfg.DefaultPHP)
 	}
-	if php83 := a.findPHPExecutableForVersion("8.3"); php83 != "" {
-		_ = a.supervisor.StartServiceWithEnv("php-8.3", php83, []string{"-b", "127.0.0.1:9083"}, phpEnv, 9083)
+	versionsToStart := []string{defVer}
+	for _, ver := range []string{"8.4", "8.3"} {
+		if ver != defVer {
+			versionsToStart = append(versionsToStart, ver)
+		}
+	}
+	for _, ver := range versionsToStart {
+		rtName := fmt.Sprintf("php-%s", ver)
+		port := runtimes.PHPPortForVersion(ver)
+		if phpExe := a.findPHPExecutableForVersion(ver); phpExe != "" {
+			_ = php.EnsurePHPIni(filepath.Dir(phpExe), ver)
+			_ = a.supervisor.StartServiceWithEnv(rtName, phpExe, []string{"-b", fmt.Sprintf("127.0.0.1:%d", port)}, phpEnv, port)
+		}
 	}
 
 	// 2. Start Caddy on 443
@@ -432,7 +620,7 @@ func (a *App) ToggleService(name string) (bool, error) {
 	isPHP := strings.HasPrefix(name, "php-")
 	if isPHP {
 		ver := strings.TrimPrefix(name, "php-")
-		port = projects.PHPPortForVersion(ver)
+		port = runtimes.PHPPortForVersion(ver)
 	} else {
 		switch name {
 		case "caddy":
@@ -461,7 +649,7 @@ func (a *App) ToggleService(name string) (bool, error) {
 		}
 		if port > 0 {
 			if !a.waitForPort(port, false, 5*time.Second) {
-				return true, fmt.Errorf("تعذر إيقاف الخدمة %s: لا يزال المنفذ %d قيد الاستخدام", name, port)
+				return true, fmt.Errorf("failed to stop service %s: port %d is still listening", name, port)
 			}
 		}
 		return false, nil
@@ -478,8 +666,9 @@ func (a *App) ToggleService(name string) (bool, error) {
 		ver := strings.TrimPrefix(name, "php-")
 		phpExe := a.findPHPExecutableForVersion(ver)
 		if phpExe == "" {
-			return false, fmt.Errorf("محرك PHP %s غير متوفر. يرجى تنزيله من قسم الحزم المحمولة.", ver)
+			return false, fmt.Errorf("PHP executable for %s not found; download it from runtimes", ver)
 		}
+		_ = php.EnsurePHPIni(filepath.Dir(phpExe), ver)
 		phpEnv := []string{
 			"PHP_FCGI_CHILDREN=8",
 			"PHP_FCGI_MAX_REQUESTS=10000",
@@ -489,7 +678,7 @@ func (a *App) ToggleService(name string) (bool, error) {
 			return false, err
 		}
 		if !a.waitForPort(port, true, 5*time.Second) {
-			return false, fmt.Errorf("تعذر تشغيل الخدمة %s: لم يستجب المنفذ %d في غضون 5 ثوانٍ", name, port)
+			return false, fmt.Errorf("failed to start service %s: port %d did not respond within 5 seconds", name, port)
 		}
 		return true, nil
 	}
@@ -498,7 +687,7 @@ func (a *App) ToggleService(name string) (bool, error) {
 	case "caddy":
 		caddyExe := a.findCaddyExecutable()
 		if caddyExe == "" {
-			return false, fmt.Errorf("خادم Caddy غير مثبت بعد. يرجى تنزيله من قسم الحزم المحمولة.")
+			return false, fmt.Errorf("Caddy binary not found; install it from runtimes")
 		}
 		_ = a.ReloadCaddy()
 		caddyDir := filepath.Join("data", "caddy")
@@ -510,7 +699,7 @@ func (a *App) ToggleService(name string) (bool, error) {
 	case "mailpit":
 		mailpitExe := filepath.Join("bin", "mailpit", "mailpit.exe")
 		if _, err := os.Stat(mailpitExe); err != nil {
-			return false, fmt.Errorf("صائد البريد Mailpit غير مثبت بعد.")
+			return false, fmt.Errorf("Mailpit binary not found")
 		}
 		err := a.supervisor.StartService("mailpit", mailpitExe, []string{"--smtp-bind-addr", "127.0.0.1:1025", "--ui-bind-addr", "127.0.0.1:8025"}, 1025)
 		return err == nil, err
@@ -518,24 +707,37 @@ func (a *App) ToggleService(name string) (bool, error) {
 	case "redis":
 		redisExe := a.findRedisExecutable()
 		if redisExe == "" {
-			return false, fmt.Errorf("خادم Redis غير متوفر حالياً على الجهاز.")
+			return false, fmt.Errorf("Redis binary not found on this system")
 		}
-		err := a.supervisor.StartService("redis", redisExe, []string{}, 6379)
+		redisDir := filepath.Dir(redisExe)
+		args := []string{}
+		if _, err := os.Stat(filepath.Join(redisDir, "redis.conf")); err == nil {
+			args = append(args, "redis.conf")
+		} else if _, err := os.Stat(filepath.Join(redisDir, "redis.windows.conf")); err == nil {
+			args = append(args, "redis.windows.conf")
+		}
+		err := a.supervisor.StartServiceInDir("redis", redisExe, args, redisDir, 6379)
 		return err == nil, err
 
 	case "mysql":
 		mysqldExe := a.findMySQLExecutable()
 		if mysqldExe == "" {
 			if a.IsPortListening(3306) {
+				if a.isMySQLPendingUpgrade() {
+					_ = a.runMySQLUpgradeIfNeeded()
+				}
 				return true, nil
 			}
-			return false, fmt.Errorf("خادم MySQL/MariaDB المحمول غير متوفر. يمكنك تنزيله من قسم الحزم المحمولة.")
+			return false, fmt.Errorf("MySQL/MariaDB binary not found; install it from runtimes")
 		}
 		dataDir := filepath.Join("data", "mysql")
 		if err := mysql.EnsureDataDir(mysqldExe, dataDir); err != nil {
-			return false, fmt.Errorf("تعذر تهيئة مجلد بيانات MySQL: %w", err)
+			return false, fmt.Errorf("failed to initialize MySQL data directory: %w", err)
 		}
 		if a.IsPortListening(3306) {
+			if a.isMySQLPendingUpgrade() {
+				_ = a.runMySQLUpgradeIfNeeded()
+			}
 			return true, nil
 		}
 		absDataDir, _ := filepath.Abs(dataDir)
@@ -546,35 +748,97 @@ func (a *App) ToggleService(name string) (bool, error) {
 			"--console",
 		}
 		err := a.supervisor.StartService("mysql", mysqldExe, args, 3306)
-		return err == nil, err
+		if err != nil {
+			return false, err
+		}
+		if a.isMySQLPendingUpgrade() {
+			_ = a.waitForPort(3306, true, 5*time.Second)
+			_ = a.runMySQLUpgradeIfNeeded()
+		}
+		return true, nil
 	}
 
-	return false, fmt.Errorf("الخدمة %s غير معروفة", name)
+	return false, fmt.Errorf("unknown service: %s", name)
 }
 
-func (a *App) CheckPortConflict(port int) string {
+func (a *App) CheckPortConflict(port int) UIMessage {
 	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), 200*time.Millisecond)
 	if err == nil {
 		_ = conn.Close()
 		for _, s := range a.GetServices() {
 			if s.Running && s.Port == port {
-				return ""
+				return UIMessage{}
 			}
 		}
-		return fmt.Sprintf("تنبيه: المنفذ %d مستخدم حالياً من قِبل برنامج آخر على جهازك (مثل خادم محلي قديم).", port)
+		return UIMessage{
+			Key:    "port_conflict_warning",
+			Params: map[string]string{"port": fmt.Sprintf("%d", port)},
+		}
 	}
-	return ""
+	return UIMessage{}
+}
+
+func (a *App) getDiscoveredPHPServices() []string {
+	seen := make(map[string]bool)
+	var list []string
+
+	// 1. Catalog PHP runtimes
+	for _, rt := range runtimes.All() {
+		if strings.HasPrefix(rt.Name, "php-") {
+			if !seen[rt.Name] {
+				seen[rt.Name] = true
+				list = append(list, rt.Name)
+			}
+		}
+	}
+
+	// 2. On-disk php-X.Y folders in baseBinDir containing php-cgi.exe (or php.exe)
+	binDir := a.getBaseBinDir()
+	if entries, err := os.ReadDir(binDir); err == nil {
+		for _, e := range entries {
+			if e.IsDir() && strings.HasPrefix(e.Name(), "php-") {
+				cgi := filepath.Join(binDir, e.Name(), "php-cgi.exe")
+				exe := filepath.Join(binDir, e.Name(), "php.exe")
+				cgiExists := false
+				if info, sErr := os.Stat(cgi); sErr == nil && !info.IsDir() {
+					cgiExists = true
+				} else if info, sErr := os.Stat(exe); sErr == nil && !info.IsDir() {
+					cgiExists = true
+				}
+				if cgiExists && !seen[e.Name()] {
+					seen[e.Name()] = true
+					list = append(list, e.Name())
+				}
+			}
+		}
+	}
+
+	// 3. Any php-* service currently registered or running in supervisor
+	if a.supervisor != nil {
+		for _, st := range a.supervisor.GetAllServices() {
+			if strings.HasPrefix(st.Name, "php-") && !seen[st.Name] {
+				seen[st.Name] = true
+				list = append(list, st.Name)
+			}
+		}
+	}
+
+	return list
 }
 
 func (a *App) GetServices() []process.ServiceStatus {
-	serviceNames := []string{"caddy", "php-8.5", "php-8.4", "php-8.3", "mysql", "redis", "mailpit"}
+	phpServices := a.getDiscoveredPHPServices()
+	serviceNames := []string{"caddy"}
+	serviceNames = append(serviceNames, phpServices...)
+	serviceNames = append(serviceNames, "mysql", "redis", "mailpit")
+
 	result := make([]process.ServiceStatus, 0, len(serviceNames))
 	for _, name := range serviceNames {
 		status, _ := a.supervisor.GetServiceStatus(name)
 		var port int
 		if strings.HasPrefix(name, "php-") {
 			ver := strings.TrimPrefix(name, "php-")
-			port = projects.PHPPortForVersion(ver)
+			port = runtimes.PHPPortForVersion(ver)
 		} else {
 			switch name {
 			case "caddy":
@@ -649,20 +913,20 @@ func (a *App) AddSite(domain string, rootPath string, phpVersion string) error {
 	return nil
 }
 
-func (a *App) InstallSSLTrust() (string, error) {
+func (a *App) InstallSSLTrust() (UIMessage, error) {
 	rootCertPath := a.findCaddyRootCert()
 	if rootCertPath == "" {
-		return "لم يتم العثور على شهادة الجذر لـ Caddy بعد. يرجى تشغيل خادم Caddy أولاً لتوليدها.", nil
+		return UIMessage{Key: "ssl_root_cert_not_found"}, nil
 	}
 
 	fingerprint, err := certs.ReadCertFingerprint(rootCertPath)
 	if err != nil {
-		return "", err
+		return UIMessage{}, err
 	}
 
 	trusted, _ := certs.IsCertTrustedInWindowsStore(fingerprint)
 	if trusted {
-		return "شهادة الجذر المحلية موثوقة بالفعل في نظام ويندوز.", nil
+		return UIMessage{Key: "ssl_already_trusted"}, nil
 	}
 
 	// 1. Try native caddy trust if available
@@ -670,7 +934,7 @@ func (a *App) InstallSSLTrust() (string, error) {
 	if caddyExe != "" {
 		_ = winutil.Command(caddyExe, "trust").Run()
 		if trustedNow, _ := certs.IsCertTrustedInWindowsStore(fingerprint); trustedNow {
-			return "تم تثبيت شهادة الجذر في متجر شهادات ويندوز بنجاح.", nil
+			return UIMessage{Key: "ssl_install_success"}, nil
 		}
 	}
 
@@ -684,23 +948,159 @@ func (a *App) InstallSSLTrust() (string, error) {
 		elCmd := winutil.Command(elevatedCmd[0], elevatedCmd[1:]...)
 		elOut, elErr := elCmd.CombinedOutput()
 		if elErr != nil {
-			return string(out) + " " + string(elOut), elErr
+			return UIMessage{}, fmt.Errorf("%s %s: %w", string(out), string(elOut), elErr)
 		}
 	}
 
-	return "تم تثبيت شهادة الجذر في متجر شهادات ويندوز بنجاح.", nil
+	return UIMessage{Key: "ssl_install_success"}, nil
 }
 
-func (a *App) DownloadBinary(name string) (string, error) {
-	url, err := downloader.GetDownloadURL(name)
-	if err != nil {
-		return "", err
+func (a *App) CheckFrameable(domain string) (FrameCheck, error) {
+	cleanDomain := strings.TrimSpace(domain)
+	if cleanDomain == "" {
+		return FrameCheck{}, fmt.Errorf("domain cannot be empty")
 	}
 
-	tempDir := filepath.Join("data", "tmp")
+	// 1. Only allow domains that belong to the current LaraGal site list
+	sites := a.GetSites()
+	matched := false
+	for _, s := range sites {
+		if strings.EqualFold(strings.TrimSpace(s.Domain), cleanDomain) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return FrameCheck{}, fmt.Errorf("domain %q is not in the known sites list", cleanDomain)
+	}
+
+	// 2. Setup TLS transport with Caddy local root cert
+	var clientTransport http.RoundTripper
+	if a.checkClient != nil && a.checkClient.Transport != nil {
+		clientTransport = a.checkClient.Transport
+	} else {
+		rootCAs, err := x509.SystemCertPool()
+		if err != nil || rootCAs == nil {
+			rootCAs = x509.NewCertPool()
+		}
+		certPath := a.caddyRootCertPath
+		if certPath == "" {
+			certPath = a.findCaddyRootCert()
+		}
+		if certPath != "" {
+			if pemData, err := os.ReadFile(certPath); err == nil {
+				rootCAs.AppendCertsFromPEM(pemData)
+			}
+		}
+		clientTransport = &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: rootCAs,
+			},
+		}
+	}
+
+	client := &http.Client{
+		Transport: clientTransport,
+		Timeout:   5 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return fmt.Errorf("stopped after 10 redirects")
+			}
+			if !strings.EqualFold(req.URL.Host, via[0].URL.Host) {
+				return http.ErrUseLastResponse
+			}
+			return nil
+		},
+	}
+
+	targetURL := fmt.Sprintf("https://%s/", strings.Trim(cleanDomain, "/"))
+
+	// 3. Perform HEAD request with 5s timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	headReq, err := http.NewRequestWithContext(ctx, http.MethodHead, targetURL, nil)
+	if err != nil {
+		return FrameCheck{Frameable: false, Reason: "unreachable", Status: 0}, nil
+	}
+
+	resp, err := client.Do(headReq)
+	if err != nil {
+		return FrameCheck{Frameable: false, Reason: "unreachable", Status: 0}, nil
+	}
+	defer func() {
+		if resp != nil && resp.Body != nil {
+			_ = resp.Body.Close()
+		}
+	}()
+
+	// 4. Fall back to GET if HEAD not allowed (405 or 501)
+	if resp.StatusCode == http.StatusMethodNotAllowed || resp.StatusCode == http.StatusNotImplemented {
+		getReq, getErr := http.NewRequestWithContext(ctx, http.MethodGet, targetURL, nil)
+		if getErr == nil {
+			if getResp, doErr := client.Do(getReq); doErr == nil {
+				_ = resp.Body.Close()
+				resp = getResp
+			}
+		}
+	}
+
+	// 5. Check X-Frame-Options
+	// Treat X-Frame-Options DENY or SAMEORIGIN as not frameable (the preview origin differs).
+	for _, val := range resp.Header.Values("X-Frame-Options") {
+		for _, part := range strings.Split(val, ",") {
+			clean := strings.ToUpper(strings.TrimSpace(part))
+			if clean == "DENY" || clean == "SAMEORIGIN" {
+				return FrameCheck{
+					Frameable: false,
+					Reason:    "x_frame_options",
+					Status:    resp.StatusCode,
+				}, nil
+			}
+		}
+	}
+
+	// 6. Parse CSP frame-ancestors: not frameable unless it contains `*`.
+	for _, csp := range resp.Header.Values("Content-Security-Policy") {
+		directives := strings.Split(csp, ";")
+		for _, directive := range directives {
+			tokens := strings.Fields(directive)
+			if len(tokens) > 0 && strings.EqualFold(tokens[0], "frame-ancestors") {
+				hasWildcard := false
+				for _, src := range tokens[1:] {
+					if src == "*" {
+						hasWildcard = true
+						break
+					}
+				}
+				if !hasWildcard {
+					return FrameCheck{
+						Frameable: false,
+						Reason:    "csp_frame_ancestors",
+						Status:    resp.StatusCode,
+					}, nil
+				}
+			}
+		}
+	}
+
+	// 7. No framing restrictions found -> frameable
+	return FrameCheck{
+		Frameable: true,
+		Reason:    "",
+		Status:    resp.StatusCode,
+	}, nil
+}
+
+func (a *App) downloadAndInstallArtifact(name string, url string, expectedChecksum string, checksumAlgo ...string) (UIMessage, error) {
+	tempDir := a.getTempDir()
 	_ = os.MkdirAll(tempDir, 0755)
-	zipPath := filepath.Join(tempDir, fmt.Sprintf("%s.zip", name))
-	destDir := filepath.Join("bin", name)
+	destDir := filepath.Join(a.getBaseBinDir(), name)
+	if strings.HasPrefix(strings.ToLower(name), "mariadb") || strings.HasPrefix(strings.ToLower(name), "mysql") {
+		destDir = filepath.Join(a.getBaseBinDir(), "mysql")
+	} else if strings.ToLower(name) == "phpmyadmin" {
+		destDir = filepath.Join(a.getDataDir(), "phpmyadmin")
+	}
 
 	onProgress := func(downloaded int64, total int64, percent int) {
 		if a.ctx != nil {
@@ -718,13 +1118,23 @@ func (a *App) DownloadBinary(name string) (string, error) {
 		ctx = a.ctx
 	}
 
+	algo := "sha256"
+	if len(checksumAlgo) > 0 && checksumAlgo[0] != "" {
+		algo = checksumAlgo[0]
+	}
+
 	if strings.ToLower(name) == "adminer" {
-		adminerDir := filepath.Join("data", "adminer")
+		adminerDir := filepath.Join(a.getDataDir(), "adminer")
 		_ = os.MkdirAll(adminerDir, 0755)
-		adminerPath := filepath.Join(adminerDir, "index.php")
-		if err := downloader.DownloadFile(ctx, url, adminerPath, onProgress); err != nil {
-			return "", err
+		adminerPath := filepath.Join(adminerDir, "adminer-core.php")
+		if err := downloader.DownloadFile(ctx, url, adminerPath, onProgress, algo, expectedChecksum); err != nil {
+			return UIMessage{}, err
 		}
+		base := "."
+		if a.dataDir != "" {
+			base = filepath.Dir(a.dataDir)
+		}
+		_, _ = adminer.EnsureInstalled(base)
 		if a.ctx != nil {
 			runtime.EventsEmit(a.ctx, "download-progress", map[string]interface{}{
 				"name":       name,
@@ -734,22 +1144,27 @@ func (a *App) DownloadBinary(name string) (string, error) {
 				"completed":  true,
 			})
 		}
-		return fmt.Sprintf("تم تنزيل وتحديث أداة Adminer بنجاح في %s", adminerPath), nil
+		return UIMessage{Key: "adminer_download_success", Params: map[string]string{"path": filepath.ToSlash(adminerPath)}}, nil
 	}
 
-	if err := downloader.DownloadFile(ctx, url, zipPath, onProgress); err != nil {
+	zipPath := filepath.Join(tempDir, fmt.Sprintf("%s.zip", name))
+	if err := downloader.DownloadFile(ctx, url, zipPath, onProgress, algo, expectedChecksum); err != nil {
 		_ = os.Remove(zipPath)
-		return "", err
+		return UIMessage{}, err
 	}
 
-	if err := downloader.ExtractZip(zipPath, destDir); err != nil {
+	if err := downloader.InstallArtifactZip(name, zipPath, destDir); err != nil {
 		_ = os.Remove(zipPath)
-		return "", err
+		return UIMessage{}, err
 	}
 	_ = os.Remove(zipPath)
 
-	if strings.HasPrefix(strings.ToLower(name), "php") {
-		_ = php.EnsurePHPIni(destDir)
+	if strings.ToLower(name) == "phpmyadmin" {
+		base := "."
+		if a.dataDir != "" {
+			base = filepath.Dir(a.dataDir)
+		}
+		_ = phpmyadmin.EnsureConfig(base)
 	}
 
 	if a.ctx != nil {
@@ -762,7 +1177,144 @@ func (a *App) DownloadBinary(name string) (string, error) {
 		})
 	}
 
-	return fmt.Sprintf("تم تنزيل وتثبيت %s بنجاح في %s", name, destDir), nil
+	return UIMessage{Key: "runtime_install_success_path", Params: map[string]string{"name": name, "dest": filepath.ToSlash(destDir)}}, nil
+}
+
+// resolveArtifactInfo resolves an artifact for any name: live release (with checksum) if available, else catalog pinned.
+// Returns (url, checksum, algo, version, majorChange, err).
+func (a *App) resolveArtifactInfo(name string) (string, string, string, string, bool, error) {
+	norm := runtimes.NormalizeName(name)
+	ctx := context.Background()
+	if a.ctx != nil {
+		ctx = a.ctx
+	}
+
+	// 1. Try live release via the registry
+	family := updater.RuntimeFamily(norm)
+
+	// For PHP, feed releases for uncataloged versions are only allowed if newer than highest catalog minor
+	if family == "php" {
+		if _, inCatalog := runtimes.Get(norm); !inCatalog {
+			minor := strings.TrimPrefix(norm, "php-")
+			if !updater.IsVersionNewer(updater.HighestCatalogPHPMajorMinor(), minor) {
+				return "", "", "", "", false, fmt.Errorf("unknown runtime or version: %s (no verified artifact found)", name)
+			}
+		}
+	}
+
+	var source updater.ReleaseSource
+	if family == "php" && a.phpReleasesURL != "" {
+		source = &updater.PHPSource{BaseURL: a.phpReleasesURL}
+	} else if a.registry != nil {
+		source = a.registry[family]
+	} else if updater.DefaultRegistry != nil {
+		source = updater.DefaultRegistry[family]
+	}
+
+	if source != nil {
+		liveReleases, err := source.Latest(ctx, norm)
+		if err == nil {
+			for _, rel := range liveReleases {
+				if rel.Name == norm || rel.Name == name {
+					if rel.Checksum != "" && rel.URL != "" {
+						algo := rel.ChecksumAlgo
+						if algo == "" {
+							algo = "sha256"
+						}
+
+						// Determine major change against currently installed or catalog version
+						curVer := a.detectInstalledVersion(name)
+						if curVer == "" {
+							if catRt, ok := runtimes.Get(norm); ok {
+								curVer = catRt.Version
+							}
+						}
+						isMajor := rel.MajorChange
+						if curVer != "" && rel.Version != "" {
+							if updater.IsMajorChange(curVer, rel.Version) {
+								isMajor = true
+							}
+						}
+						if norm == "redis" && !strings.Contains(rel.Source, "tporadowski") {
+							isMajor = true
+						}
+
+						return rel.URL, rel.Checksum, algo, rel.Version, isMajor, nil
+					}
+				}
+			}
+		}
+	}
+
+	// 2. Fall back to pinned catalog artifact
+	if rt, exists := runtimes.Get(norm); exists {
+		if rt.URL != "" && rt.SHA256 != "" {
+			return rt.URL, rt.SHA256, "sha256", rt.Version, false, nil
+		}
+	}
+
+	// 3. Names not in catalog are installable ONLY via a live release with a checksum
+	return "", "", "", "", false, fmt.Errorf("unknown runtime or version: %s (no verified artifact or checksum available)", name)
+}
+
+func (a *App) resolveArtifact(name string) (string, string, string, error) {
+	url, checksum, algo, _, _, err := a.resolveArtifactInfo(name)
+	return url, checksum, algo, err
+}
+
+func (a *App) detectInstalledVersion(name string) string {
+	return updater.DetectInstalledBinaryVersion(a.getBaseBinDir(), name, a.getDataDir())
+}
+
+func (a *App) DownloadBinary(name string) (UIMessage, error) {
+	url, checksum, algo, err := a.resolveArtifact(name)
+	if err != nil {
+		return UIMessage{}, err
+	}
+	if checksum == "" {
+		return UIMessage{}, fmt.Errorf("no verified checksum available for binary: %s", name)
+	}
+	return a.downloadAndInstallArtifact(name, url, checksum, algo)
+}
+
+func (a *App) resolveUpgradeArtifact(name string) (string, string, error) {
+	url, checksum, _, _, _, err := a.resolveArtifactInfo(name)
+	return url, checksum, err
+}
+
+// GetRuntimeCatalog returns all runtime artifacts from the catalog plus on-disk PHP runtimes.
+func (a *App) GetRuntimeCatalog() []runtimes.Artifact {
+	all := runtimes.All()
+	seen := make(map[string]bool, len(all))
+	for _, rt := range all {
+		seen[rt.Name] = true
+	}
+
+	binDir := a.getBaseBinDir()
+	if entries, err := os.ReadDir(binDir); err == nil {
+		for _, e := range entries {
+			if e.IsDir() && strings.HasPrefix(e.Name(), "php-") {
+				cgiPath := filepath.Join(binDir, e.Name(), "php-cgi.exe")
+				exePath := filepath.Join(binDir, e.Name(), "php.exe")
+				cgiExists := false
+				if info, statErr := os.Stat(cgiPath); statErr == nil && !info.IsDir() {
+					cgiExists = true
+				} else if info, statErr := os.Stat(exePath); statErr == nil && !info.IsDir() {
+					cgiExists = true
+				}
+				if cgiExists && !seen[e.Name()] {
+					seen[e.Name()] = true
+					minor := strings.TrimPrefix(e.Name(), "php-")
+					all = append(all, runtimes.Artifact{
+						Name:    e.Name(),
+						Version: minor,
+						PHPPort: runtimes.PHPPortForVersion(minor),
+					})
+				}
+			}
+		}
+	}
+	return all
 }
 
 // CheckRuntimeUpdates inspects available version upgrades and security releases for managed runtimes
@@ -772,26 +1324,65 @@ func (a *App) CheckRuntimeUpdates() []updater.RuntimeUpdateInfo {
 		ctx = a.ctx
 	}
 	opts := updater.CheckOptions{
-		BaseBinDir: "bin",
+		PHPReleasesURL: a.phpReleasesURL,
+		BaseBinDir:     a.getBaseBinDir(),
+		DataDir:        a.getDataDir(),
+		LogDir:         filepath.Join(a.getDataDir(), "logs"),
+		Registry:       a.getRegistry(),
 	}
 	return updater.CheckUpdates(ctx, opts)
 }
 
-// UpgradeRuntime stops running service if active, downloads latest release, preserves configs, and restarts service
-func (a *App) UpgradeRuntime(name string) (string, error) {
-	wasRunning := false
-	if status, exists := a.supervisor.GetServiceStatus(name); exists && status.Running {
-		wasRunning = true
-		_ = a.supervisor.StopService(name)
+// UpgradeRuntime stops running service if active, downloads latest release, preserves configs, and restarts service.
+// Upgrades with MajorChange=true must NOT run from the normal Upgrade call:
+// UpgradeRuntime(name) returns a clear error "major_change_requires_confirmation".
+func (a *App) UpgradeRuntime(name string) (UIMessage, error) {
+	return a.upgradeRuntimeInternal(name, false)
+}
+
+// UpgradeRuntimeConfirmed performs the runtime upgrade explicitly even if MajorChange=true.
+func (a *App) UpgradeRuntimeConfirmed(name string) (UIMessage, error) {
+	return a.upgradeRuntimeInternal(name, true)
+}
+
+func (a *App) upgradeRuntimeInternal(name string, confirmed bool) (UIMessage, error) {
+	url, checksum, algo, _, majorChange, err := a.resolveArtifactInfo(name)
+	if err != nil {
+		return UIMessage{}, err
 	}
 
-	msg, err := a.DownloadBinary(name)
+	if majorChange && !confirmed {
+		return UIMessage{}, fmt.Errorf("major_change_requires_confirmation")
+	}
+
+	family := updater.RuntimeFamily(runtimes.NormalizeName(name))
+	serviceName := name
+	if family == "mysql" {
+		serviceName = "mysql"
+	}
+
+	wasRunning := false
+	if a.supervisor != nil {
+		if status, exists := a.supervisor.GetServiceStatus(serviceName); exists && status.Running {
+			wasRunning = true
+			_ = a.supervisor.StopService(serviceName)
+		}
+	}
+
+	msg, err := a.downloadAndInstallArtifact(name, url, checksum, algo)
 	if err != nil {
-		return "", err
+		if wasRunning {
+			_, _ = a.ToggleService(serviceName)
+		}
+		return UIMessage{}, err
+	}
+
+	if family == "mysql" && majorChange {
+		a.markMySQLPendingUpgrade()
 	}
 
 	if wasRunning {
-		_, _ = a.ToggleService(name)
+		_, _ = a.ToggleService(serviceName)
 	}
 
 	return msg, nil
@@ -1088,7 +1679,7 @@ func (a *App) StartProjectApp(projectPath string, port int) (bool, error) {
 		}
 	}
 
-	return false, fmt.Errorf("لم يتم العثور على ملف تنفيذي أو أداة تشغيل للمشروع %s", projectName)
+	return false, fmt.Errorf("no executable or start script found for project %s", projectName)
 }
 
 func (a *App) StopProjectApp(projectName string) error {
@@ -1205,7 +1796,7 @@ func (a *App) SelectProjectsDirectory(lang string) (string, error) {
 		wailsDir = ""
 	}
 
-	dialogTitle := "اختر مجلد المشاريع"
+	dialogTitle := "Select Projects Directory"
 	if strings.ToLower(strings.TrimSpace(lang)) == "en" {
 		dialogTitle = "Select Projects Directory"
 	}
@@ -1299,23 +1890,23 @@ func (a *App) SaveProjectSettings(projectPath string, settings config.ProjectCus
 }
 
 type ProjectDiagnostics struct {
-	ProjectPath    string   `json:"project_path"`
-	Domain         string   `json:"domain"`
-	ProjectType    string   `json:"project_type"`
-	PHPVersion     string   `json:"php_version"`
-	PHPPort        int      `json:"php_port"`
-	ProxyPort      int      `json:"proxy_port"`
-	DocRoot        string   `json:"doc_root"`
-	DocRootExists  bool     `json:"doc_root_exists"`
-	HasIndexFile   bool     `json:"has_index_file"`
-	IndexFile      string   `json:"index_file,omitempty"`
-	HasEnvFile     bool     `json:"has_env_file"`
-	HasVendorDir   bool     `json:"has_vendor_dir"`
-	HasNodeModules bool     `json:"has_node_modules"`
-	IsPortActive   bool     `json:"is_port_active"`
-	Status         string   `json:"status"` // "healthy", "warning", "error"
-	Issues         []string `json:"issues"`
-	Suggestions    []string `json:"suggestions"`
+	ProjectPath    string      `json:"project_path"`
+	Domain         string      `json:"domain"`
+	ProjectType    string      `json:"project_type"`
+	PHPVersion     string      `json:"php_version"`
+	PHPPort        int         `json:"php_port"`
+	ProxyPort      int         `json:"proxy_port"`
+	DocRoot        string      `json:"doc_root"`
+	DocRootExists  bool        `json:"doc_root_exists"`
+	HasIndexFile   bool        `json:"has_index_file"`
+	IndexFile      string      `json:"index_file,omitempty"`
+	HasEnvFile     bool        `json:"has_env_file"`
+	HasVendorDir   bool        `json:"has_vendor_dir"`
+	HasNodeModules bool        `json:"has_node_modules"`
+	IsPortActive   bool        `json:"is_port_active"`
+	Status         string      `json:"status"` // "healthy", "warning", "error"
+	Issues         []UIMessage `json:"issues"`
+	Suggestions    []UIMessage `json:"suggestions"`
 }
 
 // ScanProjectDatabases searches for preexisting schemas (.sql) and local MySQL databases for the given project
@@ -1348,7 +1939,7 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 	pType := "php"
 	domain := pName + a.cfg.DomainSuffix
 	docRoot := cleanPath
-	phpPort := 9083
+	phpPort := runtimes.PHPPortForVersion(a.cfg.DefaultPHP)
 	phpVer := a.cfg.DefaultPHP
 	proxyPort := 0
 
@@ -1370,8 +1961,8 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 		ProxyPort:   proxyPort,
 		DocRoot:     filepath.ToSlash(docRoot),
 		Status:      "healthy",
-		Issues:      make([]string, 0),
-		Suggestions: make([]string, 0),
+		Issues:      make([]UIMessage, 0),
+		Suggestions: make([]UIMessage, 0),
 	}
 
 	// 1. Check Document Root
@@ -1380,8 +1971,8 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 	} else {
 		diag.DocRootExists = false
 		diag.Status = "error"
-		diag.Issues = append(diag.Issues, fmt.Sprintf("مجلد الويب المحدد (%s) غير موجود على القرص.", filepath.Base(docRoot)))
-		diag.Suggestions = append(diag.Suggestions, "يرجى تعديل مجلد الويب واختيار المسار الصحيح للمشروع (مثل public أو dist).")
+		diag.Issues = append(diag.Issues, UIMessage{Key: "diag_issue_docroot_missing", Params: map[string]string{"base": filepath.Base(docRoot)}})
+		diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_docroot_fix"})
 	}
 
 	// Check index file in docRoot
@@ -1395,8 +1986,8 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 	}
 	if !diag.HasIndexFile && pType != "go" && pType != "rust" && pType != "dotnet" && pType != "python" {
 		diag.Status = "warning"
-		diag.Issues = append(diag.Issues, "لم يتم العثور على ملف بداية (index.php أو index.html) داخل مجلد الويب.")
-		diag.Suggestions = append(diag.Suggestions, "تأكد من اختيار المجلد الفرعي الذي يحتوي على ملف التشغيل (مثل مجلد public).")
+		diag.Issues = append(diag.Issues, UIMessage{Key: "diag_issue_index_missing"})
+		diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_index_fix"})
 	}
 
 	// 2. Check PHP projects (.env, vendor, fastcgi)
@@ -1408,11 +1999,11 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 			diag.HasEnvFile = false
 			if pType == "laravel" {
 				diag.Status = "warning"
-				diag.Issues = append(diag.Issues, "ملف إعدادات البيئة (.env) غير موجود.")
+				diag.Issues = append(diag.Issues, UIMessage{Key: "diag_issue_env_missing"})
 				if fileExists(filepath.Join(cleanPath, ".env.example")) {
-					diag.Suggestions = append(diag.Suggestions, "يمكنك إنشاء ملف .env تلقائياً بنقرة واحدة من زر «إنشاء .env».")
+					diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_env_create"})
 				} else {
-					diag.Suggestions = append(diag.Suggestions, "قم بإنشاء ملف .env وضبط مفتاح التطبيق وقاعدة البيانات.")
+					diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_env_manual"})
 				}
 			}
 		}
@@ -1424,8 +2015,8 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 			diag.HasVendorDir = false
 			if fileExists(filepath.Join(cleanPath, "composer.json")) {
 				diag.Status = "warning"
-				diag.Issues = append(diag.Issues, "حزم وتبعية المشروع غير مثبتة (vendor/autoload.php مفقود).")
-				diag.Suggestions = append(diag.Suggestions, "يرجى تشغيل أمر «composer install» في مجلد المشروع لتثبيت التبعيات.")
+				diag.Issues = append(diag.Issues, UIMessage{Key: "diag_issue_vendor_missing"})
+				diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_composer_install"})
 			}
 		}
 
@@ -1435,8 +2026,8 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 			} else {
 				diag.IsPortActive = false
 				diag.Status = "error"
-				diag.Issues = append(diag.Issues, fmt.Sprintf("خادم PHP FastCGI غير متصل على المنفذ :%d.", phpPort))
-				diag.Suggestions = append(diag.Suggestions, "تأكد من تشغيل خدمة PHP أو اختيار إصدار PHP متوفر على جهازك.")
+				diag.Issues = append(diag.Issues, UIMessage{Key: "diag_issue_php_port_inactive", Params: map[string]string{"port": fmt.Sprintf("%d", phpPort)}})
+				diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_php_service"})
 			}
 		}
 	}
@@ -1450,8 +2041,8 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 			if diag.Status != "error" {
 				diag.Status = "warning"
 			}
-			diag.Issues = append(diag.Issues, fmt.Sprintf("خادم التطبيق غير مشغل على المنفذ :%d.", proxyPort))
-			diag.Suggestions = append(diag.Suggestions, "اضغط على زر «تشغيل التطبيق» في بطاقة المشروع لتشغيل خادم التطبيق الداخلي.")
+			diag.Issues = append(diag.Issues, UIMessage{Key: "diag_issue_proxy_port_inactive", Params: map[string]string{"port": fmt.Sprintf("%d", proxyPort)}})
+			diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_start_app"})
 		}
 	}
 
@@ -1462,8 +2053,8 @@ func (a *App) DiagnoseProject(projectPath string) ProjectDiagnostics {
 		} else if fileExists(filepath.Join(cleanPath, "package.json")) {
 			diag.HasNodeModules = false
 			diag.Status = "warning"
-			diag.Issues = append(diag.Issues, "مجلد الحزم node_modules غير موجود.")
-			diag.Suggestions = append(diag.Suggestions, "قم بتشغيل أمر «npm install» أو بناء المشروع «npm run build».")
+			diag.Issues = append(diag.Issues, UIMessage{Key: "diag_issue_node_modules_missing"})
+			diag.Suggestions = append(diag.Suggestions, UIMessage{Key: "diag_sug_npm_install"})
 		}
 	}
 
@@ -1481,7 +2072,7 @@ func (a *App) FixProjectEnv(projectPath string) (bool, error) {
 	}
 
 	if !fileExists(examplePath) {
-		return false, fmt.Errorf("ملف .env.example غير موجود في المجلد")
+		return false, fmt.Errorf(".env.example not found in project directory")
 	}
 
 	data, err := os.ReadFile(examplePath)
@@ -1549,7 +2140,7 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 				if override.IsIgnored || override.Type == "non_web" {
 					isWeb = false
 					projectType = "non_web"
-					typeLabel = "غير ويب / ملفات"
+					typeLabel = "Non-Web"
 				} else {
 					if override.Type != "" {
 						projectType = override.Type
@@ -1572,7 +2163,7 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 						case "node":
 							typeLabel = "Node.js"
 						case "static":
-							typeLabel = "HTML / ثابت"
+							typeLabel = "Static"
 						default:
 							typeLabel = override.Type
 						}
@@ -1588,8 +2179,8 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 						proxyPort = override.ProxyPort
 					}
 					if override.PHPVersion != "" {
-						phpVer = projects.NormalizePHPVersion(override.PHPVersion)
-						phpPort = projects.PHPPortForVersion(phpVer)
+						phpVer = runtimes.NormalizePHPVersion(override.PHPVersion)
+						phpPort = runtimes.PHPPortForVersion(phpVer)
 					}
 				}
 			}
@@ -1597,14 +2188,14 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 
 		// 2. Standalone ProjectPHP overrides fallback
 		if overrideVer, exists := a.cfg.ProjectPHP[cleanKey]; exists && overrideVer != "" {
-			phpVer = projects.NormalizePHPVersion(overrideVer)
-			phpPort = projects.PHPPortForVersion(phpVer)
+			phpVer = runtimes.NormalizePHPVersion(overrideVer)
+			phpPort = runtimes.PHPPortForVersion(phpVer)
 		} else if overrideVer, exists := a.cfg.ProjectPHP[projectName]; exists && overrideVer != "" {
-			phpVer = projects.NormalizePHPVersion(overrideVer)
-			phpPort = projects.PHPPortForVersion(phpVer)
+			phpVer = runtimes.NormalizePHPVersion(overrideVer)
+			phpPort = runtimes.PHPPortForVersion(phpVer)
 		} else if overrideVer, exists := a.cfg.ProjectPHP[detected.Domain]; exists && overrideVer != "" {
-			phpVer = projects.NormalizePHPVersion(overrideVer)
-			phpPort = projects.PHPPortForVersion(phpVer)
+			phpVer = runtimes.NormalizePHPVersion(overrideVer)
+			phpPort = runtimes.PHPPortForVersion(phpVer)
 		}
 
 		scannedSites = append(scannedSites, caddy.SiteDef{
@@ -1634,8 +2225,8 @@ func (a *App) ScanProjects() []caddy.SiteDef {
 			s := &sites[i]
 			if s.IsWeb && s.PHPPort > 0 && s.PHPVersion != "" {
 				if a.findPHPExecutableForVersion(s.PHPVersion) == "" {
-					s.PHPVersion = projects.NormalizePHPVersion(a.cfg.DefaultPHP)
-					s.PHPPort = projects.PHPPortForVersion(s.PHPVersion)
+					s.PHPVersion = runtimes.NormalizePHPVersion(a.cfg.DefaultPHP)
+					s.PHPPort = runtimes.PHPPortForVersion(s.PHPVersion)
 				}
 				_ = a.ensurePHPServiceRunning(s.PHPVersion)
 			}
@@ -1740,7 +2331,7 @@ func (a *App) ReloadCaddy() error {
 }
 
 // SyncHosts synchronizes the active web domains to the Windows hosts file and flushes DNS cache
-func (a *App) SyncHosts() (string, error) {
+func (a *App) SyncHosts() (UIMessage, error) {
 	webDomains := make([]string, 0)
 	for _, s := range a.sites {
 		if s.IsWeb && s.Domain != "" {
@@ -1754,22 +2345,26 @@ func (a *App) SyncHosts() (string, error) {
 	webDomains = append(webDomains, "adminer"+suffix)
 	webDomains = append(webDomains, "phpmyadmin"+suffix)
 	if err := hosts.UpdateSystemHosts(webDomains); err != nil {
-		return "", err
+		return UIMessage{}, err
 	}
 	if len(webDomains) == 0 {
-		return "تم تنظيف ملف hosts بنجاح (لا توجد مواقع نشطة حالياً).", nil
+		return UIMessage{Key: "hosts_clean_no_sites"}, nil
 	}
 
-	return fmt.Sprintf("تمت مزامنة %d نطاق بنجاح مع ملف hosts المحلي وتحديث كاش DNS.", len(webDomains)), nil
+	return UIMessage{
+		Key:    "hosts_synced_count",
+		Params: map[string]string{"count": fmt.Sprintf("%d", len(webDomains))},
+	}, nil
 }
 
 // getActivePHPPort returns the port of the currently running PHP FastCGI instance, or default port
 func (a *App) getActivePHPPort() int {
 	if a.supervisor != nil {
-		for _, v := range []string{"8.4", "8.3", "8.2", "8.1"} {
-			svcName := "php-" + v
-			if st, ok := a.supervisor.GetServiceStatus(svcName); ok && st.Running {
-				return projects.PHPPortForVersion(v)
+		for _, rt := range runtimes.All() {
+			if strings.HasPrefix(rt.Name, "php-") && rt.PHPPort > 0 {
+				if st, ok := a.supervisor.GetServiceStatus(rt.Name); ok && st.Running {
+					return rt.PHPPort
+				}
 			}
 		}
 	}
@@ -1777,7 +2372,7 @@ func (a *App) getActivePHPPort() int {
 	if a.cfg != nil && a.cfg.DefaultPHP != "" {
 		defVer = a.cfg.DefaultPHP
 	}
-	return projects.PHPPortForVersion(defVer)
+	return runtimes.PHPPortForVersion(defVer)
 }
 
 // EnsureAdminerInstalled verifies that data/adminer/index.php is present or writes embedded release
@@ -1798,16 +2393,18 @@ func (a *App) OpenAdminer(dbName string) error {
 
 	// 2. Ensure at least one PHP FastCGI instance is running
 	phpRunning := false
-	for _, v := range []string{"8.4", "8.3", "8.2", "8.1"} {
-		if st, ok := a.supervisor.GetServiceStatus("php-" + v); ok && st.Running {
-			phpRunning = true
-			break
+	if a.supervisor != nil {
+		for _, st := range a.supervisor.GetAllServices() {
+			if strings.HasPrefix(st.Name, "php-") && st.Running {
+				phpRunning = true
+				break
+			}
 		}
 	}
 	if !phpRunning {
-		defVer := a.cfg.DefaultPHP
-		if defVer == "" {
-			defVer = "8.4"
+		defVer := "8.4"
+		if a.cfg != nil && a.cfg.DefaultPHP != "" {
+			defVer = a.cfg.DefaultPHP
 		}
 		_ = a.ensurePHPServiceRunning(defVer)
 	}
@@ -1827,7 +2424,7 @@ func (a *App) OpenAdminer(dbName string) error {
 // OpenPhpMyAdmin starts prerequisites (MySQL, PHP, Caddy) and opens phpMyAdmin in browser
 func (a *App) OpenPhpMyAdmin(dbName string) error {
 	if !phpmyadmin.IsInstalled(".") {
-		return fmt.Errorf("أداة phpMyAdmin غير مثبتة حالياً في data/phpmyadmin")
+		return fmt.Errorf("phpMyAdmin is not installed in data/phpmyadmin")
 	}
 
 	_ = phpmyadmin.EnsureConfig(".")
@@ -1841,10 +2438,12 @@ func (a *App) OpenPhpMyAdmin(dbName string) error {
 
 		// 2. Ensure at least one PHP FastCGI instance is running
 		phpRunning := false
-		for _, v := range []string{"8.4", "8.3", "8.2", "8.1"} {
-			if st, ok := a.supervisor.GetServiceStatus("php-" + v); ok && st.Running {
-				phpRunning = true
-				break
+		if a.supervisor != nil {
+			for _, st := range a.supervisor.GetAllServices() {
+				if strings.HasPrefix(st.Name, "php-") && st.Running {
+					phpRunning = true
+					break
+				}
 			}
 		}
 		if !phpRunning {

@@ -2,8 +2,8 @@ package php
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
+
+	"github.com/laragal/laragal/internal/runtimes"
 )
 
 type PHPVersionInfo struct {
@@ -14,11 +14,7 @@ type PHPVersionInfo struct {
 }
 
 func AssignPortForVersion(version string) int {
-	clean := strings.ReplaceAll(version, ".", "")
-	if val, err := strconv.Atoi(clean); err == nil {
-		return 9000 + val
-	}
-	return 9083 // Fallback default port
+	return runtimes.PHPPortForVersion(version)
 }
 
 func BuildFastCGIArgs(info PHPVersionInfo) []string {

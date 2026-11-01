@@ -130,7 +130,7 @@ func ScanProjectForSchemas(projectPath string) ([]DiscoveredDatabase, error) {
 			// Read up to 64KB to parse table names
 			tables := readSampleTables(path)
 
-			desc := fmt.Sprintf("مخطط قاعدة بيانات سابق للمشروع (%s) - %d جدول", fileName, len(tables))
+			desc := fmt.Sprintf("Previous project database schema (%s) - %d tables", fileName, len(tables))
 
 			results = append(results, DiscoveredDatabase{
 				Type:        "schema_file",
@@ -222,7 +222,7 @@ func scanHostDirsForDatabases(dirs []string, targetDBHint string) []DiscoveredDa
 			}
 			seen[fullPath] = true
 
-			desc := fmt.Sprintf("قاعدة بيانات سابقة مكتشفة على الجهاز المحلي (%s)", dbName)
+			desc := fmt.Sprintf("Previous database discovered on local machine (%s)", dbName)
 
 			results = append(results, DiscoveredDatabase{
 				Type:        "legacy_server_dir",

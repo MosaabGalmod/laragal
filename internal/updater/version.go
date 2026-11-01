@@ -45,10 +45,27 @@ func ExtractVersion(output string) string {
 	return ""
 }
 
-func parseVersionComponents(v string) []int {
+// ExtractSeries extracts the major.minor series string from a version (e.g. "11.8.9" -> "11.8", "10.11.19" -> "10.11")
+func ExtractSeries(v string) string {
 	clean := CleanVersionString(v)
+	parts := strings.Split(clean, ".")
+	if len(parts) >= 2 {
+		return parts[0] + "." + parts[1]
+	}
+	return clean
+}
+
+func parseVersionComponents(v string) ([]int, int, bool) {
+	clean := CleanVersionString(v)
+	build := 0
+	hasBuild := false
 	if idx := strings.Index(clean, "-"); idx != -1 {
+		suffix := clean[idx+1:]
 		clean = clean[:idx]
+		if b, err := strconv.Atoi(suffix); err == nil {
+			build = b
+			hasBuild = true
+		}
 	}
 	parts := strings.Split(clean, ".")
 	var res []int
@@ -57,10 +74,13 @@ func parseVersionComponents(v string) []int {
 			res = append(res, num)
 		}
 	}
-	return res
+	return res, build, hasBuild
 }
 
-// IsVersionNewer compares two version strings and returns true if latest is strictly greater than current
+// IsVersionNewer compares two version strings and returns true if latest is strictly greater than current.
+// If current has NO build suffix and feed latest has a build suffix and numeric parts are equal,
+// they are treated as equal (not newer) because local CLI outputs (like `php -v`) omit Windows rebuild suffixes.
+// Keep: "8.5.12-1" < "8.5.12-2" when both have suffixes; "8.5.12" < "8.5.13-1".
 func IsVersionNewer(current string, latest string) bool {
 	cleanLatest := strings.TrimSpace(latest)
 	if cleanLatest == "" {
@@ -71,8 +91,8 @@ func IsVersionNewer(current string, latest string) bool {
 		return true
 	}
 
-	curParts := parseVersionComponents(cleanCurrent)
-	latParts := parseVersionComponents(cleanLatest)
+	curParts, curBuild, curHasBuild := parseVersionComponents(cleanCurrent)
+	latParts, latBuild, latHasBuild := parseVersionComponents(cleanLatest)
 
 	maxLen := len(curParts)
 	if len(latParts) > maxLen {
@@ -97,5 +117,32 @@ func IsVersionNewer(current string, latest string) bool {
 		}
 	}
 
-	return false
+	// Numeric parts are equal.
+	// When current has NO build suffix, do not rank a suffixed feed version as newer.
+	if !curHasBuild || !latHasBuild {
+		return false
+	}
+
+	return latBuild > curBuild
 }
+
+// ExtractMajor returns the major version number from a version string (e.g. "4.8.1" -> 4).
+func ExtractMajor(v string) (int, error) {
+	parts, _, _ := parseVersionComponents(v)
+	if len(parts) == 0 {
+		return 0, strconv.ErrSyntax
+	}
+	return parts[0], nil
+}
+
+// IsMajorChange compares the major version of current (or catalog) vs target.
+// Returns true if both versions have parsed majors and they differ.
+func IsMajorChange(currentOrCatalog string, target string) bool {
+	curMajor, err1 := ExtractMajor(currentOrCatalog)
+	tgtMajor, err2 := ExtractMajor(target)
+	if err1 != nil || err2 != nil {
+		return false
+	}
+	return curMajor != tgtMajor
+}
+

@@ -1,4 +1,4 @@
-﻿package config
+package config
 
 import (
 	"bytes"
@@ -24,6 +24,7 @@ type AppConfig struct {
 	ProjectPHP       map[string]string                `json:"project_php,omitempty"`
 	ProjectOverrides map[string]ProjectCustomSettings `json:"project_overrides,omitempty"`
 	StartOnBoot      bool                             `json:"start_on_boot"`
+	HiddenRuntimes   []string                         `json:"hidden_runtimes,omitempty"`
 }
 
 func NewDefaultConfig() *AppConfig {
@@ -46,6 +47,7 @@ func NewDefaultConfig() *AppConfig {
 		},
 		ProjectPHP:       make(map[string]string),
 		ProjectOverrides: make(map[string]ProjectCustomSettings),
+		HiddenRuntimes:   make([]string, 0),
 	}
 }
 
@@ -64,6 +66,9 @@ func LoadConfig(path string) (*AppConfig, error) {
 	}
 	if cfg.ProjectOverrides == nil {
 		cfg.ProjectOverrides = make(map[string]ProjectCustomSettings)
+	}
+	if cfg.HiddenRuntimes == nil {
+		cfg.HiddenRuntimes = make([]string, 0)
 	}
 	return &cfg, nil
 }

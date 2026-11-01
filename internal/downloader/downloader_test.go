@@ -4,6 +4,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/hex"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -28,8 +31,6 @@ func TestGetDownloadURL(t *testing.T) {
 		"redis",
 		"php8.5",
 		"php85",
-		"php-8.6",
-		"php-9.0",
 		"mariadb",
 	}
 
@@ -60,6 +61,52 @@ func TestGetDownloadURL(t *testing.T) {
 	_, err := downloader.GetDownloadURL("unknown-runtime-xyz")
 	if err == nil {
 		t.Errorf("expected error for unknown runtime, got nil")
+	}
+}
+
+func TestArtifactSHA256Configured(t *testing.T) {
+	requiredArtifacts := []string{
+		"caddy",
+		"mailpit",
+		"php-8.5",
+		"php-8.4",
+		"php-8.3",
+		"php-8.2",
+		"php-8.1",
+		"mysql",
+		"redis",
+		"adminer",
+		"phpmyadmin",
+	}
+
+	for _, name := range requiredArtifacts {
+		art, err := downloader.GetDownloadArtifact(name)
+		if err != nil {
+			t.Errorf("GetDownloadArtifact(%q) returned error: %v", name, err)
+			continue
+		}
+		if art.URL == "" {
+			t.Errorf("artifact %s has empty URL", name)
+		}
+		if len(art.SHA256) != 64 {
+			t.Errorf("artifact %s has invalid or missing SHA-256 hash: %q", name, art.SHA256)
+		}
+		expected := downloader.GetExpectedSHA256(name)
+		if expected != art.SHA256 {
+			t.Errorf("GetExpectedSHA256(%q) = %q, want %q", name, expected, art.SHA256)
+		}
+	}
+}
+
+func TestUnknownVersionReturnsError(t *testing.T) {
+	for _, unknown := range []string{"php-8.6", "php-9.0", "php-unknown", "unknown-tool"} {
+		_, err := downloader.GetDownloadArtifact(unknown)
+		if err == nil {
+			t.Errorf("expected error for unpinned unknown runtime %q, got nil", unknown)
+		}
+		if err != nil && !strings.Contains(err.Error(), "unknown") && !strings.Contains(err.Error(), "no known") {
+			t.Errorf("expected clear error message for %q, got: %v", unknown, err)
+		}
 	}
 }
 
@@ -105,6 +152,128 @@ func TestDownloadFileWithProgress(t *testing.T) {
 	}
 }
 
+func TestDownloadFileIntegrity_MatchingHash(t *testing.T) {
+	payload := []byte("Secure artifact payload content for SHA-256 integrity check")
+	hasher := sha256.New()
+	hasher.Write(payload)
+	expectedHash := hex.EncodeToString(hasher.Sum(nil))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(payload)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	destFile := filepath.Join(tempDir, "verified_artifact.zip")
+
+	err := downloader.DownloadFile(context.Background(), server.URL, destFile, nil, expectedHash)
+	if err != nil {
+		t.Fatalf("DownloadFile with matching hash failed unexpectedly: %v", err)
+	}
+
+	content, err := os.ReadFile(destFile)
+	if err != nil {
+		t.Fatalf("failed to read successfully downloaded file: %v", err)
+	}
+	if !bytes.Equal(content, payload) {
+		t.Errorf("downloaded content mismatch")
+	}
+}
+
+func TestDownloadFile_ArchivesFallbackOn404(t *testing.T) {
+	payload := []byte("Archive fallback payload content for superseded PHP build")
+	hasher := sha256.New()
+	hasher.Write(payload)
+	expectedHash := hex.EncodeToString(hasher.Sum(nil))
+
+	var primaryRequested, archiveRequested bool
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/downloads/releases/php-8.4.27-1-nts-Win32-vs17-x64.zip":
+			primaryRequested = true
+			w.WriteHeader(http.StatusNotFound)
+		case "/downloads/releases/archives/php-8.4.27-1-nts-Win32-vs17-x64.zip":
+			archiveRequested = true
+			w.Header().Set("Content-Length", fmt.Sprintf("%d", len(payload)))
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write(payload)
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	destFile := filepath.Join(tempDir, "fallback_php.zip")
+
+	primaryURL := server.URL + "/downloads/releases/php-8.4.27-1-nts-Win32-vs17-x64.zip"
+
+	err := downloader.DownloadFile(context.Background(), primaryURL, destFile, nil, expectedHash)
+	if err != nil {
+		t.Fatalf("DownloadFile failed on archive fallback: %v", err)
+	}
+
+	if !primaryRequested {
+		t.Errorf("expected primary URL to be requested first")
+	}
+	if !archiveRequested {
+		t.Errorf("expected archive URL to be requested on 404")
+	}
+
+	content, err := os.ReadFile(destFile)
+	if err != nil {
+		t.Fatalf("failed to read downloaded file: %v", err)
+	}
+	if !bytes.Equal(content, payload) {
+		t.Errorf("content mismatch, got %q, want %q", string(content), string(payload))
+	}
+}
+
+func TestDownloadFileIntegrity_MismatchingHash(t *testing.T) {
+	payload := []byte("Compromised or mismatched content payload")
+	wrongHash := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" // hash of empty string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(payload)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	destFile := filepath.Join(tempDir, "compromised_artifact.zip")
+
+	err := downloader.DownloadFile(context.Background(), server.URL, destFile, nil, wrongHash)
+	if err == nil {
+		t.Fatalf("expected error on hash mismatch, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "mismatch") {
+		t.Errorf("expected error message to mention 'mismatch', got: %v", err)
+	}
+
+	// Verify destFile was NOT created
+	if _, err := os.Stat(destFile); !os.IsNotExist(err) {
+		t.Errorf("destination file %s should NOT exist after hash mismatch", destFile)
+	}
+
+	// Verify no temporary files were left behind in tempDir
+	entries, err := os.ReadDir(tempDir)
+	if err != nil {
+		t.Fatalf("failed to read temp dir: %v", err)
+	}
+	if len(entries) > 0 {
+		names := make([]string, len(entries))
+		for i, e := range entries {
+			names[i] = e.Name()
+		}
+		t.Errorf("temporary files left behind after mismatch: %v", names)
+	}
+}
+
 func TestExtractZipWithSingleRootDir(t *testing.T) {
 	tempDir := t.TempDir()
 	zipPath := filepath.Join(tempDir, "nested.zip")
@@ -145,5 +314,71 @@ func TestExtractZipWithSingleRootDir(t *testing.T) {
 	expectedReadme := filepath.Join(destDir, "README.txt")
 	if _, err := os.Stat(expectedReadme); err != nil {
 		t.Errorf("expected %s to exist after root stripping, got: %v", expectedReadme, err)
+	}
+}
+
+func TestDownloadFileIntegrity_SHA512_MatchingHash(t *testing.T) {
+	payload := []byte("Secure artifact payload content for SHA-512 integrity verification test")
+	hasher := sha512.New()
+	hasher.Write(payload)
+	expectedHash := hex.EncodeToString(hasher.Sum(nil))
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(payload)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	destFile := filepath.Join(tempDir, "verified_sha512.bin")
+
+	// 1. Test passing algo ("sha512") and value
+	err := downloader.DownloadFile(context.Background(), server.URL, destFile, nil, "sha512", expectedHash)
+	if err != nil {
+		t.Fatalf("DownloadFile with sha512 algo+value failed: %v", err)
+	}
+
+	content, err := os.ReadFile(destFile)
+	if err != nil {
+		t.Fatalf("failed to read verified file: %v", err)
+	}
+	if !bytes.Equal(content, payload) {
+		t.Errorf("content mismatch, got %q, want %q", string(content), string(payload))
+	}
+
+	// 2. Test passing 128-char hex string directly without explicit algo (auto-detected as sha512)
+	destFile2 := filepath.Join(tempDir, "verified_sha512_auto.bin")
+	err = downloader.DownloadFile(context.Background(), server.URL, destFile2, nil, expectedHash)
+	if err != nil {
+		t.Fatalf("DownloadFile with 128-char sha512 auto-detect failed: %v", err)
+	}
+}
+
+func TestDownloadFileIntegrity_SHA512_MismatchFails(t *testing.T) {
+	payload := []byte("Corrupted content for SHA-512 mismatch test")
+	wrongHash := strings.Repeat("f", 128)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(payload)))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	tempDir := t.TempDir()
+	destFile := filepath.Join(tempDir, "compromised_sha512.bin")
+
+	err := downloader.DownloadFile(context.Background(), server.URL, destFile, nil, "sha512", wrongHash)
+	if err == nil {
+		t.Fatalf("expected error on SHA-512 hash mismatch, got nil")
+	}
+
+	if !strings.Contains(err.Error(), "SHA512") && !strings.Contains(err.Error(), "sha512") && !strings.Contains(err.Error(), "mismatch") {
+		t.Errorf("expected error message to mention SHA512 and mismatch, got: %v", err)
+	}
+
+	if _, err := os.Stat(destFile); !os.IsNotExist(err) {
+		t.Errorf("destination file %s must not exist after mismatch", destFile)
 	}
 }

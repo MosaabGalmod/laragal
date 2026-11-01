@@ -189,3 +189,144 @@ func TestGenerateCaddyfileWithPhpMyAdmin(t *testing.T) {
 	}
 }
 
+func TestCaddyfileSitesLoopbackBinding(t *testing.T) {
+	sites := []caddy.SiteDef{
+		{
+			Domain:   "laravel.test",
+			RootPath: "D:/projects/laravel/public",
+			PHPPort:  9083,
+			IsWeb:    true,
+		},
+		{
+			Domain:      "nodeapp.test",
+			RootPath:    "D:/projects/nodeapp",
+			ProjectType: "node",
+			ProxyPort:   3000,
+			IsWeb:       true,
+		},
+		{
+			Domain:   "static.test",
+			RootPath: "D:/projects/static",
+			IsWeb:    true,
+		},
+	}
+	adminerCfg := caddy.AdminerConfig{
+		Enabled:  true,
+		Domain:   "adminer.test",
+		RootPath: "D:/projects/laragal/data/adminer",
+		PHPPort:  9084,
+		Port:     3307,
+	}
+	pmaCfg := caddy.PhpMyAdminConfig{
+		Enabled:  true,
+		Domain:   "phpmyadmin.test",
+		RootPath: "D:/projects/laragal/data/phpmyadmin",
+		PHPPort:  9084,
+		Port:     3308,
+	}
+
+	caddyfile := caddy.GenerateCaddyfileWithTools(sites, 2019, adminerCfg, pmaCfg)
+
+	lines := strings.Split(caddyfile, "\n")
+	siteBlockCount := 0
+	bindCount := 0
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		// Top-level site block opener: non-indented, ends with '{', and is not the global '{' block
+		if strings.HasSuffix(trimmed, "{") && !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
+			if trimmed == "{" {
+				// Global options block
+				continue
+			}
+			siteBlockCount++
+			if i+1 >= len(lines) || strings.TrimSpace(lines[i+1]) != "bind 127.0.0.1 [::1]" {
+				t.Errorf("site block %q at line %d does not have 'bind 127.0.0.1 [::1]' as first directive; next line: %q", line, i+1, lines[i+1])
+			}
+		}
+		if trimmed == "bind 127.0.0.1 [::1]" {
+			bindCount++
+		}
+	}
+
+	expectedSites := len(sites) + 2 // 3 user sites + adminer + phpmyadmin
+	if siteBlockCount != expectedSites {
+		t.Fatalf("expected %d site blocks, found %d", expectedSites, siteBlockCount)
+	}
+	if bindCount != siteBlockCount {
+		t.Errorf("bind directive count (%d) does not match site block count (%d)", bindCount, siteBlockCount)
+	}
+}
+
+func TestCaddyfile502BilingualAndEscaping(t *testing.T) {
+	sites := []caddy.SiteDef{
+		{
+			Domain:      "crafted.test",
+			Path:        "D:/projects/crafted",
+			RootPath:    "D:/projects/crafted",
+			ProxyPort:   4567,
+			ProjectType: "custom",
+			TypeLabel:   `Crafted "Evil" <script>alert(1)</script> \test`,
+			IsWeb:       true,
+		},
+	}
+
+	caddyfile := caddy.GenerateCaddyfile(sites, 2019, caddy.AdminerConfig{})
+
+	// 1. Both languages must be present with proper dir and lang attributes
+	hasArBlock := strings.Contains(caddyfile, `dir="rtl" lang="ar"`) || strings.Contains(caddyfile, `dir='rtl' lang='ar'`) || strings.Contains(caddyfile, `dir=\"rtl\" lang=\"ar\"`)
+	if !hasArBlock {
+		t.Errorf("missing Arabic block with dir=rtl lang=ar")
+	}
+	hasEnBlock := strings.Contains(caddyfile, `dir="ltr" lang="en"`) || strings.Contains(caddyfile, `dir='ltr' lang='en'`) || strings.Contains(caddyfile, `dir=\"ltr\" lang=\"en\"`)
+	if !hasEnBlock {
+		t.Errorf("missing English block with dir=ltr lang=en")
+	}
+
+	// 2. Dark mode support via @media in a <style> tag
+	hasStyle := strings.Contains(caddyfile, `<style>`) || strings.Contains(caddyfile, `<style `)
+	hasDarkMode := strings.Contains(caddyfile, `@media (prefers-color-scheme: dark)`) || strings.Contains(caddyfile, `@media(prefers-color-scheme:dark)`)
+	if !hasStyle || !hasDarkMode {
+		t.Errorf("missing dark mode @media in <style> tag")
+	}
+
+	// 3. XSS/Escape assertions: raw <script> or unescaped quotes must not appear
+	if strings.Contains(caddyfile, `<script>`) {
+		t.Errorf("raw <script> tag found in Caddyfile, expected HTML escaping")
+	}
+	if !strings.Contains(caddyfile, `&lt;script&gt;`) {
+		t.Errorf("expected HTML escaped &lt;script&gt;, not found")
+	}
+
+	// 4. Verify respond directive structure
+	lines := strings.Split(caddyfile, "\n")
+	foundRespond := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "respond ") {
+			foundRespond = true
+			if !strings.HasSuffix(trimmed, " 502") {
+				t.Errorf("respond line does not end with 502 status code: %s", trimmed)
+			}
+			inner := strings.TrimPrefix(trimmed, "respond \"")
+			if !strings.HasSuffix(inner, "\" 502") {
+				t.Errorf("respond directive not properly double-quoted: %s", trimmed)
+			}
+			body := strings.TrimSuffix(inner, "\" 502")
+			unescapedQuote := false
+			for i := 0; i < len(body); i++ {
+				if body[i] == '"' && (i == 0 || body[i-1] != '\\') {
+					unescapedQuote = true
+					break
+				}
+			}
+			if unescapedQuote {
+				t.Errorf("body contains unescaped quote that breaks out of Caddyfile string: %s", body)
+			}
+		}
+	}
+	if !foundRespond {
+		t.Errorf("no respond directive found in generated Caddyfile")
+	}
+}
+

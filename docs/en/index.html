@@ -54,6 +54,17 @@
         "downloadUrl": "https://github.com/MosaabGalmod/laragal/releases/latest",
         "installUrl": "https://github.com/MosaabGalmod/laragal/releases/latest",
         "screenshot": "https://mosaabgalmod.github.io/laragal/assets/og-en.png",
+        "featureList": [
+          "Caddy with automatic local HTTPS for .test domains",
+          "Concurrent PHP FastCGI versions (8.1 to 8.5) with official upstream releases",
+          "MariaDB 11.4 LTS and Redis caching",
+          "phpMyAdmin and Adminer with automatic local login",
+          "Mailpit local SMTP and webmail",
+          "Responsive viewport simulator with frame-ancestors checking",
+          "WCAG 2.x AA/AAA contrast checker and design resources",
+          "Atomic runtime updates with SHA-256 checksum verification",
+          "Localhost binding on 127.0.0.1 and ::1"
+        ],
         "license": "https://github.com/MosaabGalmod/laragal/blob/main/LICENSE",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
         "codeRepository": "https://github.com/MosaabGalmod/laragal"
@@ -108,6 +119,8 @@
       <nav class="nav" aria-label="Page sections">
         <a href="#services">Services</a>
         <a href="#projects">Project types</a>
+        <a href="#design-tools">Design tools</a>
+        <a href="#updates">Updates</a>
         <a href="#start">Get started</a>
         <a href="#security">Security</a>
         <a href="#faq">FAQ</a>
@@ -130,6 +143,8 @@
           <nav class="menu-panel" aria-label="Page sections">
             <a href="#services">Services</a>
             <a href="#projects">Project types</a>
+            <a href="#design-tools">Design tools</a>
+            <a href="#updates">Updates</a>
             <a href="#start">Get started</a>
             <a href="#security">Security</a>
             <a href="#faq">FAQ</a>
@@ -180,7 +195,7 @@
           </article>
           <article class="service">
             <h3><span>PHP 8.1–8.5</span><span class="mono">:9081–9085</span></h3>
-            <p>Each version has its own FastCGI port with OPcache, so one project can run on 8.3 while another runs on 8.5. Switch versions from the project row.</p>
+            <p>Each version has its own FastCGI port with OPcache, so one project can run on 8.3 while another runs on 8.5. Version 8.1 is end-of-life (EOL), and new versions appear from the official source. Switch versions from the project row.</p>
           </article>
           <article class="service">
             <h3><span>MariaDB</span><span class="mono">:3306</span></h3>
@@ -196,7 +211,7 @@
           </article>
           <article class="service">
             <h3><span>Redis</span><span class="mono">:6379</span></h3>
-            <p>For cache, queues and sessions. Stopped by default and started with one click when a project needs it.</p>
+            <p>For cache, queues and sessions; stopped by default. The bundled build is end-of-life (EOL), and a maintained build can be installed after confirmation.</p>
           </article>
         </div>
       </div>
@@ -226,6 +241,71 @@
               <tr><td>Flutter Web</td><td><span class="sig"><code>build/web/index.html</code></span></td><td>Static files</td></tr>
             </tbody>
           </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="design-tools" aria-labelledby="design-tools-title">
+      <div class="wrap">
+        <h2 id="design-tools-title">Design tools</h2>
+        <p class="section-intro">Built-in utility panels to inspect responsiveness and verify accessibility without leaving your development environment.</p>
+
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3>Responsive preview</h3>
+            <p>Preview active sites across standard viewport widths: mobile (<code>375px</code>), tablet (<code>768px</code>), and full desktop width.</p>
+            <p>The preview checks framing headers (<code>X-Frame-Options</code> and CSP <code>frame-ancestors</code>) and explains when a project disallows iframe embedding, offering a button to open it in your browser.</p>
+          </article>
+
+          <article class="feature-card">
+            <h3>WCAG contrast checker</h3>
+            <p>Evaluates color contrast ratios between text and background in real time under WCAG 2.x guidelines.</p>
+            <p>Displays compliance ratings for both AA and AAA thresholds for normal and large text to ensure readable interfaces.</p>
+          </article>
+
+          <article class="feature-card">
+            <h3>Design resources</h3>
+            <p>Curated quick-access links to typography pairings, color palette generators, and accessibility references.</p>
+            <p>Provides direct links to design guidelines to support building clear, accessible user interfaces.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="updates" aria-labelledby="updates-title">
+      <div class="wrap">
+        <h2 id="updates-title">Updates</h2>
+        <p class="section-intro">Every managed runtime checks its official upstream source directly, and nothing is downloaded without checksum verification.</p>
+
+        <div class="feature-grid">
+          <article class="feature-card">
+            <h3>Official upstream sources</h3>
+            <p>Services check official distribution channels and verify the published SHA-256 digest before installing:</p>
+            <ul>
+              <li><strong>PHP:</strong> Queries <code>releases.json</code> on <code>windows.php.net</code>. New minor releases such as 8.6 appear automatically as they are released.</li>
+              <li><strong>Caddy, Mailpit, Adminer, and Redis:</strong> Monitored via GitHub Releases with per-file SHA-256 digest verification.</li>
+              <li><strong>MariaDB:</strong> Queries the official MariaDB REST API. Patch updates in the current series install directly, while new LTS series require confirmation and run <code>mariadb-upgrade</code>.</li>
+              <li><strong>phpMyAdmin:</strong> Checked against <code>phpmyadmin.net</code> with SHA-256 verification, showing a compatibility note if the active PHP version is outside the supported range.</li>
+            </ul>
+          </article>
+
+          <article class="feature-card">
+            <h3>Confirmation for major changes</h3>
+            <p>Upgrades involving a different major version or a provider change require explicit confirmation in a dialog before anything changes.</p>
+            <p>This includes moving Adminer from 4.8.1 to 6.x, upgrading Redis to a maintained build such as redis-windows 8.x, or upgrading to a new MariaDB LTS series.</p>
+          </article>
+
+          <article class="feature-card">
+            <h3>Atomic installs and data safety</h3>
+            <p>Installations are atomic: packages extract into a temporary staging folder while preserving existing configuration files such as <code>php.ini</code>, <code>my.ini</code>, and <code>redis.conf</code>.</p>
+            <p>The previous installation is restored automatically if an error occurs, and database files are never deleted during cleanup or upgrades.</p>
+          </article>
+
+          <article class="feature-card">
+            <h3>LaraGal application updates</h3>
+            <p>LaraGal itself does not include an automatic background updater or update notifications.</p>
+            <p>New application versions are published on GitHub Releases and installed manually by replacing the executable.</p>
+          </article>
         </div>
       </div>
     </section>
@@ -270,15 +350,15 @@
           </div>
           <div>
             <dt>Services bound to localhost</dt>
-            <dd>PHP, MariaDB and Mailpit listen on 127.0.0.1 only. Caddy listens on port 443, so block it in the firewall when you are on a public network.</dd>
+            <dd>Caddy sites, phpMyAdmin, Adminer, PHP, MariaDB, and Mailpit listen on <code>127.0.0.1</code> and <code>::1</code> only, so they are not reachable from the local network.</dd>
           </div>
           <div>
-            <dt>Network access</dt>
-            <dd>The app goes online only to check for updates from windows.php.net and GitHub, and to download packages when you ask it to.</dd>
+            <dt>Network access & verified downloads</dt>
+            <dd>The app connects to the internet only to check official upstream sources and download packages when requested. Every download is verified by SHA-256 checksum to detect transit corruption or tampering.</dd>
           </div>
           <div>
-            <dt>Database password</dt>
-            <dd>The root user has no password. That is acceptable because the database refuses connections from other machines. Never use this setup on a production server.</dd>
+            <dt>Database password & admin tools</dt>
+            <dd>The root user has no password, and phpMyAdmin and Adminer log in automatically for local development convenience. This is acceptable because the services refuse connections from outside your machine; never use this setup on a production server.</dd>
           </div>
           <div>
             <dt>Your files</dt>

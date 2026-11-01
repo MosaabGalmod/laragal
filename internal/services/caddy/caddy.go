@@ -2,6 +2,7 @@ package caddy
 
 import (
 	"fmt"
+	"html"
 	"strings"
 )
 
@@ -40,6 +41,42 @@ type AdminerConfig struct {
 	Port     int    `json:"port"`
 }
 
+func build502RespondHTML(typeLabel string, proxyPort int) string {
+	if typeLabel == "" {
+		typeLabel = "الخادم / Server"
+	}
+	escapedType := html.EscapeString(typeLabel)
+	portStr := fmt.Sprintf("%d", proxyPort)
+
+	style := "<style>" +
+		":root{--bg:#f8fafc;--card:#ffffff;--text:#0f172a;--muted:#475569;--border:#e2e8f0;--shadow:rgba(0,0,0,0.06)}" +
+		"@media (prefers-color-scheme: dark){:root{--bg:#0f172a;--card:#1e293b;--text:#f8fafc;--muted:#94a3b8;--border:#334155;--shadow:rgba(0,0,0,0.25)}}" +
+		"body{margin:0;padding:24px;font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);display:flex;align-items:center;justify-content:center;min-height:80vh}" +
+		".card{max-width:540px;width:100%;background:var(--card);border:1px solid var(--border);border-radius:16px;padding:28px;box-shadow:0 4px 12px var(--shadow)}" +
+		".divider{margin:20px 0;border:0;border-top:1px solid var(--border)}" +
+		"h2{margin:0 0 10px;font-size:18px;color:var(--text)}" +
+		"p{margin:0;font-size:14px;line-height:1.6;color:var(--muted)}" +
+		"b{color:var(--text)}" +
+		"</style>"
+
+	arabicBlock := fmt.Sprintf("<div dir=\"rtl\" lang=\"ar\" style=\"text-align:right;\">"+
+		"<h2>LaraGal — خادم التطبيق غير متصل</h2>"+
+		"<p>تطبيق <b>%s</b> غير مشغل حالياً على المنفذ <b>%s</b>.<br>يمكنك تشغيل التطبيق بنقرة واحدة من لوحة تحكم <b>LaraGal</b> أو تشغيل أداة التطوير الخاصة به.</p>"+
+		"</div>", escapedType, portStr)
+
+	englishBlock := fmt.Sprintf("<div dir=\"ltr\" lang=\"en\" style=\"text-align:left;\">"+
+		"<h2>LaraGal — Application Server Offline</h2>"+
+		"<p><b>%s</b> application is not currently running on port <b>%s</b>.<br>You can start it with one click from the <b>LaraGal</b> dashboard or start its development server.</p>"+
+		"</div>", escapedType, portStr)
+
+	htmlBody := fmt.Sprintf("%s<div class=\"card\">%s<hr class=\"divider\">%s</div>", style, arabicBlock, englishBlock)
+
+	// Escape for Caddyfile double-quoted respond string:
+	caddyEscaped := strings.ReplaceAll(htmlBody, `\`, `\\`)
+	caddyEscaped = strings.ReplaceAll(caddyEscaped, `"`, `\"`)
+	return caddyEscaped
+}
+
 func GenerateCaddyfile(sites []SiteDef, adminPort int, adminerCfg ...AdminerConfig) string {
 	var aCfg AdminerConfig
 	if len(adminerCfg) > 0 {
@@ -69,6 +106,7 @@ func GenerateCaddyfileWithTools(sites []SiteDef, adminPort int, adminerCfg Admin
 		normalizedRoot := strings.ReplaceAll(site.RootPath, "\\", "/")
 
 		sb.WriteString(fmt.Sprintf("%s {\n", site.Domain))
+		sb.WriteString("    bind 127.0.0.1 [::1]\n")
 		sb.WriteString(fmt.Sprintf("    root * \"%s\"\n", normalizedRoot))
 		sb.WriteString("    encode gzip zstd\n")
 		if site.PHPPort > 0 {
@@ -115,11 +153,11 @@ func GenerateCaddyfileWithTools(sites []SiteDef, adminPort int, adminerCfg Admin
 			sb.WriteString("    }\n")
 			typeLabel := site.TypeLabel
 			if typeLabel == "" {
-				typeLabel = "الخادم"
+				typeLabel = "الخادم / Server"
 			}
 			sb.WriteString("    handle_errors {\n")
 			sb.WriteString("        header Content-Type \"text/html; charset=utf-8\"\n")
-			sb.WriteString(fmt.Sprintf("        respond \"<div dir='rtl' style='font-family:system-ui,sans-serif;max-width:540px;margin:80px auto;padding:32px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:16px;text-align:center;box-shadow:0 4px 12px rgba(0,0,0,0.05);'><h2 style='color:#0f172a;margin-bottom:12px;'>LaraGal — خادم التطبيق غير متصل</h2><p style='color:#475569;line-height:1.6;font-size:14px;'>تطبيق %s غير مشغل حالياً على المنفذ <b>%d</b>.<br>يمكنك تشغيل التطبيق بنقرة واحدة من لوحة تحكم <b>LaraGal</b> أو تشغيل أداة التطوير الخاصة به.</p></div>\" 502\n", typeLabel, proxyPort))
+			sb.WriteString(fmt.Sprintf("        respond \"%s\" 502\n", build502RespondHTML(typeLabel, proxyPort)))
 			sb.WriteString("    }\n")
 		} else {
 			sb.WriteString("    try_files {path} {path}/ /index.html /index.htm\n")
@@ -143,6 +181,7 @@ func GenerateCaddyfileWithTools(sites []SiteDef, adminPort int, adminerCfg Admin
 		}
 
 		sb.WriteString(fmt.Sprintf("%s, http://localhost:%d {\n", adminerDomain, adminerPort))
+		sb.WriteString("    bind 127.0.0.1 [::1]\n")
 		sb.WriteString(fmt.Sprintf("    root * \"%s\"\n", normalizedRoot))
 		sb.WriteString("    encode gzip zstd\n")
 		if cfg.PHPPort > 0 {
@@ -155,7 +194,7 @@ func GenerateCaddyfileWithTools(sites []SiteDef, adminPort int, adminerCfg Admin
 		sb.WriteString("}\n\n")
 	}
 
-		// Render phpMyAdmin database manager virtual host if enabled
+	// Render phpMyAdmin database manager virtual host if enabled
 	if pmaCfg.Enabled {
 		normalizedRoot := strings.ReplaceAll(pmaCfg.RootPath, "\\", "/")
 		pmaDomain := pmaCfg.Domain
@@ -168,6 +207,7 @@ func GenerateCaddyfileWithTools(sites []SiteDef, adminPort int, adminerCfg Admin
 		}
 
 		sb.WriteString(fmt.Sprintf("%s, http://localhost:%d {\n", pmaDomain, pmaPort))
+		sb.WriteString("    bind 127.0.0.1 [::1]\n")
 		sb.WriteString(fmt.Sprintf("    root * \"%s\"\n", normalizedRoot))
 		sb.WriteString("    encode gzip zstd\n")
 		if pmaCfg.PHPPort > 0 {
