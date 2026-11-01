@@ -321,5 +321,22 @@
   "diag_issue_node_modules_missing": "مجلد الحزم node_modules غير موجود.",
   "diag_sug_npm_install": "قم بتشغيل أمر «npm install» أو بناء المشروع «npm run build».",
   "project_type_label_static": "ثابت",
-  "project_type_label_non_web": "غير ويب / ملفات"
+  "project_type_label_non_web": "غير ويب / ملفات",
+  "contrast_sample_body": "نص تجريبي لاختبار وضوح القراءة والتباين اللوني للنصوص والفقرات في الواجهات الرقمية.",
+  "contrast_sample_heading": "عنوان تجريبي للمعاينة البصرية",
+  "contrast_swap_colors": "تبديل اللونين",
+  "open_external_resource": "فتح الأداة في المتصفح الخارجي",
+  "open_lucide_icons": "Lucide Icons (مكتبة الأيقونات)",
+  "preview_dimensions": "أبعاد نافذة العرض",
+  "preview_no_site_selected": "لم يتم اختيار أي مشروع ويب للمعاينة الحية",
+  "resource_coolors_desc": "توليد باليتات ألوان متناسقة وتصديرها مباشرة بتنسيقات CSS وTailwind.",
+  "resource_figma_desc": "بيئة سحابية لتصميم واجهات المستخدم والنماذج التفاعلية لفرق العمل.",
+  "resource_google_fonts_desc": "استعراض وتضمين الخطوط العربية واللاتينية مفتوحة المصدر لمواقع الويب.",
+  "resource_lucide_desc": "مكتبة أيقونات متجهة (SVG) نظيفة وعصرية متوافقة مع LaraGal.",
+  "wcag_aa_level": "معيار WCAG AA",
+  "wcag_aaa_level": "معيار WCAG AAA",
+  "wcag_fail": "غير مطابق",
+  "wcag_large_text": "النص الكبير (18pt+ أو 14pt عريض)",
+  "wcag_normal_text": "النص العادي (أقل من 18pt)",
+  "wcag_pass": "مطابق"
 }

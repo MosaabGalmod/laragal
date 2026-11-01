@@ -321,5 +321,22 @@
   "diag_issue_node_modules_missing": "node_modules directory does not exist.",
   "diag_sug_npm_install": "Run 'npm install' or build the project using 'npm run build'.",
   "project_type_label_static": "Static",
-  "project_type_label_non_web": "Non-Web"
+  "project_type_label_non_web": "Non-Web",
+  "contrast_sample_body": "The quick brown fox jumps over the lazy dog. Previewing typography readability and color contrast.",
+  "contrast_sample_heading": "Sample Visual Headline Preview",
+  "contrast_swap_colors": "Swap Foreground and Background",
+  "open_external_resource": "Open Tool in External Browser",
+  "open_lucide_icons": "Lucide Icons Library",
+  "preview_dimensions": "Viewport Dimensions",
+  "preview_no_site_selected": "No web project selected for live preview",
+  "resource_coolors_desc": "Fast palette generator with direct export to CSS and Tailwind formats.",
+  "resource_figma_desc": "Cloud collaborative workspace for UI/UX wireframes and prototypes.",
+  "resource_google_fonts_desc": "Browse and embed open-source typography and Arabic web fonts.",
+  "resource_lucide_desc": "Clean and customizable SVG icons consistent with LaraGal tooling.",
+  "wcag_aa_level": "WCAG AA Standard",
+  "wcag_aaa_level": "WCAG AAA Standard",
+  "wcag_fail": "Fail",
+  "wcag_large_text": "Large Text (18pt+ or 14pt bold)",
+  "wcag_normal_text": "Normal Text (< 18pt)",
+  "wcag_pass": "Pass"
 }

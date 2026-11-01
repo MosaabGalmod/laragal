@@ -69,6 +69,16 @@
         </button>
 
         <button
+          @click="openDesignToolsModal()"
+          class="inline-flex items-center justify-center gap-1.5 h-8 w-8 xl:w-auto px-0 xl:px-2.5 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/80 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/50 shrink-0 cursor-pointer"
+          :title="t('design_tools_desc')"
+          :aria-label="t('design_tools_btn')"
+        >
+          <Layout class="w-3.5 h-3.5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+          <span class="hidden xl:inline">{{ t('design_tools_btn') }}</span>
+        </button>
+
+        <button
           @click="installSSL"
           class="inline-flex items-center justify-center gap-1.5 h-8 w-8 xl:w-auto px-0 xl:px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
           :title="t('ssl_install_hint')"
@@ -1293,6 +1303,15 @@
         </div>
       </div>
     </div>
+
+    <!-- ================= 10. DESIGN TOOLS MODAL (Responsive, Contrast, Resources) ================= -->
+    <DesignToolsModal
+      v-model="showDesignToolsModal"
+      :sites="sites"
+      :initial-domain="designToolsSiteDomain"
+      :t="t"
+      @close="showDesignToolsModal = false"
+    />
   </div>
 </template>
 
@@ -1304,11 +1323,12 @@ import {
   Folder, Check, Minus, Square, X,
   AlertCircle, AlertTriangle, FolderOpen, Power, RefreshCw,
   Settings, Wrench, Database, ShieldAlert, ArrowUpCircle,
-  Search
+  Search, Layout
 } from 'lucide-vue-next'
 
 import ServiceCard from './components/ServiceCard.vue'
 import ProjectRow from './components/ProjectRow.vue'
+import DesignToolsModal from './components/DesignToolsModal.vue'
 import { getProjectTypeLabel } from './utils/projectType'
 
 import arLocale from './locales/ar.json'
@@ -1321,6 +1341,8 @@ const isDark = ref(localStorage.getItem('laragal_theme') !== 'light')
 const currentLang = ref<'ar' | 'en'>('ar')
 const showNewModal = ref(false)
 const showDownloadModal = ref(false)
+const showDesignToolsModal = ref(false)
+const designToolsSiteDomain = ref('')
 const downloadingRuntime = ref('')
 const notification = ref('')
 const copiedItem = ref('')
@@ -2294,6 +2316,11 @@ function openNewModal() {
   projectError.value = ''
   newProject.value.name = ''
   showNewModal.value = true
+}
+
+function openDesignToolsModal(domain?: string) {
+  designToolsSiteDomain.value = domain || ''
+  showDesignToolsModal.value = true
 }
 
 // Instant custom field validation
