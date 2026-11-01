@@ -115,7 +115,7 @@ LaraGal detects project structures via `internal/projects/detector.go` and dynam
 ## Design Tools
 
 LaraGal includes built-in design utility panels accessible directly from the desktop interface:
-- **Responsive Viewport Simulator:** Preview active sites across preset device viewports (mobile, tablet, laptop, desktop) with orientation toggling and custom dimension scaling.
+- **Responsive Viewport Simulator:** Preview active sites across preset device viewports (mobile, tablet, laptop, desktop) with orientation toggling and custom dimension scaling. The preview checks framing headers (`X-Frame-Options` and CSP `frame-ancestors`) via `CheckFrameable` and explains when a project forbids iframe embedding, providing an external browser fallback.
 - **WCAG Contrast Checker:** Real-time color contrast evaluation between foreground and background colors with AA and AAA compliance ratios under WCAG 2.1 standards.
 - **Design Resources:** Curated quick-access links to typography, color palette tools, and accessibility guidelines.
 
@@ -132,9 +132,15 @@ LaraGal is built strictly for local development environments:
 
 ## Updates
 
-- **PHP Patch Upgrades:** LaraGal checks `windows.php.net/downloads/releases/releases.json` for newer patch releases of supported PHP versions (NTS builds). Downloads are verified with the published SHA-256 digest, with fallback to official archive mirrors if a release has been moved.
-- **Bundled Service Runtimes:** Versions for Caddy, MariaDB, Mailpit, phpMyAdmin, Adminer, and Redis are pinned in the internal runtime catalog (`internal/runtimes/runtimes.go`) and are updated through new LaraGal releases.
-- **Application Releases:** LaraGal does not include an automatic background updater or update notifications. New application versions are published on [GitHub Releases](https://github.com/MosaabGalmod/laragal/releases) and installed manually by replacing the executable.
+- **Live Official Sources & Verified Checksums:** Every managed runtime now queries a live official upstream source before downloading; nothing is downloaded without checksum verification:
+  - **PHP:** Queries `windows.php.net/downloads/releases/releases.json` using the SHA-256 digest in the feed. New minors newer than the newest catalog minor (e.g., `8.6`, `9.0`) are offered automatically; older unlisted minors (`7.4`, `8.0`) are never offered. Loopback port is assigned deterministically as `9000 + major*10 + minor`.
+  - **Caddy, Mailpit, Adminer, & Redis:** Monitored via the GitHub Releases API, where the checksum is the SHA-256 "digest" GitHub publishes per release asset. Results are cached for 1 hour to respect unauthenticated rate limits (60 requests/hour); if unreachable, falls back to the pinned catalog.
+  - **MariaDB:** Queries the `downloads.mariadb.org` REST API (SHA-256). Patch updates within the installed series install normally. Newer Stable LTS series (currently `11.4`, `11.8`, `12.3`) are offered as major upgrades requiring confirmation, followed by `mariadb-upgrade` on next start. Preview, RC, and Rolling series are never offered.
+  - **phpMyAdmin:** Checked against `phpmyadmin.net` `version.json` with `.sha256` fetched from `files.phpmyadmin.net`. Shows a compatibility note when the serving PHP version is outside phpMyAdmin's supported range (currently: 5.2.3 supports PHP <8.4, while LaraGal serves it with PHP 8.4).
+- **Major-Version & Provider Changes:** Upgrades involving a different major version or a provider change (Adminer `4.8.1` → `6.x`, Redis `tporadowski 5.0` → `redis-windows 8.x`, or a new MariaDB LTS series) require explicit confirmation in a dialog.
+- **Atomic Installs & Rollback Safety:** Installations are atomic: extracted into a staging folder, config files (`php.ini`, `my.ini`, `redis.conf`) preserved, old folder swapped out and restored on failure, and database files are never deleted by cleanup.
+- **Honest Security Note:** A checksum fetched from the same vendor as the file detects corruption and tampering in transit, but does not protect against a compromised vendor account. Only Caddy additionally publishes Sigstore signatures, which LaraGal does not verify yet.
+- **Application Releases:** LaraGal itself still has no auto-update or update notification. New versions are published on [GitHub Releases](https://github.com/MosaabGalmod/laragal/releases) and installed manually by replacing the executable.
 
 ---
 
@@ -209,7 +215,7 @@ build.bat
 * استهلاك الموارد وحجم الملف: يبلغ حجم الملف التنفيذي المترجم نحو `16 MB`، ويبلغ استهلاك الذاكرة الخاصة في وضع الخمول قرابة `57 MB` بالاعتماد على محرك `WebView2`.
 * خدمات التطوير المرفقة: يوفر البرنامج حزمًا محمولة لكل من خادم قواعد البيانات `MySQL/MariaDB` وخادم `Redis` وأداة اختبار البريد `Mailpit` مع واجهة ويب على المنفذ `8025`.
 * واجهة مكتبية ثنائية اللغة: تدعم اللغتين العربية `(RTL)` والإنجليزية `(LTR)` مع الوضعين الداكن والفاتح، وتتموضع أزرار التحكم بالنافذة على اليسار الفعلي في الوضع العربي وعلى اليمين الفعلي في الوضع الإنجليزي.
-* أدوات التصميم المدمجة: تتضمن نافذة لمحاكاة العرض على مقاسات الشاشات المختلفة، وأداة لفحص تباين الألوان وفق معايير إمكانية الوصول `(WCAG AA/AAA)`، وروابط سريعة لأدلة التصميم.
+* أدوات التصميم المدمجة: تتضمن نافذة لمحاكاة العرض على مقاسات الشاشات المختلفة مع فحص ترويسات التأطير `(X-Frame-Options)` وسياسة أمان المحتوى `(CSP frame-ancestors)` وتوضيح سبب تعذر العرض عند حظر المشروع للتضمين، وأداة لفحص تباين الألوان وفق معايير إمكانية الوصول `(WCAG AA/AAA)`، وروابط سريعة لأدلة التصميم.
 
 ### الأمان:
 
@@ -219,9 +225,15 @@ build.bat
 
 ### التحديثات:
 
-* ترقيات حزم `PHP`: يجلب البرنامج التحديثات الفرعية مباشرة من ملف `releases.json` على `windows.php.net` بعد التحقق من بصمة `SHA-256`، مع دعم التنزيل من الأرشيف الرسمي عند أرشفة الإصدار.
-* إصدارات الخدمات المدمجة: إصدارات `Caddy` و `MariaDB` و `Mailpit` و `phpMyAdmin` و `Adminer` و `Redis` مثبتة في الكتالوج الداخلي `internal/runtimes/runtimes.go` ولا تتغير إلا مع إصدار نسخة جديدة من `LaraGal`.
-* تحديث البرنامج: لا يحتوي البرنامج على خاصية التحديث التلقائي في الخلفية أو إشعارات التحديث؛ ويجري تنزيل الإصدارات الجديدة يدويًا من صفحة الإصدارات في `GitHub Releases`.
+* فحص المصادر الرسمية الحية لجميع بيئات التشغيل: تفحص كافة الخدمات المدارة مصادر إصداراتها الرسمية عبر الإنترنت، ولا يجري تنزيل أي حزمة دون التحقق من بصمة التجزئة `(SHA-256)`:
+  * حزم `PHP`: يجلب البرنامج التحديثات من ملف `releases.json` على موقع `windows.php.net` بالاعتماد على بصمة `(SHA-256)` المرفقة بالتغذية. تُعرض الإصدارات الفرعية الأحدث من أعلى إصدار مسجل في الكتالوج (مثل `8.6` و `9.0`) تلقائيًا، بينما تُحجب الإصدارات الأقدم غير المدرجة (مثل `7.4` و `8.0`). ويُحسب منفذ الاستماع تلقائيًا وفق المعادلة `(9000 + major*10 + minor)`.
+  * خدمات `Caddy` و `Mailpit` و `Adminer` و `Redis`: تُفحص عبر واجهة `GitHub Releases API` بالاعتماد على بصمة `(digest)` المنشورة لكل أصل برمجي من المنبع. تُحفظ النتائج مؤقتًا لمدة ساعة واحدة لتفادي تجاوز الحد المسموح للاستعلام غير الموثق وهو 60 طلبًا في الساعة، مع الرجوع التلقائي إلى الكتالوج المثبت عند تعذر الوصول إلى الشبكة.
+  * خادم `MariaDB`: يُفحص عبر واجهة `downloads.mariadb.org REST API` بمطابقة بصمة `(SHA-256)`. تُثبت التحديثات التصحيحية ضمن السلسلة الحالية بصورة اعتيادية، بينما تُعرض السلاسل المستقرة طويلة الدعم `(Stable LTS)` الأحدث (حاليًا `11.4` و `11.8` و `12.3`) كترقيات رئيسية تتطلب تأكيدًا يدويًا، ويتبعها تشغيل أداة `mariadb-upgrade` عند الإقلاع التالي للخدمة. وتُحجب إصدارات المعاينة والتطوير `(Preview/RC/Rolling)` بصورة دائمة.
+  * أداة `phpMyAdmin`: تُفحص عبر ملف `version.json` على `phpmyadmin.net` مع ملف `.sha256` من `files.phpmyadmin.net`، مع إظهار ملاحظة توافقية عندما يكون إصدار `PHP` المشغِّل خارج نطاق الدعم الرسمي للمكتبة (يدعم إصدار `5.2.3` حاليًا `PHP` أقل من `8.4`، بينما يشغله البرنامج عبر `PHP 8.4`).
+* تأكيد الترقيات الرئيسية وتغيير المزود: تتطلب التغييرات في الإصدار الرئيسي أو الانتقال لمزود مختلف (مثل الانتقال في `Adminer` من `4.8.1` إلى `6.x`، أو في `Redis` من `tporadowski 5.0` إلى `redis-windows 8.x`، أو الانتقال لسلسلة `MariaDB` جديدة) موافقة صريحة من المستخدم في نافذة حوارية قبل البدء.
+* التثبيت الذري وسلامة الاسترجاع: تجري عمليات التثبيت بصورة ذرية؛ إذ تُفك الحزم داخل مجلد مؤقت `(staging)`، وتُحفظ ملفات الإعداد القائمة `(php.ini)` و `(my.ini)` و `(redis.conf)`، ويُستبدل المجلد القديم مع إمكانية استرجاعه تلقائيًا عند أي تعثر؛ ولا تحذف عمليات التنظيف ملفات قواعد البيانات أبدًا.
+* إشعار أمني بشأن سلامة البصمات: تكتشف بصمات التجزئة المجلوبة من نفس مزود الملفات أي تلف أو تلاعب يطرأ أثناء النقل عبر الشبكة، لكنها لا تحمي من مخاطر اختراق حساب المزود نفسه. وينفرد خادم `Caddy` بنشر تواقيع `Sigstore` إضافية لا يتحقق منها البرنامج حاليًا.
+* تحديث برنامج `LaraGal`: لا يحتوي البرنامج نفسه على خاصية التحديث التلقائي أو إشعارات التحديث حتى الآن، وتُثبت الإصدارات الجديدة يدويًا عبر تنزيل الملف التنفيذي واستبداله من صفحة الإصدارات في `GitHub Releases`.
 
 </div>
 
