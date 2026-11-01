@@ -1,4 +1,4 @@
-﻿package updater
+package updater
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/laragal/laragal/internal/runtimes"
 	"github.com/laragal/laragal/internal/winutil"
 )
 
@@ -114,62 +115,12 @@ func ParsePHPReleasesJSON(data []byte) (map[string]PHPVersionMeta, error) {
 	return result, nil
 }
 
-var fallbackStableVersions = map[string]RuntimeUpdateInfo{
-	"caddy": {
-		Name:          "caddy",
-		LatestVersion: "2.8.4",
-		DownloadURL:   "https://github.com/caddyserver/caddy/releases/download/v2.8.4/caddy_2.8.4_windows_amd64.zip",
-	},
-	"mailpit": {
-		Name:          "mailpit",
-		LatestVersion: "1.21.8",
-		DownloadURL:   "https://github.com/axllent/mailpit/releases/download/v1.21.8/mailpit-windows-amd64.zip",
-	},
-	"php-8.5": {
-		Name:          "php-8.5",
-		LatestVersion: "8.5.12",
-		DownloadURL:   "https://windows.php.net/downloads/releases/php-8.5.12-1-nts-Win32-vs17-x64.zip",
-	},
-	"php-8.4": {
-		Name:          "php-8.4",
-		LatestVersion: "8.4.4",
-		DownloadURL:   "https://windows.php.net/downloads/releases/php-8.4.4-nts-Win32-vs17-x64.zip",
-	},
-	"php-8.3": {
-		Name:          "php-8.3",
-		LatestVersion: "8.3.17",
-		DownloadURL:   "https://windows.php.net/downloads/releases/php-8.3.17-nts-Win32-vs16-x64.zip",
-	},
-	"php-8.2": {
-		Name:          "php-8.2",
-		LatestVersion: "8.2.27",
-		DownloadURL:   "https://windows.php.net/downloads/releases/php-8.2.27-nts-Win32-vs16-x64.zip",
-	},
-	"php-8.1": {
-		Name:          "php-8.1",
-		LatestVersion: "8.1.31",
-		DownloadURL:   "https://windows.php.net/downloads/releases/archives/php-8.1.31-nts-Win32-vs16-x64.zip",
-	},
-	"mysql": {
-		Name:          "mysql",
-		LatestVersion: "10.11.10",
-		DownloadURL:   "https://archive.mariadb.org/mariadb-10.11.10/winx64-packages/mariadb-10.11.10-winx64.zip",
-	},
-	"redis": {
-		Name:          "redis",
-		LatestVersion: "5.0.14.1",
-		DownloadURL:   "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip",
-	},
-	"phpmyadmin": {
-		Name:          "phpmyadmin",
-		LatestVersion: "5.2.2",
-		DownloadURL:   "https://files.phpmyadmin.net/phpMyAdmin/5.2.2/phpMyAdmin-5.2.2-all-languages.zip",
-	},
-	"adminer": {
-		Name:          "adminer",
-		LatestVersion: "4.8.1",
-		DownloadURL:   "https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1.php",
-	},
+// GetDownloadURL returns the configured download URL for a runtime from the catalog.
+func GetDownloadURL(name string) string {
+	if rt, ok := runtimes.Get(name); ok {
+		return rt.URL
+	}
+	return ""
 }
 
 // DetectInstalledBinaryVersion reads local executable outputs across bin, data, WinGet and PATH
@@ -312,9 +263,10 @@ func CheckUpdates(ctx context.Context, opts CheckOptions) []RuntimeUpdateInfo {
 	results := make([]RuntimeUpdateInfo, 0, len(runtimesToCheck))
 
 	for _, name := range runtimesToCheck {
-		info, exists := fallbackStableVersions[name]
-		if !exists {
-			info = RuntimeUpdateInfo{Name: name}
+		info := RuntimeUpdateInfo{Name: name}
+		if rt, exists := runtimes.Get(name); exists {
+			info.LatestVersion = rt.Version
+			info.DownloadURL = rt.URL
 		}
 
 		// Detect installed version
