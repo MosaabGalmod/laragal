@@ -111,6 +111,7 @@ const (
 
 	mfString    = 0x00000000
 	mfSeparator = 0x00000800
+	mfChecked   = 0x00000008
 
 	tpmRightAlign = 0x0008
 	tpmLayoutRtl  = 0x8000
@@ -139,10 +140,21 @@ func trayWndProc(hWnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 			if hMenu != 0 {
 				showText, _ := syscall.UTF16PtrFromString("إظهار LaraGal")
 				folderText, _ := syscall.UTF16PtrFromString("فتح مجلد المشاريع")
+				bootText, _ := syscall.UTF16PtrFromString("بدء مع إقلاع ويندوز")
 				quitText, _ := syscall.UTF16PtrFromString("إيقاف الخدمات والخروج التام")
+
+				isBoot := false
+				if globalTrayApp != nil {
+					isBoot = globalTrayApp.GetStartOnBoot()
+				}
+				bootFlags := uintptr(mfString)
+				if isBoot {
+					bootFlags |= mfChecked
+				}
 
 				pAppendMenu.Call(hMenu, mfString, 1001, uintptr(unsafe.Pointer(showText)))
 				pAppendMenu.Call(hMenu, mfString, 1002, uintptr(unsafe.Pointer(folderText)))
+				pAppendMenu.Call(hMenu, bootFlags, 1004, uintptr(unsafe.Pointer(bootText)))
 				pAppendMenu.Call(hMenu, mfSeparator, 0, 0)
 				pAppendMenu.Call(hMenu, mfString, 1003, uintptr(unsafe.Pointer(quitText)))
 
@@ -169,6 +181,11 @@ func trayWndProc(hWnd uintptr, msg uint32, wParam, lParam uintptr) uintptr {
 				case 1002:
 					if globalTrayApp != nil {
 						_ = globalTrayApp.OpenFolder(globalTrayApp.cfg.ProjectsPath)
+					}
+				case 1004:
+					if globalTrayApp != nil {
+						curr := globalTrayApp.GetStartOnBoot()
+						_ = globalTrayApp.SetStartOnBoot(!curr)
 					}
 				case 1003:
 					if globalTrayApp != nil {

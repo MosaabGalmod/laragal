@@ -446,3 +446,45 @@ func TestOpenPhpMyAdmin_NotInstalled(t *testing.T) {
 		t.Fatalf("expected error when phpMyAdmin is not installed, got nil")
 	}
 }
+
+func TestStartOnBootConfigAndToggle(t *testing.T) {
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "laragal.json")
+
+	cfg := config.NewDefaultConfig()
+	cfg.StartOnBoot = false
+	if err := cfg.Save(cfgPath); err != nil {
+		t.Fatalf("failed to save config: %v", err)
+	}
+
+	app := &App{
+		cfg:     cfg,
+		cfgPath: cfgPath,
+	}
+
+	// Toggle on
+	if err := app.SetStartOnBoot(true); err != nil {
+		if !strings.Contains(err.Error(), "Access is denied") {
+			t.Fatalf("SetStartOnBoot(true) failed: %v", err)
+		}
+	} else {
+		if !app.GetStartOnBoot() {
+			t.Errorf("expected GetStartOnBoot to be true after toggle")
+		}
+
+		// Verify persisted config on disk
+		loaded, err := config.LoadConfig(cfgPath)
+		if err != nil {
+			t.Fatalf("failed to reload config: %v", err)
+		}
+		if !loaded.StartOnBoot {
+			t.Errorf("expected loaded.StartOnBoot to be true")
+		}
+
+		// Toggle off
+		_ = app.SetStartOnBoot(false)
+		if app.GetStartOnBoot() {
+			t.Errorf("expected GetStartOnBoot to be false after toggle off")
+		}
+	}
+}
