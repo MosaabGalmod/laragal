@@ -105,6 +105,17 @@ func (a *App) startup(ctx context.Context) {
 	_ = os.MkdirAll(a.cfg.ProjectsPath, 0755)
 	a.initTray()
 
+	// Sync Windows autostart state with configuration
+	if a.cfg.StartOnBoot {
+		if !winutil.IsStartOnBoot("LaraGal") {
+			_ = winutil.SetStartOnBoot("LaraGal", "", true)
+		}
+	} else {
+		if winutil.IsStartOnBoot("LaraGal") {
+			_ = winutil.SetStartOnBoot("LaraGal", "", false)
+		}
+	}
+
 	a.loadSitesCache()
 
 	// 1. Scan projects synchronously at the start of background services goroutine so UI has sites in < 20ms and Caddyfile is written
@@ -1141,6 +1152,37 @@ func (a *App) QuitApp() {
 	if a.ctx != nil {
 		runtime.Quit(a.ctx)
 	}
+}
+
+// GetStartOnBoot returns whether LaraGal is set to run automatically on Windows startup.
+func (a *App) GetStartOnBoot() bool {
+	if a.cfg == nil {
+		return false
+	}
+	if winutil.IsStartOnBoot("LaraGal") {
+		return true
+	}
+	return a.cfg.StartOnBoot
+}
+
+// SetStartOnBoot enables or disables auto-starting LaraGal with Windows.
+func (a *App) SetStartOnBoot(enabled bool) error {
+	if a.cfg == nil {
+		return fmt.Errorf("app configuration not initialized")
+	}
+
+	err := winutil.SetStartOnBoot("LaraGal", "", enabled)
+	if err != nil {
+		return fmt.Errorf("failed to update Windows autostart: %w", err)
+	}
+
+	a.cfg.StartOnBoot = enabled
+	_ = a.cfg.Save(a.cfgPath)
+
+	if a.ctx != nil {
+		runtime.EventsEmit(a.ctx, "start-on-boot-updated", enabled)
+	}
+	return nil
 }
 
 // GetProjectsDirectory returns the configured projects root directory

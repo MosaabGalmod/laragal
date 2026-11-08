@@ -3,20 +3,20 @@
     <!-- ================= UNIFIED DESKTOP HEADER (Single Bar - Zero Duplication) ================= -->
     <header
       @dblclick="toggleMaximize"
-      class="wails-drag flex-shrink-0 h-14 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-40 px-4 flex items-center justify-between select-none cursor-default"
+      class="wails-drag flex-shrink-0 h-14 border-b border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-40 px-3 sm:px-4 flex items-center justify-between gap-2 select-none cursor-default"
     >
       <!-- Brand Block -->
-      <div class="flex items-center gap-3 wails-no-drag shrink-0">
+      <div class="flex items-center gap-2.5 sm:gap-3 wails-no-drag shrink-0">
         <img src="/logo.png" alt="LaraGal" class="w-8 h-8 rounded-lg shadow-xs ring-1 ring-blue-500/20 object-contain shrink-0" />
-        <div class="flex items-center gap-2">
-          <span class="text-lg font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          <span class="text-base sm:text-lg font-black tracking-tight text-slate-900 dark:text-white">LaraGal</span>
           <span dir="ltr" class="text-[10px] px-1.5 py-0.5 rounded-md bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 font-mono font-bold border border-blue-200 dark:border-blue-900">
             {{ appVersion }}
           </span>
         </div>
-        <div class="hidden lg:block h-5 w-px bg-slate-200 dark:bg-slate-800"></div>
+        <div class="hidden 2xl:block h-5 w-px bg-slate-200 dark:bg-slate-800"></div>
         <p
-          class="hidden lg:block text-xs text-slate-500 dark:text-slate-400 font-medium truncate max-w-md"
+          class="hidden 2xl:block text-xs text-slate-500 dark:text-slate-400 font-medium truncate max-w-xs 2xl:max-w-md"
           :title="t('app_subtitle')"
         >
           {{ t('app_subtitle') }}
@@ -24,13 +24,13 @@
       </div>
 
       <!-- CENTER: Draggable Window Space -->
-      <div class="flex-1 h-full cursor-default"></div>
+      <div class="flex-1 h-full min-w-4 cursor-default"></div>
 
-      <!-- Actions Toolbar & Window Controls -->
-      <div class="flex items-center gap-2.5 wails-no-drag shrink-0">
+      <!-- Actions Toolbar (Shrinks gracefully, never pushes window controls) -->
+      <div class="flex items-center gap-1.5 sm:gap-2 wails-no-drag shrink min-w-0 overflow-x-auto no-scrollbar py-1">
         <button
           @click="openNewModal"
-          class="inline-flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
+          class="inline-flex items-center justify-center gap-1.5 h-8 px-2.5 sm:px-3 rounded-lg text-xs font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
           :aria-label="t('new_project_btn')"
         >
           <Plus class="w-3.5 h-3.5 shrink-0" />
@@ -40,47 +40,58 @@
         <button
           @click="syncHostsNow"
           :disabled="isSyncingHosts"
-          class="inline-flex items-center justify-center gap-1.5 h-8 w-8 xl:w-auto px-0 xl:px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
+          class="inline-flex items-center justify-center gap-1.5 h-8 w-8 2xl:w-auto px-0 2xl:px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 disabled:opacity-60 disabled:cursor-not-allowed shrink-0"
           :title="t('sync_hosts_hint')"
           :aria-label="t('sync_hosts_btn')"
         >
           <RefreshCw class="w-3.5 h-3.5 shrink-0 text-blue-600 dark:text-blue-400" :class="{ 'animate-spin': isSyncingHosts }" />
-          <span class="hidden xl:inline">{{ t('sync_hosts_btn') }}</span>
+          <span class="hidden 2xl:inline">{{ t('sync_hosts_btn') }}</span>
         </button>
 
         <button
           @click="openAdminer()"
-          class="inline-flex items-center justify-center gap-1.5 h-8 w-8 xl:w-auto px-0 xl:px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
+          class="inline-flex items-center justify-center gap-1.5 h-8 w-8 2xl:w-auto px-0 2xl:px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
           :title="t('open_adminer_title')"
           :aria-label="t('open_adminer')"
         >
           <Database class="w-3.5 h-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
-          <span class="hidden xl:inline">{{ t('open_adminer') }}</span>
+          <span class="hidden 2xl:inline">{{ t('open_adminer') }}</span>
         </button>
 
         <button
           @click="openPhpMyAdmin()"
-          class="inline-flex items-center justify-center gap-1.5 h-8 w-8 xl:w-auto px-0 xl:px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
+          class="inline-flex items-center justify-center gap-1.5 h-8 w-8 2xl:w-auto px-0 2xl:px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
           :title="t('open_phpmyadmin_title')"
           :aria-label="t('open_phpmyadmin')"
         >
           <Database class="w-3.5 h-3.5 shrink-0 text-orange-600 dark:text-orange-400" />
-          <span class="hidden xl:inline">{{ t('open_phpmyadmin') }}</span>
+          <span class="hidden 2xl:inline">{{ t('open_phpmyadmin') }}</span>
         </button>
 
         <button
           @click="installSSL"
-          class="inline-flex items-center justify-center gap-1.5 h-8 w-8 xl:w-auto px-0 xl:px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
+          class="inline-flex items-center justify-center gap-1.5 h-8 w-8 2xl:w-auto px-0 2xl:px-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0 cursor-pointer"
           :title="t('ssl_install_hint')"
           :aria-label="t('install_ssl_btn')"
         >
           <ShieldCheck class="w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
-          <span class="hidden xl:inline">{{ t('install_ssl_btn') }}</span>
+          <span class="hidden 2xl:inline">{{ t('install_ssl_btn') }}</span>
+        </button>
+
+        <button
+          @click="toggleStartOnBoot"
+          class="inline-flex items-center justify-center gap-1.5 h-8 w-8 2xl:w-auto px-0 2xl:px-2.5 rounded-lg border transition-colors whitespace-nowrap text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0 cursor-pointer"
+          :class="startOnBoot ? 'border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300' : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700'"
+          :title="t('start_on_boot_desc')"
+          :aria-label="t('start_on_boot')"
+        >
+          <Power class="w-3.5 h-3.5 shrink-0" :class="startOnBoot ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'" />
+          <span class="hidden 2xl:inline">{{ t('start_on_boot') }}</span>
         </button>
 
         <button
           @click="toggleLang"
-          class="inline-flex items-center justify-center h-8 px-2.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
+          class="inline-flex items-center justify-center h-8 px-2 sm:px-2.5 rounded-lg text-xs font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50 shrink-0"
           :title="currentLang === 'ar' ? 'English' : 'العربية'"
           :aria-label="currentLang === 'ar' ? 'English' : 'العربية'"
         >
@@ -97,36 +108,36 @@
           <Sun v-if="isDark" class="w-3.5 h-3.5 text-amber-400" />
           <Moon v-else class="w-3.5 h-3.5 text-slate-600 dark:text-slate-300" />
         </button>
+      </div>
 
-        <div class="h-5 w-px bg-slate-200 dark:bg-slate-800 mx-1 shrink-0"></div>
+      <div class="h-5 w-px bg-slate-200 dark:bg-slate-800 mx-0.5 sm:mx-1 shrink-0"></div>
 
-        <!-- Window Controls: minimize, maximize, close -->
-        <div class="flex items-center gap-1 shrink-0">
-          <button
-            @click.stop="minimizeWindow"
-            class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
-            :title="t('minimize')"
-            :aria-label="t('minimize')"
-          >
-            <Minus class="w-3.5 h-3.5" />
-          </button>
-          <button
-            @click.stop="toggleMaximize"
-            class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
-            :title="t('maximize_restore')"
-            :aria-label="t('maximize_restore')"
-          >
-            <Square class="w-3 h-3" />
-          </button>
-          <button
-            @click.stop="closeWindow"
-            class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-rose-600 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
-            :title="t('close_to_background')"
-            :aria-label="t('close_to_background')"
-          >
-            <X class="w-3.5 h-3.5" />
-          </button>
-        </div>
+      <!-- Window Controls: minimize, maximize, close (Anchored, shrink-0, impossible to push off-screen) -->
+      <div class="flex items-center gap-0.5 sm:gap-1 shrink-0 wails-no-drag">
+        <button
+          @click.stop="minimizeWindow"
+          class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+          :title="t('minimize')"
+          :aria-label="t('minimize')"
+        >
+          <Minus class="w-3.5 h-3.5" />
+        </button>
+        <button
+          @click.stop="toggleMaximize"
+          class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+          :title="t('maximize_restore')"
+          :aria-label="t('maximize_restore')"
+        >
+          <Square class="w-3 h-3" />
+        </button>
+        <button
+          @click.stop="closeWindow"
+          class="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 dark:text-slate-400 hover:bg-rose-600 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/50"
+          :title="t('close_to_background')"
+          :aria-label="t('close_to_background')"
+        >
+          <X class="w-3.5 h-3.5" />
+        </button>
       </div>
     </header>
 
@@ -1272,6 +1283,7 @@ const projectError = ref('')
 const confirmService = ref<ServiceItem | null>(null)
 const togglingServices = ref<Set<string>>(new Set())
 const showQuitConfirm = ref(false)
+const startOnBoot = ref(false)
 const projectsDirectory = ref('C:/laragal/sites')
 const recentDirectories = ref<string[]>([])
 const runningProjects = ref<Record<string, boolean>>({})
@@ -1861,6 +1873,17 @@ onMounted(async () => {
         runtimeUpdates.value = map
       }
     })
+    rt.EventsOn('start-on-boot-updated', (val: any) => {
+      startOnBoot.value = Boolean(val)
+    })
+  }
+
+  if ((window as any).go?.main?.App?.GetStartOnBoot) {
+    try {
+      startOnBoot.value = await (window as any).go.main.App.GetStartOnBoot()
+    } catch (e) {
+      console.warn("Could not load start-on-boot setting:", e)
+    }
   }
 
   if ((window as any).go?.main?.App?.GetProjectsDirectory) {
@@ -2232,6 +2255,23 @@ async function installSSL() {
     }
   }
   notification.value = t('success_ssl')
+}
+
+async function toggleStartOnBoot() {
+  const target = !startOnBoot.value
+  if ((window as any).go?.main?.App?.SetStartOnBoot) {
+    try {
+      await (window as any).go.main.App.SetStartOnBoot(target)
+      startOnBoot.value = target
+      notification.value = target ? t('start_on_boot_enabled') : t('start_on_boot_disabled')
+      return
+    } catch (err: any) {
+      notification.value = `خطأ أثناء ضبط التشغيل مع ويندوز: ${err}`
+      return
+    }
+  }
+  startOnBoot.value = target
+  notification.value = target ? t('start_on_boot_enabled') : t('start_on_boot_disabled')
 }
 
 async function handleCreateProject() {
